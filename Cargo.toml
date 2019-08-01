@@ -1,0 +1,14 @@
+[package]
+name = "didactic-umbrella"
+version = "0.1.0"
+authors = []
+rust-version = "1.36.0"
+edition = "2018"
+target = "src/main.rs"
+
+[dependencies]
+ferris-says = "0.1"
+structopt = "0.2.18"
+
+# can't import bch because of absent of ring crate, its really outdated
+[replace]
