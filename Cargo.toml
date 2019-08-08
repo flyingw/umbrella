@@ -2,13 +2,15 @@
 name = "didactic-umbrella"
 version = "0.1.0"
 authors = []
-rust-version = "1.36.0"
 edition = "2018"
-target = "src/main.rs"
 
 [dependencies]
 ferris-says = "0.1"
 structopt = "0.2.18"
+stderrlog="0.4.1"
+log = { version = "0.4", features = ["max_level_trace", "release_max_level_warn"] }
+bch="0.1.1"
 
-# can't import bch because of absent of ring crate, its really outdated
-[replace]
+[patch.crates-io]
+#bch = {path= '../rust-bch/'}
+bch = {git = 'https://github.com/flyingw/rust-bch.git'}

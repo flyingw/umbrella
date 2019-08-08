@@ -25,7 +25,7 @@ struct Miner {
 #[structopt(name="umbrella", raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
 /// Make a note on transaction.
 /// 
-/// Sender wallet is a pair of address and secret. 
+/// Sender wallet is a pair of address and secret.
 /// We don't create it so it should exist.
 /// 
 /// Recipient address is encoded (base58 160-bit hash) form of hash of their public key.
@@ -38,7 +38,13 @@ pub struct Opt {
     sender: Wallet,
     #[structopt(flatten)]
     miner: Miner,
-    #[structopt(long, default_value="testnet")]
+    #[structopt(long, default_value="regtest")]
     /// Network for with the address is encoded.
     network:String,
+    /// Verbose mode (-v, -vv, -vvv, -vvvv)
+    #[structopt(short="v", long="verbose", parse(from_occurrences))]
+    pub verbose:usize,
+    /// Silence all output
+    #[structopt(short = "q", long = "quiet")]
+    pub quiet: bool,
 }
