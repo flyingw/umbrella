@@ -65,3 +65,5 @@ Since its distributed as source code on github `cargo` patch this project for us
 
 Check `$HOME/.cargo` folder for downloaded repository with source code or 
 checkout it manually and patch `crates.io` with `path='./local/path'`.
+
+git@github.com:marioschlipf/bitcoin-abe.git

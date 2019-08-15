@@ -9,8 +9,13 @@ ferris-says = "0.1"
 structopt = "0.2.18"
 stderrlog="0.4.1"
 log = { version = "0.4", features = ["max_level_trace", "release_max_level_warn"] }
+hex = "0.3"
 bch="0.1.1"
+bitcoin= {version="0.18"}
+secp256k1 = "0.15.2"
+rust-base58 = "0.0"
+linked-hash-map = "0.5"
 
 [patch.crates-io]
-#bch = {path= '../rust-bch/'}
-bch = {git = 'https://github.com/flyingw/rust-bch.git'}
+bch = {path= '../rust-bch/'}
+#bch = {git = 'https://github.com/flyingw/rust-bch.git'}
