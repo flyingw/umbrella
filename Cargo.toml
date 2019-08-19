@@ -11,9 +11,12 @@ stderrlog="0.4.1"
 log = { version = "0.4", features = ["max_level_trace", "release_max_level_warn"] }
 hex = "0.3"
 bch="0.1.1"
-secp256k1 = "0.15.2"
-rust-base58 = "0.0"
+secp256k1 = "0.11"
+rust-base58 = "0.0.4"
 linked-hash-map = "0.5"
+ring = "0.14"
+base32="0.4.0"
+bech32="0.7.1"
 
 [patch.crates-io]
 bch = {path= '../rust-bch/'}
