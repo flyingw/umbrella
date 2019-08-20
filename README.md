@@ -1,69 +1,42 @@
-# Didactic Umbrella
+# Umbrella
 
-Imaginary name for a project wich in other hand will be called literaly project.
+Universal cross network client to write data into blockchain.
 
-# Idea
+WARN: Do not use with real networks. Regtest only.
 
-Light command line interface to some restricted blockchains API.
-
-# Download
+# download
 
 [v0.1.0] (http://didactic.umbrella/)
 
-# Prerequisites
-
-Setup Rust
+# prerequisites
 
 ```
 $ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 $ rustup update
 ```
 
-Setup Bitcoin Node and CLI tools
-
-```
-$ brew install bitcoin
-```
-
-# Build 
+# build 
 
 ```
 $ cargo build
 ```
 
-[describe native build configuration here]
+# test
 
-Possible config? Need to know what its means for building process.
+Setup Bitcoin Node and CLI tools
 
 ```
-$HOME/.cargo $ cat config
-[build]
-rustflags = "-C target-cpu=native"
+$ brew install bitcoin
+$ git clone https://github.com/Bitcoin-ABC/bitcoin-abc.git | make
+$ etc.
 
-$ cargo update
-$ cargo build --release
 ```
-look for binaries at `./target/releases`
 
-# Run 
+# run 
 
 Run bitcoin node in regtest mode to test connection localy.
-Actually all test connections will work but this need to be changed in code.
 
 ```
-$ bitcoind -regtest
-```
-
-```
+$ bitcoind[core|abc] -regtest
 $ cargo run -- -vvvv [optional parameters: -v, -network, etc.] [--help: for details]
 ```
-
-# Dev Notes
-
-Project uses external `BCH` client for demo purposess. 
-Since its distributed as source code on github `cargo` patch this project for us. 
-
-Check `$HOME/.cargo` folder for downloaded repository with source code or 
-checkout it manually and patch `crates.io` with `path='./local/path'`.
-
-git@github.com:marioschlipf/bitcoin-abe.git

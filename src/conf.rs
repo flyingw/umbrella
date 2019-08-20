@@ -1,24 +1,73 @@
 use structopt::StructOpt;
-use std::path::PathBuf;
+use std::str::FromStr;
+use bch::util::Hash256;
 
 #[derive(StructOpt,Debug)]
-struct Wallet {
-    #[structopt(long, default_value="mrvz6oz4YGxsHk3VggP8aQCFzMxCLdtmzX")]
-    /// Public address of sender wallet.
-    address: String,
-    #[structopt(long, default_value="92ctZsdvgQ2eRPjHDtjgQ6Y7oogLKoDMXCdnqmgAd62s5MjrHvb")]
-    /// Private key of sender wallet. Can also be imported from file.
+pub struct Wallet {
+    #[structopt(long)]
+    /// Public address of sender to be used as input.
+    pub in_address: String,
+
+    #[structopt(long)]
+    /// input UTXO amount
+    pub in_amount: f64,
+
+    #[structopt(long, parse(try_from_str="Hash256::decode"))]
+    /// OutPoint transaction id.
+    pub outpoint_hash: Hash256,
+
+    #[structopt(long)]
+    /// OutPoint vout index.
+    pub outpoint_index: u32,
+
+    #[structopt(long)]
+    /// Private key to sign sender input. 
+    /// 
+    /// Supported format: WIF (Wallet Import Format) - base56check encoded string.
+    /// 
+    /// > bitcoin-cli -regtest dumpprivkey "address"
     secret: String,
+
+    #[structopt(long)]
+    /// 
+    /// Public addrss to be used as output for change.
+    /// 
+    /// > bitcoin-cli -regtest getnewaddress
+    pub out_address: String,
+
+    #[structopt(long)]
+    /// 
+    /// Change from input transaction. 
+    /// Amout that should be returned to new sender address and don't burned or spent for writing data.
+    pub change: f64,
+}
+
+#[derive(Debug)]
+pub struct HexData(Vec<u8>);
+impl FromStr for HexData {
+    type Err = hex::FromHexError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> { hex::decode(s).map(HexData) }
 }
 
 #[derive(StructOpt, Debug)]
-struct Miner {
+pub struct Data {
     #[structopt(long)]
-    /// Recipients.
-    recipients: Vec<String>,
-    #[structopt(long, parse(from_os_str))]
-    /// Optional address path.
-    path: Option<PathBuf>,
+    /// 
+    /// Public address to pay for data storage.
+    /// 
+    /// > bitcoin-cli -regtest getnewaddress
+    pub dust_address: String,
+    
+    #[structopt(long, default_value="0.0001")]
+    /// Amount to pay for data storeage.
+    pub dust_amount: f64,
+    
+    #[structopt(short,long="d")]
+    /// 
+    /// Data to be incuded in output.
+    /// 
+    pub data: HexData,
 }
 
 #[derive(StructOpt, Debug)]
@@ -35,15 +84,19 @@ struct Miner {
 /// Note: Give money back to mkHS9ne12qx9pS9VojpwU5xtRd4T7X7ZUt.
 pub struct Opt {
     #[structopt(flatten)]
-    sender: Wallet,
+    pub sender: Wallet,
+
     #[structopt(flatten)]
-    miner: Miner,
+    pub data: Data,
+
     #[structopt(long, default_value="regtest")]
     /// Network for with the address is encoded.
     network:String,
+
     /// Verbose mode (-v, -vv, -vvv, -vvvv)
     #[structopt(short="v", long="verbose", parse(from_occurrences))]
     pub verbose:usize,
+    
     /// Silence all output
     #[structopt(short = "q", long = "quiet")]
     pub quiet: bool,
