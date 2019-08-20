@@ -38,10 +38,10 @@ Run bitcoin node in regtest mode to test connection localy.
 
 ```
 $ bitcoind[core|abc] -regtest
-$ umbrella -vvvv --in_address $IN_ADD --in_amount $BALANCE --secret $SECRET \
-    --outpoint_hash $OUT_HSH --outpoint_index $OUT_PNT \
-    --out_address $OUT_ADD --change $CHANGE \
-    --dust_address $DST_ADD --dust_amount $DUST \
+$ umbrella -vvvv --in_address $IN_ADD --in_amount $BALANCE --secret $SECRET
+    --outpoint_hash $OUT_HSH --outpoint_index $OUT_PNT
+    --out_address $OUT_ADD --change $CHANGE
+    --dust_address $DST_ADD --dust_amount $DUST
     --data $DATA --network $NETWORK
 [--help: for details]
 ```
