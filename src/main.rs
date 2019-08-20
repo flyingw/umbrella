@@ -1,40 +1,83 @@
 #[macro_use]
 extern crate log;
 extern crate stderrlog;
+extern crate byteorder;
+extern crate digest;
+extern crate dns_lookup;
+extern crate hex;
+#[macro_use]
+extern crate lazy_static;
+extern crate linked_hash_map;
+extern crate murmur3;
+extern crate rand;
+extern crate ring;
+extern crate ripemd160;
+extern crate rust_base58;
+extern crate secp256k1;
+extern crate snowflake;
 
+pub mod address;
+pub mod messages;
+pub mod network;
+pub mod peer;
+pub mod script;
+pub mod transaction;
+pub mod util;
+pub mod wallet;
+pub mod p2pkh;
+pub mod sighash;
+pub mod hash256;
+pub mod amount;
+pub mod bits;
+pub mod bloom_filter;
+pub mod future;
+pub mod hash160;
+pub mod latch;
+pub mod result;
+pub mod rx;
+pub mod serdes;
+pub mod conf;
+pub mod cashaddr;
+pub mod legacyaddr;
+pub mod var_int;
+
+pub use messages as msg;
+pub use serdes::Serializable;
+pub use result::{Error, Result};
+pub use amount::{Amount, Units};
+pub use hash160::{Hash160, hash160};
+pub use hash256::{sha256d, Hash256};
 use ferris_says::say;
 use std::io::{stdout, BufWriter};
 use conf::Opt;
 use structopt::StructOpt;
 
-use bch::network::Network;
-use bch::messages::{Version, NODE_BITCOIN_CASH, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut};
-use bch::peer::Peer;
-use bch::util::{secs_since,Amount,Units};
-use bch::util::rx::Observable;
+use network::Network;
+use msg::{Version, NODE_BITCOIN_CASH, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut};
+use peer::Peer;
+use util::secs_since;
+use rx::Observable;
 use std::time::UNIX_EPOCH;
 use std::net::{IpAddr, Ipv4Addr};
 
-use bch::script::Script;
+use script::Script;
 use secp256k1::{Secp256k1, SecretKey, PublicKey};
-use bch::transaction::p2pkh::{create_sig_script};
-use bch::transaction::sighash::{sighash, SigHashCache, SIGHASH_FORKID, SIGHASH_ALL};
-use bch::transaction::generate_signature;
+use p2pkh::{create_sig_script};
+use sighash::{sighash, SigHashCache, SIGHASH_FORKID, SIGHASH_ALL};
+use transaction::generate_signature;
 use rust_base58::base58::FromBase58;
-
-pub mod conf;
 
 /// same functionality as in as create_pk_script. just to visualy trace op_codes here.
 fn pk_script(addr: &str) -> Script {
     let mut s = Script::new();
     let mut payload = [1;20];
 
-    use bch::address::cashaddr_decode;
+    use cashaddr::cashaddr_decode;
 
     let hash = cashaddr_decode(addr, Network::Regtest).expect("correct cash address");
     payload.copy_from_slice(&hash.0[..20]);
 
-    use bch::script::op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160};
+    use script::op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160};
 
     s.append(OP_DUP);
     s.append(OP_HASH160);
@@ -115,7 +158,7 @@ fn main() {
 
     debug!{"transaction: {:#?}", tx};
 
-    use bch::messages::Message;
+    use messages::Message;
 
     peer.send(&Message::Tx(tx)).unwrap();
 
@@ -135,11 +178,12 @@ mod tests {
     // > cargo test -- --nocapture
     #[test] fn test_sail() {
         use super::*;
-        use bch::util::sha256d;
-        use bch::address::{AddressType,cashaddr_encode};
-        use bch::network::Network;
+        //use sha256::sha256d;
+        use address::AddressType;
+        use cashaddr::cashaddr_encode;
+        use network::Network;
         use rust_base58::base58::ToBase58;
-        use bch::util::hash160;
+        use hash160;
 
         let secret_wif: &str = &"cPSW2teJFwABTyvxrE39VuX3PGTUm1kkFhtzHXLqv6BzaUxT7PzF";
         println!("wif: {:?}", secret_wif);

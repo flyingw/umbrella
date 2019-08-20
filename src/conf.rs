@@ -1,6 +1,6 @@
 use structopt::StructOpt;
 use std::str::FromStr;
-use bch::util::Hash256;
+use crate::hash256::Hash256;
 
 #[derive(StructOpt,Debug)]
 pub struct Wallet {

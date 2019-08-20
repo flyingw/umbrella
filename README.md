@@ -40,3 +40,8 @@ Run bitcoin node in regtest mode to test connection localy.
 $ bitcoind[core|abc] -regtest
 $ cargo run -- -vvvv [optional parameters: -v, -network, etc.] [--help: for details]
 ```
+
+# links
+
+Use [rust-bch](https://github.com/brentongunning/rust-bch) library to build Bitcoin Cash application.
+
