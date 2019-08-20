@@ -43,4 +43,4 @@ $ umbrella -vvvv --in_address $IN_ADD --in_amount $BALANCE --secret $SECRET
 
 ## browse
 
-[abe](git@github.com:marioschlipf/bitcoin-abe.git)
+[abe](https://github.com/marioschlipf/bitcoin-abe)
