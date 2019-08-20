@@ -1,10 +1,11 @@
 # roadmap 
 
- * setup test network + 
- * create some free money + 
- * connect to test network + 
+ * setup test network +
+ * create some free money +
+ * connect to test network +
+ - make transaction (pay-to-keyhash) +
  * make transaction (pay-to-script) -
- * sign transaction -
+ * sign transaction +
  * broadcast transaction -
  * validate -
  * make loop -
