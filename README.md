@@ -4,9 +4,9 @@ Universal cross network client to write data into blockchain.
 
 WARN: Do not use with real networks. Regtest only.
 
-# download
+# downloads
 
-[v0.1.0] (http://didactic.umbrella/)
+[v0.1.0] (https://github.com/flyingw/umbrella/releases/tag/v0.1.0)
 
 # prerequisites
 
@@ -38,5 +38,10 @@ Run bitcoin node in regtest mode to test connection localy.
 
 ```
 $ bitcoind[core|abc] -regtest
-$ cargo run -- -vvvv [optional parameters: -v, -network, etc.] [--help: for details]
+$ umbrella -vvvv --in_address $IN_ADD --in_amount $BALANCE --secret $SECRET \
+    --outpoint_hash $OUT_HSH --outpoint_index $OUT_PNT \
+    --out_address $OUT_ADD --change $CHANGE \
+    --dust_address $DST_ADD --dust_amount $DUST \
+    --data $DATA --network $NETWORK
+[--help: for details]
 ```
