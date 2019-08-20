@@ -1,8 +1,9 @@
 [package]
-name = "didactic-umbrella"
+name = "umbrella"
+description = "Cross network client to write data into blockchain."
 version = "0.1.0"
-authors = []
 edition = "2018"
+license = "MIT"
 
 [dependencies]
 ferris-says = "0.1"
@@ -19,5 +20,9 @@ base32="0.4.0"
 bech32="0.7.1"
 
 [patch.crates-io]
-bch = {path= '../rust-bch/'}
-#bch = {git = 'https://github.com/flyingw/rust-bch.git'}
+#bch = {path= '../rust-bch/'}
+bch = {git = 'https://github.com/flyingw/rust-bch.git'}
+
+[profile.release]
+opt-level = "s" # prefer size
+lto = true      # shrink binary

@@ -10,17 +10,17 @@ use structopt::StructOpt;
 use bch::network::Network;
 use bch::messages::{Version, NODE_BITCOIN_CASH, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut};
 use bch::peer::Peer;
-use bch::util::{secs_since,Amount, Hash256, Units};
+use bch::util::{secs_since,Amount,Units};
 use bch::util::rx::Observable;
 use std::time::UNIX_EPOCH;
 use std::net::{IpAddr, Ipv4Addr};
 
 use bch::script::Script;
 use secp256k1::{Secp256k1, SecretKey, PublicKey};
+use bch::transaction::p2pkh::{create_sig_script};
 use bch::transaction::sighash::{sighash, SigHashCache, SIGHASH_FORKID, SIGHASH_ALL};
 use bch::transaction::generate_signature;
 use rust_base58::base58::FromBase58;
-use bch::transaction::p2pkh::{create_sig_script};
 
 pub mod conf;
 
@@ -70,10 +70,10 @@ fn main() {
 
     let peer = Peer::connect(ip, port, Network::Regtest, version, 0, 0);
     peer.connected_event().poll();
-    
-    let pub_script      = pk_script("bchreg:qqsl42aquha5gz76fj99lk3ccq3dtyfa2g5857v8jc");
-    let chng_pk_script  = pk_script("bchreg:qqt9nu7xp3myqv2rvuafse3wsqclnwdrtgrzy8t5dd");
-    let dump_pk_script  = pk_script("bchreg:qqegtckkmttyclskd5jjz4fv0r7eucl42qqr6mpzrw");
+
+    let pub_script      = pk_script(&opt.sender.in_address);
+    let chng_pk_script  = pk_script(&opt.sender.out_address);
+    let dump_pk_script  = pk_script(&opt.data.dust_address);
 
     trace!("pk: {:?}", &pub_script);
     trace!("ck: {:?}", &chng_pk_script);
@@ -83,33 +83,31 @@ fn main() {
         version: 2,
         inputs: vec![TxIn{
             prev_output: OutPoint {
-                hash: Hash256::decode("ff8c7c3c77aa2e43932ad497cf0c8ba5a24f542ec1bcb7afe329a7166ae8dccd").unwrap(),
-                index: 1,
+                hash:  opt.sender.outpoint_hash,
+                index: opt.sender.outpoint_index,
             },
             ..Default::default()
         }],
         outputs: vec![
-            TxOut{ amount: Amount::from(29.9997, Units::Bch), pk_script: chng_pk_script,}, 
-            TxOut{ amount: Amount::from(0.0001, Units::Bch), pk_script: dump_pk_script, }],
+            TxOut{ amount: Amount::from(opt.sender.change, Units::Bch), pk_script: chng_pk_script,}, 
+            TxOut{ amount: Amount::from(opt.data.dust_amount, Units::Bch), pk_script: dump_pk_script, }],
         lock_time:0
     };
-
-    let secret_wif = "cPubfVPWaF7dZv2Ppopq7rAeecnyxKDTfHjt3r2NNhpTwMZAdqWc";
 
     let secp = Secp256k1::new();
     let mut cache = SigHashCache::new();
     
     let mut privk = [0;32];
-    privk.copy_from_slice(&secret_wif.from_base58().unwrap()[1..33]); 
+    privk.copy_from_slice(&opt.sender.secret.from_base58().unwrap()[1..33]); 
 
     let secret_key = SecretKey::from_slice(&secp, &privk).expect("32 bytes, within curve order");
     let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
 
-    debug!("secret: {:?} ", secret_key);
-    debug!("public: {:?} ", hex::encode(&pub_key.serialize().as_ref()));
+    trace!("secret: {:?} ", secret_key);
+    trace!("public: {:?} ", hex::encode(&pub_key.serialize().as_ref()));
 
     let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
-    let sighash = sighash(&tx, 0, &pub_script.0, Amount::from(29.9999, Units::Bch), sighash_type, &mut cache).unwrap();
+    let sighash = sighash(&tx, 0, &pub_script.0, Amount::from(opt.sender.in_amount, Units::Bch), sighash_type, &mut cache).unwrap();
     let signature = generate_signature(&privk, &sighash, sighash_type).unwrap();
     let sig_script = create_sig_script(&signature, &pub_key.serialize());
 

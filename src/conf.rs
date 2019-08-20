@@ -6,18 +6,22 @@ use bch::util::Hash256;
 pub struct Wallet {
     #[structopt(long)]
     /// Public address of sender to be used as input.
+    /// 
     pub in_address: String,
 
     #[structopt(long)]
     /// input UTXO amount
+    /// 
     pub in_amount: f64,
 
     #[structopt(long, parse(try_from_str="Hash256::decode"))]
     /// OutPoint transaction id.
+    /// 
     pub outpoint_hash: Hash256,
 
     #[structopt(long)]
     /// OutPoint vout index.
+    /// 
     pub outpoint_index: u32,
 
     #[structopt(long)]
@@ -26,19 +30,20 @@ pub struct Wallet {
     /// Supported format: WIF (Wallet Import Format) - base56check encoded string.
     /// 
     /// > bitcoin-cli -regtest dumpprivkey "address"
-    secret: String,
+    /// 
+    pub secret: String,
 
     #[structopt(long)]
-    /// 
     /// Public addrss to be used as output for change.
     /// 
     /// > bitcoin-cli -regtest getnewaddress
+    /// 
     pub out_address: String,
 
     #[structopt(long)]
-    /// 
     /// Change from input transaction. 
     /// Amout that should be returned to new sender address and don't burned or spent for writing data.
+    /// 
     pub change: f64,
 }
 
@@ -53,18 +58,18 @@ impl FromStr for HexData {
 #[derive(StructOpt, Debug)]
 pub struct Data {
     #[structopt(long)]
-    /// 
     /// Public address to pay for data storage.
     /// 
     /// > bitcoin-cli -regtest getnewaddress
+    /// 
     pub dust_address: String,
     
     #[structopt(long, default_value="0.0001")]
     /// Amount to pay for data storeage.
+    /// 
     pub dust_amount: f64,
     
-    #[structopt(short,long="d")]
-    /// 
+    #[structopt(short,long="data")]
     /// Data to be incuded in output.
     /// 
     pub data: HexData,
@@ -81,7 +86,6 @@ pub struct Data {
 /// 
 /// Address encode the network, so we need a network parameter too.
 /// 
-/// Note: Give money back to mkHS9ne12qx9pS9VojpwU5xtRd4T7X7ZUt.
 pub struct Opt {
     #[structopt(flatten)]
     pub sender: Wallet,
@@ -91,7 +95,7 @@ pub struct Opt {
 
     #[structopt(long, default_value="regtest")]
     /// Network for with the address is encoded.
-    network:String,
+    pub network:String,
 
     /// Verbose mode (-v, -vv, -vvv, -vvvv)
     #[structopt(short="v", long="verbose", parse(from_occurrences))]
