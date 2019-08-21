@@ -6,7 +6,6 @@ use std::fmt;
 use super::result::Result;
 
 mod interpreter;
-#[allow(dead_code)]
 pub mod op_codes;
 mod stack;
 

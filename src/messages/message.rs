@@ -3,7 +3,6 @@ use super::block::Block;
 use super::block_locator::BlockLocator;
 use super::fee_filter::FeeFilter;
 use super::headers::Headers;
-use super::inv::Inv;
 use super::message_header::MessageHeader;
 use super::ping::Ping;
 use super::reject::Reject;
@@ -57,9 +56,6 @@ pub mod commands {
     /// [Get block transaction command](https://en.bitcoin.it/wiki/Protocol_documentation#getblocktxn)
     pub const GETBLOCKTXN: [u8; 12] = *b"getblocktxn\0";
 
-    /// [Get data command](https://en.bitcoin.it/wiki/Protocol_documentation#getdata)
-    pub const GETDATA: [u8; 12] = *b"getdata\0\0\0\0\0";
-
     /// [Get headers command](https://en.bitcoin.it/wiki/Protocol_documentation#getheaders)
     pub const GETHEADERS: [u8; 12] = *b"getheaders\0\0";
 
@@ -68,9 +64,6 @@ pub mod commands {
 
     /// [Mempool command](https://en.bitcoin.it/wiki/Protocol_documentation#mempool)
     pub const MEMPOOL: [u8; 12] = *b"mempool\0\0\0\0\0";
-
-    /// [Not found command](https://en.bitcoin.it/wiki/Protocol_documentation#notfound)
-    pub const NOTFOUND: [u8; 12] = *b"notfound\0\0\0\0";
 
     /// [Ping command](https://en.bitcoin.it/wiki/Protocol_documentation#ping)
     pub const PING: [u8; 12] = *b"ping\0\0\0\0\0\0\0\0";
@@ -111,11 +104,9 @@ pub mod commands {
             s.insert(GETADDR);
             s.insert(GETBLOCKS);
             s.insert(GETBLOCKTXN);
-            s.insert(GETDATA);
             s.insert(GETHEADERS);
             s.insert(HEADERS);
             s.insert(MEMPOOL);
-            s.insert(NOTFOUND);
             s.insert(PING);
             s.insert(PONG);
             s.insert(REJECT);
@@ -135,12 +126,9 @@ pub enum Message {
     FeeFilter(FeeFilter),
     GetAddr,
     GetBlocks(BlockLocator),
-    GetData(Inv),
     GetHeaders(BlockLocator),
     Headers(Headers),
-    Inv(Inv),
     Mempool,
-    NotFound(Inv),
     Other(String),
     Partial(MessageHeader),
     Ping(Ping),
@@ -217,13 +205,6 @@ impl Message {
             return Ok(Message::GetBlocks(block_locator));
         }
 
-        // Getdata
-        if header.command == commands::GETDATA {
-            let payload = header.payload(reader)?;
-            let inv = Inv::read(&mut Cursor::new(payload))?;
-            return Ok(Message::GetData(inv));
-        }
-
         // Getheaders
         if header.command == commands::GETHEADERS {
             let payload = header.payload(reader)?;
@@ -238,26 +219,12 @@ impl Message {
             return Ok(Message::Headers(headers));
         }
 
-        // Inv
-        if header.command == commands::INV {
-            let payload = header.payload(reader)?;
-            let inv = Inv::read(&mut Cursor::new(payload))?;
-            return Ok(Message::Inv(inv));
-        }
-
         // Mempool
         if header.command == commands::MEMPOOL {
             if header.payload_size != 0 {
                 return Err(Error::BadData("Bad payload".to_string()));
             }
             return Ok(Message::Mempool);
-        }
-
-        // Notfound
-        if header.command == commands::NOTFOUND {
-            let payload = header.payload(reader)?;
-            let inv = Inv::read(&mut Cursor::new(payload))?;
-            return Ok(Message::NotFound(inv));
         }
 
         // Ping
@@ -336,12 +303,9 @@ impl Message {
             Message::FeeFilter(p) => write_with_payload(writer, FEEFILTER, p, magic),
             Message::GetAddr => write_without_payload(writer, GETADDR, magic),
             Message::GetBlocks(p) => write_with_payload(writer, GETBLOCKS, p, magic),
-            Message::GetData(p) => write_with_payload(writer, GETDATA, p, magic),
             Message::GetHeaders(p) => write_with_payload(writer, GETHEADERS, p, magic),
             Message::Headers(p) => write_with_payload(writer, HEADERS, p, magic),
             Message::Mempool => write_without_payload(writer, MEMPOOL, magic),
-            Message::NotFound(p) => write_with_payload(writer, NOTFOUND, p, magic),
-            Message::Inv(p) => write_with_payload(writer, INV, p, magic),
             Message::Other(s) => Err(io::Error::new(io::ErrorKind::InvalidData, s.as_ref())),
             Message::Partial(_) => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -372,7 +336,6 @@ impl fmt::Debug for Message {
                 .field("block_locator_hashes", &p.block_locator_hashes)
                 .field("hash_stop", &p.hash_stop)
                 .finish(),
-            Message::GetData(p) => f.debug_struct("GetData").field("inv", &p).finish(),
             Message::GetHeaders(p) => f
                 .debug_struct("GetHeaders")
                 .field("version", &p.version)
@@ -380,9 +343,7 @@ impl fmt::Debug for Message {
                 .field("hash_stop", &p.hash_stop)
                 .finish(),
             Message::Headers(p) => f.write_str(&format!("{:#?}", p)),
-            Message::Inv(p) => f.write_str(&format!("{:#?}", p)),
             Message::Mempool => f.write_str("Mempool"),
-            Message::NotFound(p) => f.debug_struct("NotFound").field("inv", &p).finish(),
             Message::Other(p) => f.write_str(&format!("{:#?}", p)),
             Message::Partial(h) => f.write_str(&format!("Partial {:#?}", h)),
             Message::Ping(p) => f.write_str(&format!("{:#?}", p)),

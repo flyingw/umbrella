@@ -10,12 +10,10 @@ pub mod peer;
 pub mod script;
 pub mod transaction;
 pub mod util;
-pub mod p2pkh;
 pub mod sighash;
 pub mod hash256;
 pub mod amount;
 pub mod bits;
-pub mod bloom_filter;
 pub mod future;
 pub mod hash160;
 pub mod latch;
@@ -48,12 +46,11 @@ use std::net::{IpAddr, Ipv4Addr};
 
 use script::Script;
 use secp256k1::{Secp256k1, SecretKey, PublicKey};
-use p2pkh::{create_sig_script};
 use sighash::{sighash, SigHashCache, SIGHASH_FORKID, SIGHASH_ALL};
 use transaction::generate_signature;
 use rust_base58::base58::FromBase58;
 
-/// same functionality as in as create_pk_script. just to visualy trace op_codes here.
+// Creates public key hash script.
 fn pk_script(addr: &str) -> Script {
     let mut s = Script::new();
     let mut payload = [1;20];
@@ -71,6 +68,14 @@ fn pk_script(addr: &str) -> Script {
     s.append(OP_EQUALVERIFY);
     s.append(OP_CHECKSIG);
     s   
+}
+
+/// Creates a sigscript to sign a p2pkh transaction
+fn sig_script(sig: &[u8], public_key: &[u8; 33]) -> Script {
+    let mut sig_script = Script::new();
+    sig_script.append_data(sig);
+    sig_script.append_data(public_key);
+    sig_script
 }
 
 ///
@@ -138,7 +143,7 @@ fn main() {
     let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
     let sighash = sighash(&tx, 0, &pub_script.0, Amount::from(opt.sender.in_amount, Units::Bch), sighash_type, &mut cache).unwrap();
     let signature = generate_signature(&privk, &sighash, sighash_type).unwrap();
-    let sig_script = create_sig_script(&signature, &pub_key.serialize());
+    let sig_script = sig_script(&signature, &pub_key.serialize());
 
     tx.inputs[0].sig_script = sig_script;
 

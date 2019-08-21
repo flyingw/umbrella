@@ -14,7 +14,6 @@ const CHARSET_REV: [i8; 128] = [
 ];
 
 // Flags for the version byte
-#[allow(dead_code)]
 mod version_byte_flags {
     pub const TYPE_MASK: u8 = 0x78;
     pub const TYPE_P2PKH: u8 = 0x00;
