@@ -4,11 +4,9 @@ use super::message::Payload;
 use super::out_point::{OutPoint,COINBASE_OUTPOINT_HASH, COINBASE_OUTPOINT_INDEX};
 use super::tx_out::TxOut;
 use super::tx_in::TxIn;
-use crate::script::{op_codes, Script, TransactionChecker};
 use std::fmt;
 use std::io;
 use std::io::{Read, Write};
-use crate::sighash::SigHashCache;
 use crate::var_int;
 use crate::hash256::{sha256d, Hash256};
 use crate::result::{Error, Result};
@@ -41,7 +39,6 @@ impl Tx {
     /// Validates a non-coinbase transaction
     pub fn validate(
         &self,
-        require_sighash_forkid: bool,
         utxos: &LinkedHashMap<OutPoint, TxOut>,
     ) -> Result<()> {
         // Make sure neither in or out lists are empty
@@ -98,28 +95,6 @@ impl Tx {
         // Check inputs spent > outputs received
         if total_in < total_out {
             return Err(Error::BadData("Output total exceeds input".to_string()));
-        }
-
-        // Verify each script
-        let mut sighash_cache = SigHashCache::new();
-        for input in 0..self.inputs.len() {
-            let tx_in = &self.inputs[input];
-            let tx_out = utxos.get(&tx_in.prev_output).unwrap();
-
-            let mut script = Script::new();
-            script.append_slice(&tx_in.sig_script.0);
-            script.append(op_codes::OP_CODESEPARATOR);
-            script.append_slice(&tx_out.pk_script.0);
-
-            let mut tx_checker = TransactionChecker {
-                tx: self,
-                sig_hash_cache: &mut sighash_cache,
-                input: input,
-                amount: tx_out.amount,
-                require_sighash_forkid,
-            };
-
-            script.eval(&mut tx_checker)?;
         }
 
         Ok(())

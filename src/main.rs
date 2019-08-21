@@ -10,7 +10,6 @@ pub mod peer;
 pub mod script;
 pub mod transaction;
 pub mod util;
-pub mod wallet;
 pub mod p2pkh;
 pub mod sighash;
 pub mod hash256;

@@ -5,13 +5,11 @@ use op_codes::*;
 use std::fmt;
 use super::result::Result;
 
-mod checker;
 mod interpreter;
 #[allow(dead_code)]
 pub mod op_codes;
 mod stack;
 
-pub use self::checker::{Checker, TransactionChecker, TransactionlessChecker};
 pub(crate) use self::interpreter::next_op;
 
 /// Maximum number of bytes pushable to the stack
@@ -83,11 +81,6 @@ impl Script {
     pub fn append_num(&mut self, n: i32) -> Result<()> {
         self.append_data(&stack::encode_num(n as i64)?);
         Ok(())
-    }
-
-    /// Evaluates a script using the provided checker
-    pub fn eval<T: Checker>(&self, checker: &mut T) -> Result<()> {
-        self::interpreter::eval(&self.0, checker)
     }
 }
 
