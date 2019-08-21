@@ -1,9 +1,6 @@
 //! Peer-to-peer network protocol messages
 
-mod addr;
 mod message_header;
-mod node_addr_ex;
-mod node_addr;
 mod version;
 mod out_point;
 mod ping;
@@ -13,6 +10,7 @@ mod tx_in;
 mod tx_out;
 mod tx;
 mod message;
+mod node_addr;
 
 pub use version::{Version,NODE_BITCOIN_CASH, PROTOCOL_VERSION};
 pub use tx::Tx;

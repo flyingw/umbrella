@@ -1,4 +1,3 @@
-use super::addr::Addr;
 use super::message_header::MessageHeader;
 use super::ping::Ping;
 use super::reject::Reject;
@@ -21,12 +20,6 @@ pub const MAX_PAYLOAD_SIZE: u32 = 0x02000000;
 /// Message commands for the header
 pub mod commands {
     use std::collections::HashSet;
-
-    /// [Addr command](https://en.bitcoin.it/wiki/Protocol_documentation#addr)
-    pub const ADDR: [u8; 12] = *b"addr\0\0\0\0\0\0\0\0";
-
-    /// [Get addr command](https://en.bitcoin.it/wiki/Protocol_documentation#getaddr)
-    pub const GETADDR: [u8; 12] = *b"getaddr\0\0\0\0\0";
 
     /// [Ping command](https://en.bitcoin.it/wiki/Protocol_documentation#ping)
     pub const PING: [u8; 12] = *b"ping\0\0\0\0\0\0\0\0";
@@ -54,8 +47,6 @@ pub mod commands {
         /// Includes everything but version and verack.
         pub static ref ALLOWED: HashSet<[u8; 12]> = {
             let mut s = HashSet::new();
-            s.insert(ADDR);
-            s.insert(GETADDR);
             s.insert(PING);
             s.insert(PONG);
             s.insert(REJECT);
@@ -69,8 +60,6 @@ pub mod commands {
 /// Bitcoin peer-to-peer message with its payload
 #[derive(PartialEq, Eq, Hash, Clone)]
 pub enum Message {
-    Addr(Addr),
-    GetAddr,
     Other(String),
     Partial(MessageHeader),
     Ping(Ping),
@@ -110,21 +99,6 @@ impl Message {
     ///
     /// It may be used after read() returns Message::Partial.
     pub fn read_partial(reader: &mut dyn Read, header: &MessageHeader) -> Result<Self> {
-        // Addr
-        if header.command == commands::ADDR {
-            let payload = header.payload(reader)?;
-            let addr = Addr::read(&mut Cursor::new(payload))?;
-            return Ok(Message::Addr(addr));
-        }
-
-        // Getaddr
-        if header.command == commands::GETADDR {
-            if header.payload_size != 0 {
-                return Err(Error::BadData("Bad payload".to_string()));
-            }
-            return Ok(Message::GetAddr);
-        }
-
         // Ping
         if header.command == commands::PING {
             let payload = header.payload(reader)?;
@@ -188,8 +162,6 @@ impl Message {
     pub fn write(&self, writer: &mut dyn Write, magic: [u8; 4]) -> io::Result<()> {
         use self::commands::*;
         match self {
-            Message::Addr(p) => write_with_payload(writer, ADDR, p, magic),
-            Message::GetAddr => write_without_payload(writer, GETADDR, magic),
             Message::Other(s) => Err(io::Error::new(io::ErrorKind::InvalidData, s.as_ref())),
             Message::Partial(_) => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -209,8 +181,6 @@ impl Message {
 impl fmt::Debug for Message {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Message::Addr(p) => f.write_str(&format!("{:#?}", p)),
-            Message::GetAddr => f.write_str("GetAddr"),
             Message::Other(p) => f.write_str(&format!("{:#?}", p)),
             Message::Partial(h) => f.write_str(&format!("Partial {:#?}", h)),
             Message::Ping(p) => f.write_str(&format!("{:#?}", p)),
