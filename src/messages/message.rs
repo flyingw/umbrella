@@ -1,6 +1,5 @@
 use super::addr::Addr;
 use super::block::Block;
-use super::block_locator::BlockLocator;
 use super::message_header::MessageHeader;
 use super::ping::Ping;
 use super::reject::Reject;
@@ -110,7 +109,6 @@ pub enum Message {
     Addr(Addr),
     Block(Block),
     GetAddr,
-    GetBlocks(BlockLocator),
     Mempool,
     Other(String),
     Partial(MessageHeader),
@@ -172,13 +170,6 @@ impl Message {
                 return Err(Error::BadData("Bad payload".to_string()));
             }
             return Ok(Message::GetAddr);
-        }
-
-        // Getblocks
-        if header.command == commands::GETBLOCKS {
-            let payload = header.payload(reader)?;
-            let block_locator = BlockLocator::read(&mut Cursor::new(payload))?;
-            return Ok(Message::GetBlocks(block_locator));
         }
 
         // Mempool
@@ -263,7 +254,6 @@ impl Message {
             Message::Addr(p) => write_with_payload(writer, ADDR, p, magic),
             Message::Block(p) => write_with_payload(writer, BLOCK, p, magic),
             Message::GetAddr => write_without_payload(writer, GETADDR, magic),
-            Message::GetBlocks(p) => write_with_payload(writer, GETBLOCKS, p, magic),
             Message::Mempool => write_without_payload(writer, MEMPOOL, magic),
             Message::Other(s) => Err(io::Error::new(io::ErrorKind::InvalidData, s.as_ref())),
             Message::Partial(_) => Err(io::Error::new(
@@ -288,12 +278,6 @@ impl fmt::Debug for Message {
             Message::Addr(p) => f.write_str(&format!("{:#?}", p)),
             Message::Block(p) => f.write_str(&format!("{:#?}", p)),
             Message::GetAddr => f.write_str("GetAddr"),
-            Message::GetBlocks(p) => f
-                .debug_struct("GetBlocks")
-                .field("version", &p.version)
-                .field("block_locator_hashes", &p.block_locator_hashes)
-                .field("hash_stop", &p.hash_stop)
-                .finish(),
             Message::Mempool => f.write_str("Mempool"),
             Message::Other(p) => f.write_str(&format!("{:#?}", p)),
             Message::Partial(h) => f.write_str(&format!("Partial {:#?}", h)),

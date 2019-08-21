@@ -2,7 +2,6 @@
 
 mod addr;
 mod block;
-mod block_locator;
 mod message;
 mod message_header;
 mod node_addr;
@@ -18,7 +17,6 @@ mod version;
 
 pub use self::addr::Addr;
 pub use self::block::Block;
-pub use self::block_locator::{BlockLocator, NO_HASH_STOP};
 pub use self::message::{commands, Message, Payload, MAX_PAYLOAD_SIZE, NO_CHECKSUM};
 pub use self::message_header::MessageHeader;
 pub use self::node_addr::NodeAddr;
