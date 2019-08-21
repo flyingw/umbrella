@@ -2,7 +2,6 @@ use super::addr::Addr;
 use super::block::Block;
 use super::block_locator::BlockLocator;
 use super::fee_filter::FeeFilter;
-use super::headers::Headers;
 use super::message_header::MessageHeader;
 use super::ping::Ping;
 use super::reject::Reject;
@@ -56,12 +55,6 @@ pub mod commands {
     /// [Get block transaction command](https://en.bitcoin.it/wiki/Protocol_documentation#getblocktxn)
     pub const GETBLOCKTXN: [u8; 12] = *b"getblocktxn\0";
 
-    /// [Get headers command](https://en.bitcoin.it/wiki/Protocol_documentation#getheaders)
-    pub const GETHEADERS: [u8; 12] = *b"getheaders\0\0";
-
-    /// [Headers command](https://en.bitcoin.it/wiki/Protocol_documentation#headers)
-    pub const HEADERS: [u8; 12] = *b"headers\0\0\0\0\0";
-
     /// [Mempool command](https://en.bitcoin.it/wiki/Protocol_documentation#mempool)
     pub const MEMPOOL: [u8; 12] = *b"mempool\0\0\0\0\0";
 
@@ -104,8 +97,6 @@ pub mod commands {
             s.insert(GETADDR);
             s.insert(GETBLOCKS);
             s.insert(GETBLOCKTXN);
-            s.insert(GETHEADERS);
-            s.insert(HEADERS);
             s.insert(MEMPOOL);
             s.insert(PING);
             s.insert(PONG);
@@ -126,8 +117,6 @@ pub enum Message {
     FeeFilter(FeeFilter),
     GetAddr,
     GetBlocks(BlockLocator),
-    GetHeaders(BlockLocator),
-    Headers(Headers),
     Mempool,
     Other(String),
     Partial(MessageHeader),
@@ -203,20 +192,6 @@ impl Message {
             let payload = header.payload(reader)?;
             let block_locator = BlockLocator::read(&mut Cursor::new(payload))?;
             return Ok(Message::GetBlocks(block_locator));
-        }
-
-        // Getheaders
-        if header.command == commands::GETHEADERS {
-            let payload = header.payload(reader)?;
-            let block_locator = BlockLocator::read(&mut Cursor::new(payload))?;
-            return Ok(Message::GetHeaders(block_locator));
-        }
-
-        // Headers
-        if header.command == commands::HEADERS {
-            let payload = header.payload(reader)?;
-            let headers = Headers::read(&mut Cursor::new(payload))?;
-            return Ok(Message::Headers(headers));
         }
 
         // Mempool
@@ -303,8 +278,6 @@ impl Message {
             Message::FeeFilter(p) => write_with_payload(writer, FEEFILTER, p, magic),
             Message::GetAddr => write_without_payload(writer, GETADDR, magic),
             Message::GetBlocks(p) => write_with_payload(writer, GETBLOCKS, p, magic),
-            Message::GetHeaders(p) => write_with_payload(writer, GETHEADERS, p, magic),
-            Message::Headers(p) => write_with_payload(writer, HEADERS, p, magic),
             Message::Mempool => write_without_payload(writer, MEMPOOL, magic),
             Message::Other(s) => Err(io::Error::new(io::ErrorKind::InvalidData, s.as_ref())),
             Message::Partial(_) => Err(io::Error::new(
@@ -336,13 +309,6 @@ impl fmt::Debug for Message {
                 .field("block_locator_hashes", &p.block_locator_hashes)
                 .field("hash_stop", &p.hash_stop)
                 .finish(),
-            Message::GetHeaders(p) => f
-                .debug_struct("GetHeaders")
-                .field("version", &p.version)
-                .field("block_locator_hashes", &p.block_locator_hashes)
-                .field("hash_stop", &p.hash_stop)
-                .finish(),
-            Message::Headers(p) => f.write_str(&format!("{:#?}", p)),
             Message::Mempool => f.write_str("Mempool"),
             Message::Other(p) => f.write_str(&format!("{:#?}", p)),
             Message::Partial(h) => f.write_str(&format!("Partial {:#?}", h)),

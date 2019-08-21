@@ -3,7 +3,6 @@ use super::message::Payload;
 use super::out_point::OutPoint;
 use super::tx::Tx;
 use super::tx_out::TxOut;
-use super::block_header::BlockHeader;
 use std::collections::{HashSet};
 use std::fmt;
 use std::io;
@@ -15,8 +14,6 @@ use crate::serdes::Serializable;
 /// Block of transactions
 #[derive(Default, PartialEq, Eq, Hash, Clone)]
 pub struct Block {
-    /// Block header
-    pub header: BlockHeader,
     /// Block transactions
     pub txns: Vec<Tx>,
 }
@@ -57,17 +54,15 @@ impl Block {
 
 impl Serializable<Block> for Block {
     fn read(reader: &mut dyn Read) -> Result<Block> {
-        let header = BlockHeader::read(reader)?;
         let txn_count = var_int::read(reader)?;
         let mut txns = Vec::with_capacity(txn_count as usize);
         for _i in 0..txn_count {
             txns.push(Tx::read(reader)?);
         }
-        Ok(Block { header, txns })
+        Ok(Block { txns })
     }
 
     fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
-        self.header.write(writer)?;
         var_int::write(self.txns.len() as u64, writer)?;
         for txn in self.txns.iter() {
             txn.write(writer)?;
@@ -78,12 +73,7 @@ impl Serializable<Block> for Block {
 
 impl Payload<Block> for Block {
     fn size(&self) -> usize {
-        let mut size = BlockHeader::SIZE;
-        size += var_int::size(self.txns.len() as u64);
-        for txn in self.txns.iter() {
-            size += txn.size();
-        }
-        size
+        0
     }
 }
 
@@ -91,13 +81,11 @@ impl fmt::Debug for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.txns.len() <= 3 {
             f.debug_struct("Block")
-                .field("header", &self.header)
                 .field("txns", &self.txns)
                 .finish()
         } else {
             let txns = format!("[<{} transactions>]", self.txns.len());
             f.debug_struct("Block")
-                .field("header", &self.header)
                 .field("txns", &txns)
                 .finish()
         }

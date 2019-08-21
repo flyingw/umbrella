@@ -2,10 +2,8 @@
 
 mod addr;
 mod block;
-mod block_header;
 mod block_locator;
 mod fee_filter;
-mod headers;
 mod message;
 mod message_header;
 mod node_addr;
@@ -21,10 +19,8 @@ mod version;
 
 pub use self::addr::Addr;
 pub use self::block::Block;
-pub use self::block_header::BlockHeader;
 pub use self::block_locator::{BlockLocator, NO_HASH_STOP};
 pub use self::fee_filter::FeeFilter;
-pub use self::headers::{header_hash, Headers};
 pub use self::message::{commands, Message, Payload, MAX_PAYLOAD_SIZE, NO_CHECKSUM};
 pub use self::message_header::MessageHeader;
 pub use self::node_addr::NodeAddr;

@@ -1,5 +1,5 @@
 use hex;
-use crate::messages::{Block, BlockHeader, OutPoint, Tx, TxIn, TxOut};
+use crate::messages::{Block, OutPoint, Tx, TxIn, TxOut};
 use super::seed_iter::SeedIter;
 use crate::script::Script;
 use crate::hash256::Hash256;
@@ -50,17 +50,6 @@ impl Network {
     pub fn genesis_block(&self) -> Block {
         match self {
             Network::Mainnet => {
-                let header = BlockHeader {
-                    version: 1,
-                    prev_hash: Hash256([0; 32]),
-                    merkle_root: Hash256::decode(
-                        "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b",
-                    ).unwrap(),
-                    timestamp: 1231006505,
-                    bits: 0x1d00ffff,
-                    nonce: 2083236893,
-                };
-
                 let tx = Tx {
                     version: 1,
                     inputs: vec![TxIn {
@@ -79,22 +68,10 @@ impl Network {
                 };
 
                 Block {
-                    header,
                     txns: vec![tx],
                 }
             }
             Network::Testnet => {
-                let header = BlockHeader {
-                    version: 1,
-                    prev_hash: Hash256([0; 32]),
-                    merkle_root: Hash256::decode(
-                        "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b",
-                    ).unwrap(),
-                    timestamp: 1296688602,
-                    bits: 0x1d00ffff,
-                    nonce: 414098458,
-                };
-
                 let tx = Tx {
                     version: 1,
                     inputs: vec![TxIn {
@@ -113,21 +90,10 @@ impl Network {
                 };
 
                 Block {
-                    header,
                     txns: vec![tx],
                 }
             }
             Network::Regtest => {
-                let header = BlockHeader {
-                    version: 1,
-                    prev_hash: Hash256([0; 32]),
-                    merkle_root: Hash256::decode(
-                        "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b",
-                    ).unwrap(),
-                    timestamp: 1296688602,
-                    bits: 0x207fFFFF,
-                    nonce: 2,
-                };
                 let tx = Tx {
                     version:1,
                     inputs: vec![TxIn{
@@ -145,7 +111,6 @@ impl Network {
                     lock_time: 0,
                 };
                 Block {
-                    header,
                     txns: vec![tx]
                 }
             }
