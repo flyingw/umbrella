@@ -41,6 +41,10 @@ $ umbrella -vvvv --in_address $IN_ADD --in_amount $BALANCE --secret $SECRET
 [--help: for details]
 ```
 
+# links
+
+Use [rust-bch](https://github.com/brentongunning/rust-bch) library to build Bitcoin Cash application.
+
 ## browse
 
 [abe](https://github.com/marioschlipf/bitcoin-abe)
