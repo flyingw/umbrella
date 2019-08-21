@@ -1,20 +1,7 @@
 #[macro_use]
 extern crate log;
-extern crate stderrlog;
-extern crate byteorder;
-extern crate digest;
-extern crate dns_lookup;
-extern crate hex;
 #[macro_use]
 extern crate lazy_static;
-extern crate linked_hash_map;
-extern crate murmur3;
-extern crate rand;
-extern crate ring;
-extern crate ripemd160;
-extern crate rust_base58;
-extern crate secp256k1;
-extern crate snowflake;
 
 pub mod address;
 pub mod messages;
