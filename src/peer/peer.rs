@@ -366,9 +366,6 @@ impl Peer {
     fn handle_message(&self, message: &Message) -> Result<()> {
         // A subset of messages are handled directly by the peer
         match message {
-            &Message::FeeFilter(ref feefilter) => {
-                *self.minfee.lock().unwrap() = feefilter.minfee;
-            }
             &Message::Ping(ref ping) => {
                 let pong = Message::Pong(ping.clone());
                 self.send(&pong)?;

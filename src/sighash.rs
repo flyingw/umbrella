@@ -1,8 +1,7 @@
 //! Transaction sighash helpers
 
 use byteorder::{LittleEndian, WriteBytesExt};
-use super::messages::{OutPoint, Payload, Tx, TxOut};
-use super::script::{next_op, op_codes, Script};
+use super::messages::{OutPoint, Payload, Tx};
 use std::io::Write;
 use super::result::{Error, Result};
 use super::var_int;

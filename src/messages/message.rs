@@ -1,7 +1,6 @@
 use super::addr::Addr;
 use super::block::Block;
 use super::block_locator::BlockLocator;
-use super::fee_filter::FeeFilter;
 use super::message_header::MessageHeader;
 use super::ping::Ping;
 use super::reject::Reject;
@@ -42,9 +41,6 @@ pub mod commands {
 
     /// [Inventory command](https://en.bitcoin.it/wiki/Protocol_documentation#inv)
     pub const INV: [u8; 12] = *b"inv\0\0\0\0\0\0\0\0\0";
-
-    /// [Fee filter command](https://en.bitcoin.it/wiki/Protocol_documentation#feefilter)
-    pub const FEEFILTER: [u8; 12] = *b"feefilter\0\0\0";
 
     /// [Get addr command](https://en.bitcoin.it/wiki/Protocol_documentation#getaddr)
     pub const GETADDR: [u8; 12] = *b"getaddr\0\0\0\0\0";
@@ -93,7 +89,6 @@ pub mod commands {
             s.insert(BLOCKTXN);
             s.insert(CMPCTBLOCK);
             s.insert(INV);
-            s.insert(FEEFILTER);
             s.insert(GETADDR);
             s.insert(GETBLOCKS);
             s.insert(GETBLOCKTXN);
@@ -114,7 +109,6 @@ pub mod commands {
 pub enum Message {
     Addr(Addr),
     Block(Block),
-    FeeFilter(FeeFilter),
     GetAddr,
     GetBlocks(BlockLocator),
     Mempool,
@@ -170,13 +164,6 @@ impl Message {
             let payload = header.payload(reader)?;
             let block = Block::read(&mut Cursor::new(payload))?;
             return Ok(Message::Block(block));
-        }
-
-        // Feefilter
-        if header.command == commands::FEEFILTER {
-            let payload = header.payload(reader)?;
-            let feefilter = FeeFilter::read(&mut Cursor::new(payload))?;
-            return Ok(Message::FeeFilter(feefilter));
         }
 
         // Getaddr
@@ -275,7 +262,6 @@ impl Message {
         match self {
             Message::Addr(p) => write_with_payload(writer, ADDR, p, magic),
             Message::Block(p) => write_with_payload(writer, BLOCK, p, magic),
-            Message::FeeFilter(p) => write_with_payload(writer, FEEFILTER, p, magic),
             Message::GetAddr => write_without_payload(writer, GETADDR, magic),
             Message::GetBlocks(p) => write_with_payload(writer, GETBLOCKS, p, magic),
             Message::Mempool => write_without_payload(writer, MEMPOOL, magic),
@@ -301,7 +287,6 @@ impl fmt::Debug for Message {
         match self {
             Message::Addr(p) => f.write_str(&format!("{:#?}", p)),
             Message::Block(p) => f.write_str(&format!("{:#?}", p)),
-            Message::FeeFilter(p) => f.write_str(&format!("{:#?}", p)),
             Message::GetAddr => f.write_str("GetAddr"),
             Message::GetBlocks(p) => f
                 .debug_struct("GetBlocks")
