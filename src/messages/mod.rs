@@ -36,7 +36,6 @@ pub use self::filter_load::{
 pub use self::headers::{header_hash, Headers};
 pub use self::inv::{Inv, MAX_INV_ENTRIES};
 pub use self::inv_vect::{InvVect, InvVectType};
-pub use self::merkle_block::MerkleBlock;
 pub use self::message::{commands, Message, Payload, MAX_PAYLOAD_SIZE, NO_CHECKSUM};
 pub use self::message_header::MessageHeader;
 pub use self::node_addr::NodeAddr;
