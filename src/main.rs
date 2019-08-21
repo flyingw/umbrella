@@ -24,6 +24,11 @@ pub mod conf;
 pub mod cashaddr;
 pub mod legacyaddr;
 pub mod var_int;
+pub mod atomic_reader;
+pub mod op_codes;
+pub mod stack;
+pub mod interpreter;
+pub mod seed_iter;
 
 pub use messages as msg;
 pub use serdes::Serializable;
@@ -60,7 +65,7 @@ fn pk_script(addr: &str) -> Script {
     let hash = cashaddr_decode(addr, Network::Regtest).expect("correct cash address");
     payload.copy_from_slice(&hash.0[..20]);
 
-    use script::op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160};
+    use op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160};
 
     s.append(OP_DUP);
     s.append(OP_HASH160);

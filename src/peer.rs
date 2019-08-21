@@ -1,6 +1,6 @@
 use crate::messages::{Message, MessageHeader, Ping, Version};
 use crate::network::Network;
-use super::atomic_reader::AtomicReader;
+use crate::atomic_reader::AtomicReader;
 use snowflake::ProcessUniqueId;
 use std::fmt;
 use std::hash::{Hash, Hasher};

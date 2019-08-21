@@ -1,4 +1,4 @@
-use super::seed_iter::SeedIter;
+use crate::seed_iter::SeedIter;
 use crate::hash256::Hash256;
 use crate::result::{Error, Result};
 

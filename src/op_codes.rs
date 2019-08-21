@@ -19,44 +19,6 @@ pub const OP_PUSHDATA2: u8 = 77;
 /// The next four bytes sets the number of bytes to push onto the stack
 pub const OP_PUSHDATA4: u8 = 78;
 
-/// Pushes -1 onto the stack
-pub const OP_1NEGATE: u8 = 79;
-/// Pushes 1 onto the stack
-pub const OP_1: u8 = 81;
-/// Pushes 1 onto the stack
-pub const OP_TRUE: u8 = 81;
-
-/// Pushes 2 onto the stack
-pub const OP_2: u8 = 82;
-/// Pushes 3 onto the stack
-pub const OP_3: u8 = 83;
-/// Pushes 4 onto the stack
-pub const OP_4: u8 = 84;
-/// Pushes 5 onto the stack
-pub const OP_5: u8 = 85;
-/// Pushes 6 onto the stack
-pub const OP_6: u8 = 86;
-/// Pushes 7 onto the stack
-pub const OP_7: u8 = 87;
-/// Pushes 8 onto the stack
-pub const OP_8: u8 = 88;
-/// Pushes 9 onto the stack
-pub const OP_9: u8 = 89;
-/// Pushes 10 onto the stack
-pub const OP_10: u8 = 90;
-/// Pushes 11 onto the stack
-pub const OP_11: u8 = 91;
-/// Pushes 12 onto the stack
-pub const OP_12: u8 = 92;
-/// Pushes 13 onto the stack
-pub const OP_13: u8 = 93;
-/// Pushes 14 onto the stack
-pub const OP_14: u8 = 94;
-/// Pushes 15 onto the stack
-pub const OP_15: u8 = 95;
-/// Pushes 16 onto the stack
-pub const OP_16: u8 = 96;
-
 // --------------------------------------------------------------------------------------------
 // Flow Control
 // --------------------------------------------------------------------------------------------

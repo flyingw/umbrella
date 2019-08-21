@@ -1,15 +1,11 @@
 //! Script opcodes and interpreter
 
 use hex;
-use op_codes::*;
+use crate::op_codes::*;
 use std::fmt;
-use super::result::Result;
-
-mod interpreter;
-pub mod op_codes;
-mod stack;
-
-pub(crate) use self::interpreter::next_op;
+use crate::result::Result;
+use crate::stack;
+use crate::interpreter::next_op;
 
 /// Maximum number of bytes pushable to the stack
 pub const MAX_SCRIPT_ELEMENT_SIZE: usize = 520;
@@ -47,24 +43,24 @@ impl Script {
     pub fn append_data(&mut self, data: &[u8]) {
         let len = data.len();
         match len {
-            0 => self.0.push(op_codes::OP_0),
+            0 => self.0.push(OP_0),
             1..=75 => {
-                self.0.push(op_codes::OP_PUSH + len as u8); //?? working on ABC regtest mode
+                self.0.push(OP_PUSH + len as u8); //?? working on ABC regtest mode
                 self.0.extend_from_slice(data);
             }
             76..=255 => {
-                self.0.push(op_codes::OP_PUSHDATA1);
+                self.0.push(OP_PUSHDATA1);
                 self.0.push(len as u8);
                 self.0.extend_from_slice(data);
             }
             256..=65535 => {
-                self.0.push(op_codes::OP_PUSHDATA2);
+                self.0.push(OP_PUSHDATA2);
                 self.0.push((len >> 0) as u8);
                 self.0.push((len >> 8) as u8);
                 self.0.extend_from_slice(data);
             }
             _ => {
-                self.0.push(op_codes::OP_PUSHDATA4);
+                self.0.push(OP_PUSHDATA4);
                 self.0.push((len >> 0) as u8);
                 self.0.push((len >> 8) as u8);
                 self.0.push((len >> 16) as u8);
@@ -94,24 +90,6 @@ impl fmt::Debug for Script {
                 ret.push_str(" ")
             }
             match script[i] {
-                OP_0 => ret.push_str("OP_0"),
-                OP_1NEGATE => ret.push_str("OP_1NEGATE"),
-                OP_1 => ret.push_str("OP_1"),
-                OP_2 => ret.push_str("OP_2"),
-                OP_3 => ret.push_str("OP_3"),
-                OP_4 => ret.push_str("OP_4"),
-                OP_5 => ret.push_str("OP_5"),
-                OP_6 => ret.push_str("OP_6"),
-                OP_7 => ret.push_str("OP_7"),
-                OP_8 => ret.push_str("OP_8"),
-                OP_9 => ret.push_str("OP_9"),
-                OP_10 => ret.push_str("OP_10"),
-                OP_11 => ret.push_str("OP_11"),
-                OP_12 => ret.push_str("OP_12"),
-                OP_13 => ret.push_str("OP_13"),
-                OP_14 => ret.push_str("OP_14"),
-                OP_15 => ret.push_str("OP_15"),
-                OP_16 => ret.push_str("OP_16"),
                 len @ 1..=75 => {
                     ret.push_str(&format!("OP_PUSH+{} ", len));
                     if i + 1 + len as usize <= script.len() {
