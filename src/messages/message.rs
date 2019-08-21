@@ -1,5 +1,4 @@
 use super::addr::Addr;
-use super::block::Block;
 use super::message_header::MessageHeader;
 use super::ping::Ping;
 use super::reject::Reject;
@@ -29,26 +28,11 @@ pub mod commands {
     /// [Alert command](https://en.bitcoin.it/wiki/Protocol_documentation#alert) (deprecated)
     pub const ALERT: [u8; 12] = *b"alert\0\0\0\0\0\0\0";
 
-    /// [Block command](https://en.bitcoin.it/wiki/Protocol_documentation#block)
-    pub const BLOCK: [u8; 12] = *b"block\0\0\0\0\0\0\0";
-
-    /// [Block transaction command](https://en.bitcoin.it/wiki/Protocol_documentation#blocktxn)
-    pub const BLOCKTXN: [u8; 12] = *b"blocktxn\0\0\0\0";
-
     /// [Compact block command](https://en.bitcoin.it/wiki/Protocol_documentation#cmpctblock)
     pub const CMPCTBLOCK: [u8; 12] = *b"cmpctblock\0\0";
 
-    /// [Inventory command](https://en.bitcoin.it/wiki/Protocol_documentation#inv)
-    pub const INV: [u8; 12] = *b"inv\0\0\0\0\0\0\0\0\0";
-
     /// [Get addr command](https://en.bitcoin.it/wiki/Protocol_documentation#getaddr)
     pub const GETADDR: [u8; 12] = *b"getaddr\0\0\0\0\0";
-
-    /// [Get blocks command](https://en.bitcoin.it/wiki/Protocol_documentation#getblocks)
-    pub const GETBLOCKS: [u8; 12] = *b"getblocks\0\0\0";
-
-    /// [Get block transaction command](https://en.bitcoin.it/wiki/Protocol_documentation#getblocktxn)
-    pub const GETBLOCKTXN: [u8; 12] = *b"getblocktxn\0";
 
     /// [Mempool command](https://en.bitcoin.it/wiki/Protocol_documentation#mempool)
     pub const MEMPOOL: [u8; 12] = *b"mempool\0\0\0\0\0";
@@ -64,9 +48,6 @@ pub mod commands {
 
     /// [Send compact command](https://en.bitcoin.it/wiki/Protocol_documentation#sendcmpct)
     pub const SENDCMPCT: [u8; 12] = *b"sendcmpct\0\0\0";
-
-    /// [Send headers command](https://en.bitcoin.it/wiki/Protocol_documentation#sendheaders)
-    pub const SENDHEADERS: [u8; 12] = *b"sendheaders\0";
 
     /// [Transaction command](https://en.bitcoin.it/wiki/Protocol_documentation#tx)
     pub const TX: [u8; 12] = *b"tx\0\0\0\0\0\0\0\0\0\0";
@@ -84,19 +65,13 @@ pub mod commands {
             let mut s = HashSet::new();
             s.insert(ADDR);
             s.insert(ALERT);
-            s.insert(BLOCK);
-            s.insert(BLOCKTXN);
             s.insert(CMPCTBLOCK);
-            s.insert(INV);
             s.insert(GETADDR);
-            s.insert(GETBLOCKS);
-            s.insert(GETBLOCKTXN);
             s.insert(MEMPOOL);
             s.insert(PING);
             s.insert(PONG);
             s.insert(REJECT);
             s.insert(SENDCMPCT);
-            s.insert(SENDHEADERS);
             s.insert(TX);
             s
         };
@@ -107,7 +82,6 @@ pub mod commands {
 #[derive(PartialEq, Eq, Hash, Clone)]
 pub enum Message {
     Addr(Addr),
-    Block(Block),
     GetAddr,
     Mempool,
     Other(String),
@@ -115,7 +89,6 @@ pub enum Message {
     Ping(Ping),
     Pong(Ping),
     Reject(Reject),
-    SendHeaders,
     SendCmpct(SendCmpct),
     Tx(Tx),
     Verack,
@@ -155,13 +128,6 @@ impl Message {
             let payload = header.payload(reader)?;
             let addr = Addr::read(&mut Cursor::new(payload))?;
             return Ok(Message::Addr(addr));
-        }
-
-        // Block
-        if header.command == commands::BLOCK {
-            let payload = header.payload(reader)?;
-            let block = Block::read(&mut Cursor::new(payload))?;
-            return Ok(Message::Block(block));
         }
 
         // Getaddr
@@ -208,14 +174,6 @@ impl Message {
             return Ok(Message::SendCmpct(sendcmpct));
         }
 
-        // Sendheaders
-        if header.command == commands::SENDHEADERS {
-            if header.payload_size != 0 {
-                return Err(Error::BadData("Bad payload".to_string()));
-            }
-            return Ok(Message::SendHeaders);
-        }
-
         // Tx
         if header.command == commands::TX {
             let payload = header.payload(reader)?;
@@ -252,7 +210,6 @@ impl Message {
         use self::commands::*;
         match self {
             Message::Addr(p) => write_with_payload(writer, ADDR, p, magic),
-            Message::Block(p) => write_with_payload(writer, BLOCK, p, magic),
             Message::GetAddr => write_without_payload(writer, GETADDR, magic),
             Message::Mempool => write_without_payload(writer, MEMPOOL, magic),
             Message::Other(s) => Err(io::Error::new(io::ErrorKind::InvalidData, s.as_ref())),
@@ -263,7 +220,6 @@ impl Message {
             Message::Ping(p) => write_with_payload(writer, PING, p, magic),
             Message::Pong(p) => write_with_payload(writer, PONG, p, magic),
             Message::Reject(p) => write_with_payload(writer, REJECT, p, magic),
-            Message::SendHeaders => write_without_payload(writer, SENDHEADERS, magic),
             Message::SendCmpct(p) => write_with_payload(writer, SENDCMPCT, p, magic),
             Message::Tx(p) => write_with_payload(writer, TX, p, magic),
             Message::Verack => write_without_payload(writer, VERACK, magic),
@@ -276,7 +232,6 @@ impl fmt::Debug for Message {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Message::Addr(p) => f.write_str(&format!("{:#?}", p)),
-            Message::Block(p) => f.write_str(&format!("{:#?}", p)),
             Message::GetAddr => f.write_str("GetAddr"),
             Message::Mempool => f.write_str("Mempool"),
             Message::Other(p) => f.write_str(&format!("{:#?}", p)),
@@ -284,7 +239,6 @@ impl fmt::Debug for Message {
             Message::Ping(p) => f.write_str(&format!("{:#?}", p)),
             Message::Pong(p) => f.debug_struct("Pong").field("nonce", &p.nonce).finish(),
             Message::Reject(p) => f.write_str(&format!("{:#?}", p)),
-            Message::SendHeaders => f.write_str("SendHeaders"),
             Message::SendCmpct(p) => f.write_str(&format!("{:#?}", p)),
             Message::Tx(p) => f.write_str(&format!("{:#?}", p)),
             Message::Verack => f.write_str("Verack"),

@@ -65,7 +65,6 @@ pub struct Peer {
     connected: AtomicBool,
     time_delta: Mutex<i64>,
     minfee: Mutex<u64>,
-    sendheaders: AtomicBool,
     sendcmpct: AtomicBool,
     version: Mutex<Option<Version>>,
 
@@ -96,7 +95,6 @@ impl Peer {
             connected: AtomicBool::new(false),
             time_delta: Mutex::new(0),
             minfee: Mutex::new(0),
-            sendheaders: AtomicBool::new(false),
             sendcmpct: AtomicBool::new(false),
             version: Mutex::new(None),
             weak_self: Mutex::new(None),
@@ -189,11 +187,6 @@ impl Peer {
     /// Returns the minimum fee this peer accepts in sats/1000bytes
     pub fn minfee(&self) -> u64 {
         *self.minfee.lock().unwrap()
-    }
-
-    /// Returns whether this peer may announce new blocks with headers instead of inv
-    pub fn sendheaders(&self) -> bool {
-        self.sendheaders.load(Ordering::Relaxed)
     }
 
     /// Returns whether compact blocks are supported
@@ -369,9 +362,6 @@ impl Peer {
             &Message::Ping(ref ping) => {
                 let pong = Message::Pong(ping.clone());
                 self.send(&pong)?;
-            }
-            &Message::SendHeaders => {
-                self.sendheaders.store(true, Ordering::Relaxed);
             }
             &Message::SendCmpct(ref sendcmpct) => {
                 let enable = sendcmpct.use_cmpctblock();

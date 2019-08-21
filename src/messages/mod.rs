@@ -1,7 +1,6 @@
 //! Peer-to-peer network protocol messages
 
 mod addr;
-mod block;
 mod message;
 mod message_header;
 mod node_addr;
@@ -16,7 +15,6 @@ mod tx_out;
 mod version;
 
 pub use self::addr::Addr;
-pub use self::block::Block;
 pub use self::message::{commands, Message, Payload, MAX_PAYLOAD_SIZE, NO_CHECKSUM};
 pub use self::message_header::MessageHeader;
 pub use self::node_addr::NodeAddr;

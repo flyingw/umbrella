@@ -1,10 +1,6 @@
-use hex;
-use crate::messages::{Block, OutPoint, Tx, TxIn, TxOut};
 use super::seed_iter::SeedIter;
-use crate::script::Script;
 use crate::hash256::Hash256;
 use crate::result::{Error, Result};
-use crate::amount::Amount;
 
 /// Network type
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
@@ -43,77 +39,6 @@ impl Network {
             Network::Mainnet => [0xe3, 0xe1, 0xf3, 0xe8],
             Network::Testnet => [0xf4, 0xe5, 0xf3, 0xf4],
             Network::Regtest => [0xda, 0xb5, 0xbf, 0xfa],
-        }
-    }
-
-    /// Returns the genesis block
-    pub fn genesis_block(&self) -> Block {
-        match self {
-            Network::Mainnet => {
-                let tx = Tx {
-                    version: 1,
-                    inputs: vec![TxIn {
-                        prev_output: OutPoint {
-                            hash: Hash256([0; 32]),
-                            index: 0xffffffff,
-                        },
-                        sig_script: Script(hex::decode("04ffff001d0104455468652054696d65732030332f4a616e2f32303039204368616e63656c6c6f72206f6e206272696e6b206f66207365636f6e64206261696c6f757420666f722062616e6b73").unwrap()),
-                        sequence: 0xffffffff,
-                    }],
-                    outputs: vec![TxOut {
-                        amount: Amount(5000000000),
-                        pk_script: Script(hex::decode("4104678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5fac").unwrap()),
-                    }],
-                    lock_time: 0,
-                };
-
-                Block {
-                    txns: vec![tx],
-                }
-            }
-            Network::Testnet => {
-                let tx = Tx {
-                    version: 1,
-                    inputs: vec![TxIn {
-                        prev_output: OutPoint {
-                            hash: Hash256([0; 32]),
-                            index: 0xffffffff,
-                        },
-                        sig_script: Script(hex::decode("04ffff001d0104455468652054696d65732030332f4a616e2f32303039204368616e63656c6c6f72206f6e206272696e6b206f66207365636f6e64206261696c6f757420666f722062616e6b73").unwrap()),
-                        sequence: 0xffffffff,
-                    }],
-                    outputs: vec![TxOut {
-                        amount: Amount(5000000000),
-                        pk_script: Script(hex::decode("4104678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5fac").unwrap()),
-                    }],
-                    lock_time: 0,
-                };
-
-                Block {
-                    txns: vec![tx],
-                }
-            }
-            Network::Regtest => {
-                let tx = Tx {
-                    version:1,
-                    inputs: vec![TxIn{
-                        prev_output:OutPoint{
-                            hash: Hash256([0; 32]),
-                            index: 0xffffffff,
-                        },
-                        sig_script: Script(hex::decode("04ffff001d0104455468652054696d65732030332f4a616e2f32303039204368616e63656c6c6f72206f6e206272696e6b206f66207365636f6e64206261696c6f757420666f722062616e6b73").unwrap()),
-                        sequence: 0xffffffff,
-                    }],
-                    outputs: vec![TxOut{
-                        amount: Amount(5000000000),
-                        pk_script: Script(hex::decode("4104678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5fac").unwrap()),
-                    }],
-                    lock_time: 0,
-                };
-                Block {
-                    txns: vec![tx]
-                }
-            }
         }
     }
 
