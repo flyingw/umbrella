@@ -2,11 +2,8 @@ use super::addr::Addr;
 use super::block::Block;
 use super::block_locator::BlockLocator;
 use super::fee_filter::FeeFilter;
-use super::filter_add::FilterAdd;
-use super::filter_load::FilterLoad;
 use super::headers::Headers;
 use super::inv::Inv;
-use super::merkle_block::MerkleBlock;
 use super::message_header::MessageHeader;
 use super::ping::Ping;
 use super::reject::Reject;
@@ -51,15 +48,6 @@ pub mod commands {
     /// [Fee filter command](https://en.bitcoin.it/wiki/Protocol_documentation#feefilter)
     pub const FEEFILTER: [u8; 12] = *b"feefilter\0\0\0";
 
-    /// [Filter add command](https://en.bitcoin.it/wiki/Protocol_documentation#filterload.2C_filteradd.2C_filterclear.2C_merkleblock)
-    pub const FILTERADD: [u8; 12] = *b"filteradd\0\0\0";
-
-    /// [Filter clear command](https://en.bitcoin.it/wiki/Protocol_documentation#filterload.2C_filteradd.2C_filterclear.2C_merkleblock)
-    pub const FILTERCLEAR: [u8; 12] = *b"filterclear\0";
-
-    /// [Filter load command](https://en.bitcoin.it/wiki/Protocol_documentation#filterload.2C_filteradd.2C_filterclear.2C_merkleblock)
-    pub const FILTERLOAD: [u8; 12] = *b"filterload\0\0";
-
     /// [Get addr command](https://en.bitcoin.it/wiki/Protocol_documentation#getaddr)
     pub const GETADDR: [u8; 12] = *b"getaddr\0\0\0\0\0";
 
@@ -80,9 +68,6 @@ pub mod commands {
 
     /// [Mempool command](https://en.bitcoin.it/wiki/Protocol_documentation#mempool)
     pub const MEMPOOL: [u8; 12] = *b"mempool\0\0\0\0\0";
-
-    /// [Merkle block](https://en.bitcoin.it/wiki/Protocol_documentation#filterload.2C_filteradd.2C_filterclear.2C_merkleblock)
-    pub const MERKLEBLOCK: [u8; 12] = *b"merkleblock\0";
 
     /// [Not found command](https://en.bitcoin.it/wiki/Protocol_documentation#notfound)
     pub const NOTFOUND: [u8; 12] = *b"notfound\0\0\0\0";
@@ -123,9 +108,6 @@ pub mod commands {
             s.insert(CMPCTBLOCK);
             s.insert(INV);
             s.insert(FEEFILTER);
-            s.insert(FILTERADD);
-            s.insert(FILTERCLEAR);
-            s.insert(FILTERLOAD);
             s.insert(GETADDR);
             s.insert(GETBLOCKS);
             s.insert(GETBLOCKTXN);
@@ -133,7 +115,6 @@ pub mod commands {
             s.insert(GETHEADERS);
             s.insert(HEADERS);
             s.insert(MEMPOOL);
-            s.insert(MERKLEBLOCK);
             s.insert(NOTFOUND);
             s.insert(PING);
             s.insert(PONG);
@@ -152,9 +133,6 @@ pub enum Message {
     Addr(Addr),
     Block(Block),
     FeeFilter(FeeFilter),
-    FilterAdd(FilterAdd),
-    FilterClear,
-    FilterLoad(FilterLoad),
     GetAddr,
     GetBlocks(BlockLocator),
     GetData(Inv),
@@ -162,7 +140,6 @@ pub enum Message {
     Headers(Headers),
     Inv(Inv),
     Mempool,
-    MerkleBlock(MerkleBlock),
     NotFound(Inv),
     Other(String),
     Partial(MessageHeader),
@@ -225,30 +202,6 @@ impl Message {
             return Ok(Message::FeeFilter(feefilter));
         }
 
-        // FilterAdd
-        if header.command == commands::FILTERADD {
-            let payload = header.payload(reader)?;
-            let filter_add = FilterAdd::read(&mut Cursor::new(payload))?;
-            filter_add.validate()?;
-            return Ok(Message::FilterAdd(filter_add));
-        }
-
-        // FilterClear
-        if header.command == commands::FILTERCLEAR {
-            if header.payload_size != 0 {
-                return Err(Error::BadData("Bad payload".to_string()));
-            }
-            return Ok(Message::FilterClear);
-        }
-
-        // FilterLoad
-        if header.command == commands::FILTERLOAD {
-            let payload = header.payload(reader)?;
-            let filter_load = FilterLoad::read(&mut Cursor::new(payload))?;
-            filter_load.validate()?;
-            return Ok(Message::FilterLoad(filter_load));
-        }
-
         // Getaddr
         if header.command == commands::GETADDR {
             if header.payload_size != 0 {
@@ -298,13 +251,6 @@ impl Message {
                 return Err(Error::BadData("Bad payload".to_string()));
             }
             return Ok(Message::Mempool);
-        }
-
-        // MerkleBlock
-        if header.command == commands::MERKLEBLOCK {
-            let payload = header.payload(reader)?;
-            let merkle_block = MerkleBlock::read(&mut Cursor::new(payload))?;
-            return Ok(Message::MerkleBlock(merkle_block));
         }
 
         // Notfound
@@ -388,16 +334,12 @@ impl Message {
             Message::Addr(p) => write_with_payload(writer, ADDR, p, magic),
             Message::Block(p) => write_with_payload(writer, BLOCK, p, magic),
             Message::FeeFilter(p) => write_with_payload(writer, FEEFILTER, p, magic),
-            Message::FilterAdd(p) => write_with_payload(writer, FILTERADD, p, magic),
-            Message::FilterClear => write_without_payload(writer, FILTERCLEAR, magic),
-            Message::FilterLoad(p) => write_with_payload(writer, FILTERLOAD, p, magic),
             Message::GetAddr => write_without_payload(writer, GETADDR, magic),
             Message::GetBlocks(p) => write_with_payload(writer, GETBLOCKS, p, magic),
             Message::GetData(p) => write_with_payload(writer, GETDATA, p, magic),
             Message::GetHeaders(p) => write_with_payload(writer, GETHEADERS, p, magic),
             Message::Headers(p) => write_with_payload(writer, HEADERS, p, magic),
             Message::Mempool => write_without_payload(writer, MEMPOOL, magic),
-            Message::MerkleBlock(p) => write_with_payload(writer, MERKLEBLOCK, p, magic),
             Message::NotFound(p) => write_with_payload(writer, NOTFOUND, p, magic),
             Message::Inv(p) => write_with_payload(writer, INV, p, magic),
             Message::Other(s) => Err(io::Error::new(io::ErrorKind::InvalidData, s.as_ref())),
@@ -423,9 +365,6 @@ impl fmt::Debug for Message {
             Message::Addr(p) => f.write_str(&format!("{:#?}", p)),
             Message::Block(p) => f.write_str(&format!("{:#?}", p)),
             Message::FeeFilter(p) => f.write_str(&format!("{:#?}", p)),
-            Message::FilterAdd(p) => f.write_str(&format!("{:#?}", p)),
-            Message::FilterClear => f.write_str("FilterClear"),
-            Message::FilterLoad(p) => f.write_str(&format!("{:#?}", p)),
             Message::GetAddr => f.write_str("GetAddr"),
             Message::GetBlocks(p) => f
                 .debug_struct("GetBlocks")
@@ -443,7 +382,6 @@ impl fmt::Debug for Message {
             Message::Headers(p) => f.write_str(&format!("{:#?}", p)),
             Message::Inv(p) => f.write_str(&format!("{:#?}", p)),
             Message::Mempool => f.write_str("Mempool"),
-            Message::MerkleBlock(p) => f.write_str(&format!("{:#?}", p)),
             Message::NotFound(p) => f.debug_struct("NotFound").field("inv", &p).finish(),
             Message::Other(p) => f.write_str(&format!("{:#?}", p)),
             Message::Partial(h) => f.write_str(&format!("Partial {:#?}", h)),

@@ -5,12 +5,9 @@ mod block;
 mod block_header;
 mod block_locator;
 mod fee_filter;
-mod filter_add;
-mod filter_load;
 mod headers;
 mod inv;
 mod inv_vect;
-mod merkle_block;
 mod message;
 mod message_header;
 mod node_addr;
@@ -29,10 +26,6 @@ pub use self::block::Block;
 pub use self::block_header::BlockHeader;
 pub use self::block_locator::{BlockLocator, NO_HASH_STOP};
 pub use self::fee_filter::FeeFilter;
-pub use self::filter_add::{FilterAdd, MAX_FILTER_ADD_DATA_SIZE};
-pub use self::filter_load::{
-    FilterLoad, BLOOM_UPDATE_ALL, BLOOM_UPDATE_NONE, BLOOM_UPDATE_P2PUBKEY_ONLY,
-};
 pub use self::headers::{header_hash, Headers};
 pub use self::inv::{Inv, MAX_INV_ENTRIES};
 pub use self::inv_vect::{InvVect, InvVectType};
