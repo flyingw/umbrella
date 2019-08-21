@@ -34,9 +34,6 @@ pub mod commands {
     /// [Get addr command](https://en.bitcoin.it/wiki/Protocol_documentation#getaddr)
     pub const GETADDR: [u8; 12] = *b"getaddr\0\0\0\0\0";
 
-    /// [Mempool command](https://en.bitcoin.it/wiki/Protocol_documentation#mempool)
-    pub const MEMPOOL: [u8; 12] = *b"mempool\0\0\0\0\0";
-
     /// [Ping command](https://en.bitcoin.it/wiki/Protocol_documentation#ping)
     pub const PING: [u8; 12] = *b"ping\0\0\0\0\0\0\0\0";
 
@@ -67,7 +64,6 @@ pub mod commands {
             s.insert(ALERT);
             s.insert(CMPCTBLOCK);
             s.insert(GETADDR);
-            s.insert(MEMPOOL);
             s.insert(PING);
             s.insert(PONG);
             s.insert(REJECT);
@@ -83,7 +79,6 @@ pub mod commands {
 pub enum Message {
     Addr(Addr),
     GetAddr,
-    Mempool,
     Other(String),
     Partial(MessageHeader),
     Ping(Ping),
@@ -136,14 +131,6 @@ impl Message {
                 return Err(Error::BadData("Bad payload".to_string()));
             }
             return Ok(Message::GetAddr);
-        }
-
-        // Mempool
-        if header.command == commands::MEMPOOL {
-            if header.payload_size != 0 {
-                return Err(Error::BadData("Bad payload".to_string()));
-            }
-            return Ok(Message::Mempool);
         }
 
         // Ping
@@ -211,7 +198,6 @@ impl Message {
         match self {
             Message::Addr(p) => write_with_payload(writer, ADDR, p, magic),
             Message::GetAddr => write_without_payload(writer, GETADDR, magic),
-            Message::Mempool => write_without_payload(writer, MEMPOOL, magic),
             Message::Other(s) => Err(io::Error::new(io::ErrorKind::InvalidData, s.as_ref())),
             Message::Partial(_) => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -233,7 +219,6 @@ impl fmt::Debug for Message {
         match self {
             Message::Addr(p) => f.write_str(&format!("{:#?}", p)),
             Message::GetAddr => f.write_str("GetAddr"),
-            Message::Mempool => f.write_str("Mempool"),
             Message::Other(p) => f.write_str(&format!("{:#?}", p)),
             Message::Partial(h) => f.write_str(&format!("Partial {:#?}", h)),
             Message::Ping(p) => f.write_str(&format!("{:#?}", p)),
