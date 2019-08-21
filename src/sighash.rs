@@ -24,24 +24,6 @@ pub const SIGHASH_FORKID: u8 = 0x40;
 /// The 24-bit fork ID for BCH
 const FORK_ID: u32 = 0;
 
-/// Generates a transaction digest for signing
-///
-/// This will use either BIP-143 or the legacy algorithm depending on if SIGHASH_FORKID is set.
-pub fn sighash(
-    tx: &Tx,
-    n_input: usize,
-    script_code: &[u8],
-    amount: Amount,
-    sighash_type: u8,
-    cache: &mut SigHashCache,
-) -> Result<Hash256> {
-    if sighash_type & SIGHASH_FORKID != 0 {
-        bip143_sighash(tx, n_input, script_code, amount, sighash_type, cache)
-    } else {
-        legacy_sighash(tx, n_input, script_code, sighash_type)
-    }
-}
-
 /// Cache for sighash intermediate values to avoid quadratic hashing
 ///
 /// This is only valid for one transaction, but may be used for multiple signatures.
@@ -66,7 +48,7 @@ impl SigHashCache {
 ///
 /// This is to be used for all tranasctions after the August 2017 fork.
 /// It fixing quadratic hashing and includes the amount spent in the hash.
-fn bip143_sighash(
+pub fn bip143_sighash(
     tx: &Tx,
     n_input: usize,
     script_code: &[u8],
@@ -154,91 +136,5 @@ fn bip143_sighash(
     // 10. Serialize hash type
     s.write_u32::<LittleEndian>((FORK_ID << 8) | sighash_type as u32)?;
 
-    Ok(sha256d(&s))
-}
-
-/// Generates the transaction digest for signing using the legacy algorithm
-///
-/// This is used for all transaction validation before the August 2017 fork.
-fn legacy_sighash(
-    tx: &Tx,
-    n_input: usize,
-    script_code: &[u8],
-    sighash_type: u8,
-) -> Result<Hash256> {
-    if n_input >= tx.inputs.len() {
-        return Err(Error::BadArgument("input out of tx_in range".to_string()));
-    }
-
-    let mut s = Vec::with_capacity(tx.size());
-    let base_type = sighash_type & 31;
-    let anyone_can_pay = sighash_type & SIGHASH_ANYONECANPAY != 0;
-
-    // Remove all instances of OP_CODESEPARATOR from the script_code
-    let mut sub_script = Vec::with_capacity(script_code.len());
-    let mut i = 0;
-    while i < script_code.len() {
-        let next = next_op(i, script_code);
-        if script_code[i] != op_codes::OP_CODESEPARATOR {
-            sub_script.extend_from_slice(&script_code[i..next]);
-        }
-        i = next;
-    }
-
-    // Serialize the version
-    s.write_u32::<LittleEndian>(tx.version)?;
-
-    // Serialize the inputs
-    let n_inputs = if anyone_can_pay { 1 } else { tx.inputs.len() };
-    var_int::write(n_inputs as u64, &mut s)?;
-    for i in 0..tx.inputs.len() {
-        let i = if anyone_can_pay { n_input } else { i };
-        let mut tx_in = tx.inputs[i].clone();
-        if i == n_input {
-            tx_in.sig_script = Script(Vec::with_capacity(4 + sub_script.len()));
-            tx_in.sig_script.0.extend_from_slice(&sub_script);
-        } else {
-            tx_in.sig_script = Script(vec![]);
-            if base_type == SIGHASH_NONE || base_type == SIGHASH_SINGLE {
-                tx_in.sequence = 0;
-            }
-        }
-        tx_in.write(&mut s)?;
-        if anyone_can_pay {
-            break;
-        }
-    }
-
-    // Serialize the outputs
-    let tx_out_list = if base_type == SIGHASH_NONE {
-        vec![]
-    } else if base_type == SIGHASH_SINGLE {
-        if n_input >= tx.outputs.len() {
-            return Err(Error::BadArgument("input out of tx_out range".to_string()));
-        }
-        let mut truncated_out = tx.outputs.clone();
-        truncated_out.truncate(n_input + 1);
-        truncated_out
-    } else {
-        tx.outputs.clone()
-    };
-    var_int::write(tx_out_list.len() as u64, &mut s)?;
-    for i in 0..tx_out_list.len() {
-        if i == n_input && base_type == SIGHASH_SINGLE {
-            let empty = TxOut {
-                amount: Amount(-1),
-                pk_script: Script(vec![]),
-            };
-            empty.write(&mut s)?;
-        } else {
-            tx_out_list[i].write(&mut s)?;
-        }
-    }
-
-    // Serialize the lock time
-    s.write_u32::<LittleEndian>(tx.lock_time)?;
-
-    // Append the sighash_type and finally double hash the result
-    s.write_u32::<LittleEndian>(sighash_type as u32)?;
     Ok(sha256d(&s))
 }

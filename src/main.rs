@@ -46,7 +46,7 @@ use std::net::{IpAddr, Ipv4Addr};
 
 use script::Script;
 use secp256k1::{Secp256k1, SecretKey, PublicKey};
-use sighash::{sighash, SigHashCache, SIGHASH_FORKID, SIGHASH_ALL};
+use sighash::{bip143_sighash, SigHashCache, SIGHASH_FORKID, SIGHASH_ALL};
 use transaction::generate_signature;
 use rust_base58::base58::FromBase58;
 
@@ -141,7 +141,7 @@ fn main() {
     trace!("public: {:?} ", hex::encode(&pub_key.serialize().as_ref()));
 
     let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
-    let sighash = sighash(&tx, 0, &pub_script.0, Amount::from(opt.sender.in_amount, Units::Bch), sighash_type, &mut cache).unwrap();
+    let sighash = bip143_sighash(&tx, 0, &pub_script.0, Amount::from(opt.sender.in_amount, Units::Bch), sighash_type, &mut cache).unwrap();
     let signature = generate_signature(&privk, &sighash, sighash_type).unwrap();
     let sig_script = sig_script(&signature, &pub_key.serialize());
 
