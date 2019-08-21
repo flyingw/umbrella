@@ -30,7 +30,6 @@ pub mod stack;
 pub mod interpreter;
 pub mod seed_iter;
 
-pub use messages as msg;
 pub use serdes::Serializable;
 pub use result::{Error, Result};
 pub use amount::{Amount, Units};
@@ -42,7 +41,7 @@ use conf::Opt;
 use structopt::StructOpt;
 
 use network::Network;
-use msg::{Version, NODE_BITCOIN_CASH, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut};
+use messages::{Version, NODE_BITCOIN_CASH, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut};
 use peer::Peer;
 use util::secs_since;
 use rx::Observable;

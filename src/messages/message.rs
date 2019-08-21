@@ -25,12 +25,6 @@ pub mod commands {
     /// [Addr command](https://en.bitcoin.it/wiki/Protocol_documentation#addr)
     pub const ADDR: [u8; 12] = *b"addr\0\0\0\0\0\0\0\0";
 
-    /// [Alert command](https://en.bitcoin.it/wiki/Protocol_documentation#alert) (deprecated)
-    pub const ALERT: [u8; 12] = *b"alert\0\0\0\0\0\0\0";
-
-    /// [Compact block command](https://en.bitcoin.it/wiki/Protocol_documentation#cmpctblock)
-    pub const CMPCTBLOCK: [u8; 12] = *b"cmpctblock\0\0";
-
     /// [Get addr command](https://en.bitcoin.it/wiki/Protocol_documentation#getaddr)
     pub const GETADDR: [u8; 12] = *b"getaddr\0\0\0\0\0";
 
@@ -61,8 +55,6 @@ pub mod commands {
         pub static ref ALLOWED: HashSet<[u8; 12]> = {
             let mut s = HashSet::new();
             s.insert(ADDR);
-            s.insert(ALERT);
-            s.insert(CMPCTBLOCK);
             s.insert(GETADDR);
             s.insert(PING);
             s.insert(PONG);
