@@ -35,13 +35,11 @@ pub use result::{Error, Result};
 pub use amount::{Amount, Units};
 pub use hash160::{Hash160, hash160};
 pub use hash256::{sha256d, Hash256};
-use ferris_says::say;
-use std::io::{stdout, BufWriter};
 use conf::Opt;
 use structopt::StructOpt;
 
 use network::Network;
-use messages::{Version, NODE_BITCOIN_CASH, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut};
+use messages::{Version, NODE_NONE, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut};
 use peer::Peer;
 use util::secs_since;
 use rx::Observable;
@@ -100,7 +98,7 @@ fn main() {
         
     let version = Version {
         version: PROTOCOL_VERSION,
-        services: NODE_BITCOIN_CASH, 
+        services: NODE_NONE, 
         timestamp: secs_since(UNIX_EPOCH) as i64,
         user_agent: "didactic".to_string(),
         ..Default::default()
@@ -161,10 +159,6 @@ fn main() {
     let response = peer.messages().poll();
     info!("resp: {:?}", response);
     peer.disconnect();
-
-    let stdout = stdout();
-    let mut writer = BufWriter::new(stdout.lock());
-    say(b"Hello fellow kids", 17, &mut writer).unwrap();
 }
 
 #[cfg(test)]

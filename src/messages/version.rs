@@ -15,17 +15,8 @@ pub const PROTOCOL_VERSION: u32 = 70015;
 /// Minimum protocol version supported by this library
 pub const MIN_SUPPORTED_PROTOCOL_VERSION: u32 = 70001;
 
-/// Unknown IP address to use as a default
-pub const UNKNOWN_IP: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 127, 0, 0, 1];
-
 /// Service flag that node is not a full node. Used for SPV wallets.
 pub const NODE_NONE: u64 = 0;
-
-/// Service flag that node is a full node and implements all protocol features
-pub const NODE_NETWORK: u64 = 1;
-
-/// Service flag that node is a full node and implements all protocol features
-pub const NODE_BITCOIN_CASH: u64 = 1 << 5;
 
 /// Version payload defining a node's capabilities
 #[derive(Debug, Default, PartialEq, Eq, Hash, Clone)]

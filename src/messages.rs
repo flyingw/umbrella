@@ -12,7 +12,7 @@ mod tx;
 mod message;
 mod node_addr;
 
-pub use version::{Version,NODE_BITCOIN_CASH, PROTOCOL_VERSION};
+pub use version::{Version,NODE_NONE,PROTOCOL_VERSION};
 pub use tx::Tx;
 pub use tx_in::TxIn;
 pub use tx_out::TxOut;
