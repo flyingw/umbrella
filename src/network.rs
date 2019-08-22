@@ -1,4 +1,3 @@
-use crate::seed_iter::SeedIter;
 use crate::hash256::Hash256;
 use crate::result::{Error, Result};
 
@@ -8,6 +7,22 @@ pub enum Network {
     Mainnet = 0,
     Testnet = 1,
     Regtest = 2,
+}
+
+use std::str::FromStr;
+
+impl FromStr for Network {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "BCH"       => Ok(Network::Mainnet),
+            "BCH-test"  => Ok(Network::Testnet),
+            "BCH-reg"   => Ok(Network::Regtest),
+            _ => {
+                Err(Error::BadArgument(format!("Unknown network type: {}", s)))
+            }
+        }
+    }
 }
 
 impl Network {
@@ -107,10 +122,5 @@ impl Network {
             ],
             Network::Regtest => vec![],
         }
-    }
-
-    /// Creates a new DNS seed iterator for this network
-    pub fn seed_iter(&self) -> SeedIter {
-        SeedIter::new(&self.seeds(), self.port())
     }
 }

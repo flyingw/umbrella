@@ -22,13 +22,11 @@ pub mod rx;
 pub mod serdes;
 pub mod conf;
 pub mod cashaddr;
-pub mod legacyaddr;
 pub mod var_int;
 pub mod atomic_reader;
 pub mod op_codes;
 pub mod stack;
 pub mod interpreter;
-pub mod seed_iter;
 
 pub use serdes::Serializable;
 pub use result::{Error, Result};
@@ -44,7 +42,6 @@ use peer::Peer;
 use util::secs_since;
 use rx::Observable;
 use std::time::UNIX_EPOCH;
-use std::net::{IpAddr, Ipv4Addr};
 
 use script::Script;
 use secp256k1::{Secp256k1, SecretKey, PublicKey};
@@ -94,7 +91,15 @@ fn main() {
 
     trace!("Options {:?}", opt);
 
-    let (ip, port) = (IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 18444);
+    let network = opt.network;
+
+    use rand::seq::SliceRandom;
+    let seeds = network.seeds();
+    let seed = seeds.choose(&mut rand::thread_rng()).unwrap();
+    let seed = [&seed, ":", &network.port().to_string()].concat();
+
+    use std::net::{SocketAddr, ToSocketAddrs};
+    let seed: SocketAddr = seed.to_socket_addrs().unwrap().next().unwrap();
         
     let version = Version {
         version: PROTOCOL_VERSION,
@@ -104,7 +109,7 @@ fn main() {
         ..Default::default()
     };
 
-    let peer = Peer::connect(ip, port, Network::Regtest, version, 0, 0);
+    let peer = Peer::connect(seed.ip(), seed.port(), network, version, 0, 0);
     peer.connected_event().poll();
 
     let pub_script      = pk_script(&opt.sender.in_address);

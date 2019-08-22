@@ -1,6 +1,7 @@
 use structopt::StructOpt;
 use std::str::FromStr;
 use crate::hash256::Hash256;
+use crate::network::Network;
 
 #[derive(StructOpt,Debug)]
 pub struct Wallet {
@@ -93,9 +94,11 @@ pub struct Opt {
     #[structopt(flatten)]
     pub data: Data,
 
-    #[structopt(long, default_value="regtest")]
-    /// Network for with the address is encoded.
-    pub network:String,
+    #[structopt(short, long, default_value="BCH-regtest")]
+    /// Network for with the address is encoded
+    /// 
+    /// Supported networks: "BCH", "BCH-test", "BCH-reg"
+    pub network: Network,
 
     /// Verbose mode (-v, -vv, -vvv, -vvvv)
     #[structopt(short="v", long="verbose", parse(from_occurrences))]
