@@ -38,7 +38,7 @@ use structopt::StructOpt;
 
 use network::Network;
 use messages::{Version, NODE_NONE, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut};
-use messages::{Message,MessageHeader};
+use messages::{Ping, Message,MessageHeader};
 use peer::Peer;
 use util::secs_since;
 use rx::Observable;
@@ -78,103 +78,7 @@ fn sig_script(sig: &[u8], public_key: &[u8; 33]) -> Script {
     sig_script
 }
 
-///
-/// Send transaction to selected network.
-/// 
-fn main() {
-    let opt = Opt::from_args();
-    
-    stderrlog::new().module(module_path!())
-        .quiet(opt.quiet)
-        .verbosity(opt.verbose)
-        .modules(vec!("umbrella", "bch"))
-        .init().unwrap();
-
-    trace!("Options {:?}", opt);
-
-    let network = opt.network;
-
-    use rand::seq::{SliceRandom, IteratorRandom};
-
-    let mut rng = rand::thread_rng();
-    let seed = network.seeds();
-    let seed = seed.choose(&mut rng).unwrap();
-    let seed = [&seed, ":", &network.port().to_string()].concat();
-
-    use std::net::{SocketAddr, ToSocketAddrs};
-    let seed: SocketAddr = seed.to_socket_addrs().unwrap().choose(&mut rng).unwrap();
-
-    let version = Version {
-        version: PROTOCOL_VERSION,
-        services: NODE_NONE, 
-        timestamp: secs_since(UNIX_EPOCH) as i64,
-        user_agent: "didactic".to_string(),
-        ..Default::default()
-    };
-
-    // > tcp
-    use std::time::Duration;
-    use std::net::{Shutdown,TcpStream};
-    
-    // no unwrap just go to next one.
-    let mut stream = TcpStream::connect_timeout(&seed, Duration::from_secs(1)).unwrap();
-    let mut is = stream.try_clone().unwrap();
-    
-    let mut partial: Option<MessageHeader> = None;
-
-    use std::thread;
-
-    let h = thread::spawn(move || {
-        info!("Connected");// lock atomic here?
-        // read/write shit here until handshake
-        
-        loop {
-            let message = match &partial {
-                Some(header) => Message::read_partial(&mut is, header),
-                None => Message::read(&mut is, network.magic()),
-            };
-
-            match message {
-                Ok(message) => {
-                    println!("message: {:?}", message);
-                    if let Message::Partial(header) = message {
-                        partial = Some(header);
-                    } else {
-                        partial = None;
-                        //handle message?
-                    }
-                }
-                Err(e) => {
-                    if let Error::IOError(ref e) = e {
-                        if e.kind() == std::io::ErrorKind::WouldBlock {
-                            continue;
-                        }
-                    }
-                    
-                    // handle timeouts 
-                    println!("  error: {:?}", e); // update atomic
-                    is.shutdown(Shutdown::Read).unwrap();
-                    return;
-                }
-            }
-        }
-    });
-
-    let out = &mut stream;
-
-    loop {
-        //out.write();
-        //out.flush();
-        
-    }
-
-    // may have an error on macos
-    stream.shutdown(Shutdown::Both).unwrap();
-    // <
-
-    //let peer = Peer::connect(seed.ip(), seed.port(), network, version, 0, 0);
-    //peer.connected_event().poll();
-
+fn create_transaction(opt: &Opt) -> Tx {
     let pub_script      = pk_script(&opt.sender.in_address);
     let chng_pk_script  = pk_script(&opt.sender.out_address);
     let dump_pk_script  = pk_script(&opt.data.dust_address);
@@ -217,12 +121,180 @@ fn main() {
 
     tx.inputs[0].sig_script = sig_script;
 
-    debug!{"transaction: {:#?}", tx};
+    trace!{"transaction: {:#?}", tx};
+    return tx;
+}
+
+///
+/// Send transaction to selected network.
+/// 
+fn main() {
+    let opt = Opt::from_args();
+    
+    stderrlog::new().module(module_path!())
+        .quiet(opt.quiet)
+        .verbosity(opt.verbose)
+        .modules(vec!("umbrella", "bch"))
+        .init().unwrap();
+
+    trace!("Options {:?}", opt);
+
+    let network = opt.network;
+
+    use rand::seq::{SliceRandom, IteratorRandom};
+
+    let mut rng = rand::thread_rng();
+    let seed = network.seeds();
+    let seed = seed.choose(&mut rng).unwrap();
+    let seed = [&seed, ":", &network.port().to_string()].concat();
+
+    use std::net::{SocketAddr, ToSocketAddrs};
+    let seed: SocketAddr = seed.to_socket_addrs().unwrap().choose(&mut rng).unwrap();
+
+    use std::time::Duration;
+    use std::net::{Shutdown,TcpStream};
+    
+    let mut stream = TcpStream::connect_timeout(&seed, Duration::from_secs(1)).unwrap();
+    // + kind: ConnectionRefused for next seed
+    stream.set_nodelay(true).unwrap();
+    stream.set_nonblocking(true).unwrap();
+    stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+    
+    let magic = network.magic();
+    let mut partial: Option<MessageHeader> = None;
+    let mut is = stream.try_clone().unwrap();
+    
+    let tx = Message::Tx(create_transaction(&opt));
+
+    let version = Version {
+        version: PROTOCOL_VERSION,
+        services: NODE_NONE, 
+        timestamp: secs_since(UNIX_EPOCH) as i64,
+        user_agent: "didactic".to_string(),
+        ..Default::default()
+    };
+
+    let our_version = Message::Version(version);
+    debug!("Write {:#?}", our_version);
+    
+    our_version.write(&mut stream, magic).unwrap();
+
+    use std::thread;
+    use std::io;
+
+    let lis = thread::spawn(move || {
+        debug!("Connected {:?}", &seed);
+        loop {
+            let message = match &partial {
+                Some(header) => Message::read_partial(&mut is, header),
+                None => Message::read(&mut is, network.magic()),
+            };
+
+            match message {
+                Ok(message) => {
+                    if let Message::Partial(header) = message {
+                        partial = Some(header);
+                    } else {
+                        partial = None;
+                        println!("message: {:?}", message);
+
+                        match message {
+                            Message::Version(v) => {
+                                debug!("Version {:?}, verract", v);
+                            }
+                            Message::Verack => {
+                                debug!("Write {:#?}", Message::Verack);
+                                Message::Verack.write(&mut is, magic).unwrap();
+                                // debug!("Write ping");
+                                // Message::Ping(Ping {nonce: secs_since(UNIX_EPOCH) as u64,}).write(&mut is, magic).unwrap();
+                            }
+                            Message::Ping(ref ping) => {
+                                debug!("Write {:#?}", ping);
+                                Message::Pong(ping.clone()).write(&mut is, magic).unwrap();
+                            }
+                            Message::FeeFilter(ref fee) => {
+                                debug!("min fee received {:?}", fee.minfee);
+                                debug!("Write {:#?}", &tx);
+                                tx.write(&mut is, magic).unwrap();
+                                return Ok(tx);
+                            }
+                            Message::Reject(ref reject) => {
+                                debug!("rejected {:?}", reject);
+                                return Ok(Message::Reject(reject.clone()));
+                            }
+                            _ => {
+                                debug!("not handled {:?}",  message);
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    if let Error::IOError(ref e) = e {
+                        if e.kind() == io::ErrorKind::WouldBlock || 
+                            e.kind() == io::ErrorKind::TimedOut {
+                            continue;
+                        }
+                    }
+                    return Err(e);
+                }
+            }
+        }
+    });
+
+    match lis.join() {
+        Ok(v)  => debug!("{:?}", v),
+        Err(r) => {
+            debug!("{:?}", r);
+            stream.shutdown(Shutdown::Both).unwrap();
+        }
+    };
+
+    // let pub_script      = pk_script(&opt.sender.in_address);
+    // let chng_pk_script  = pk_script(&opt.sender.out_address);
+    // let dump_pk_script  = pk_script(&opt.data.dust_address);
+
+    // trace!("pk: {:?}", &pub_script);
+    // trace!("ck: {:?}", &chng_pk_script);
+    // trace!("dk: {:?}", &dump_pk_script);
+
+    // let mut tx = Tx {
+    //     version: 2,
+    //     inputs: vec![TxIn{
+    //         prev_output: OutPoint {
+    //             hash:  opt.sender.outpoint_hash,
+    //             index: opt.sender.outpoint_index,
+    //         },
+    //         ..Default::default()
+    //     }],
+    //     outputs: vec![
+    //         TxOut{ amount: Amount::from(opt.sender.change, Units::Bch), pk_script: chng_pk_script,}, 
+    //         TxOut{ amount: Amount::from(opt.data.dust_amount, Units::Bch), pk_script: dump_pk_script, }],
+    //     lock_time:0
+    // };
+
+    // let secp = Secp256k1::new();
+    // let mut cache = SigHashCache::new();
+    
+    // let mut privk = [0;32];
+    // privk.copy_from_slice(&opt.sender.secret.from_base58().unwrap()[1..33]); 
+
+    // let secret_key = SecretKey::from_slice(&secp, &privk).expect("32 bytes, within curve order");
+    // let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
+
+    // trace!("secret: {:?} ", secret_key);
+    // trace!("public: {:?} ", hex::encode(&pub_key.serialize().as_ref()));
+
+    // let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
+    // let sighash = bip143_sighash(&tx, 0, &pub_script.0, Amount::from(opt.sender.in_amount, Units::Bch), sighash_type, &mut cache).unwrap();
+    // let signature = generate_signature(&privk, &sighash, sighash_type).unwrap();
+    // let sig_script = sig_script(&signature, &pub_key.serialize());
+
+    // tx.inputs[0].sig_script = sig_script;
+
+    // trace!{"transaction: {:#?}", tx};
 
     //use messages::Message;
-
     //peer.send(&Message::Tx(tx)).unwrap();
-
     // todo: put some small timeout to wait for response in error case.
     //let response = peer.messages().poll();
     //info!("resp: {:?}", response);

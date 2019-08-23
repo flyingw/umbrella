@@ -363,10 +363,6 @@ impl Peer {
                 let pong = Message::Pong(ping.clone());
                 self.send(&pong)?;
             }
-            &Message::SendCmpct(ref sendcmpct) => {
-                let enable = sendcmpct.use_cmpctblock();
-                self.sendcmpct.store(enable, Ordering::Relaxed);
-            }
             _ => {}
         }
         Ok(())
