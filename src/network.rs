@@ -120,7 +120,7 @@ impl Network {
                 "testnet-seed.deadalnix.me".to_string(),
                 "testnet-seeder.criptolayer.net".to_string(),
             ],
-            Network::Regtest => vec![],
+            Network::Regtest => vec!["localhost".to_string()],
         }
     }
 }

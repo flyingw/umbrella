@@ -11,6 +11,7 @@ mod tx_out;
 mod tx;
 mod message;
 mod node_addr;
+pub mod fee_filter;
 
 pub use version::{Version,NODE_NONE,PROTOCOL_VERSION};
 pub use tx::Tx;

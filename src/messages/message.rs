@@ -2,6 +2,7 @@ use super::message_header::MessageHeader;
 use super::ping::Ping;
 use super::reject::Reject;
 use super::send_cmpct::SendCmpct;
+use super::fee_filter::FeeFilter;
 use super::tx::Tx;
 use super::version::Version;
 use ring::digest;
@@ -42,6 +43,9 @@ pub mod commands {
     /// [Version acknowledgement command](https://en.bitcoin.it/wiki/Protocol_documentation#verack)
     pub const VERACK: [u8; 12] = *b"verack\0\0\0\0\0\0";
 
+    // [Fee filter command](https://en.bitcoin.it/wiki/Protocol_documentation#feefilter)
+    pub const FEEFILTER: [u8; 12] = *b"feefilter\0\0\0";
+
     lazy_static! {
         /// Commands that this node is allowed to receive after handshake is complete.
         /// Includes everything but version and verack.
@@ -49,6 +53,7 @@ pub mod commands {
             let mut s = HashSet::new();
             s.insert(PING);
             s.insert(PONG);
+            s.insert(FEEFILTER);
             s.insert(REJECT);
             s.insert(SENDCMPCT);
             s.insert(TX);
@@ -60,6 +65,7 @@ pub mod commands {
 /// Bitcoin peer-to-peer message with its payload
 #[derive(PartialEq, Eq, Hash, Clone)]
 pub enum Message {
+    FeeFilter(FeeFilter),
     Other(String),
     Partial(MessageHeader),
     Ping(Ping),
@@ -127,6 +133,13 @@ impl Message {
             return Ok(Message::SendCmpct(sendcmpct));
         }
 
+        // Feefilter
+        if header.command == commands::FEEFILTER {
+            let payload = header.payload(reader)?;
+            let feefilter = FeeFilter::read(&mut Cursor::new(payload))?;
+            return Ok(Message::FeeFilter(feefilter));
+        }
+
         // Tx
         if header.command == commands::TX {
             let payload = header.payload(reader)?;
@@ -170,6 +183,7 @@ impl Message {
             Message::Ping(p) => write_with_payload(writer, PING, p, magic),
             Message::Pong(p) => write_with_payload(writer, PONG, p, magic),
             Message::Reject(p) => write_with_payload(writer, REJECT, p, magic),
+            Message::FeeFilter(p) => write_with_payload(writer, FEEFILTER, p, magic),
             Message::SendCmpct(p) => write_with_payload(writer, SENDCMPCT, p, magic),
             Message::Tx(p) => write_with_payload(writer, TX, p, magic),
             Message::Verack => write_without_payload(writer, VERACK, magic),
@@ -185,6 +199,7 @@ impl fmt::Debug for Message {
             Message::Partial(h) => f.write_str(&format!("Partial {:#?}", h)),
             Message::Ping(p) => f.write_str(&format!("{:#?}", p)),
             Message::Pong(p) => f.debug_struct("Pong").field("nonce", &p.nonce).finish(),
+            Message::FeeFilter(p) => f.write_str(&format!("{:#?}", p)),
             Message::Reject(p) => f.write_str(&format!("{:#?}", p)),
             Message::SendCmpct(p) => f.write_str(&format!("{:#?}", p)),
             Message::Tx(p) => f.write_str(&format!("{:#?}", p)),
