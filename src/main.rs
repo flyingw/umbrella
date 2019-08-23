@@ -6,7 +6,6 @@ extern crate lazy_static;
 pub mod address;
 pub mod messages;
 pub mod network;
-pub mod peer;
 pub mod script;
 pub mod transaction;
 pub mod util;
@@ -14,16 +13,12 @@ pub mod sighash;
 pub mod hash256;
 pub mod amount;
 pub mod bits;
-pub mod future;
 pub mod hash160;
-pub mod latch;
 pub mod result;
-pub mod rx;
 pub mod serdes;
 pub mod conf;
 pub mod cashaddr;
 pub mod var_int;
-pub mod atomic_reader;
 pub mod op_codes;
 pub mod stack;
 pub mod interpreter;
@@ -38,10 +33,8 @@ use structopt::StructOpt;
 
 use network::Network;
 use messages::{Version, NODE_NONE, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut};
-use messages::{Ping, Message,MessageHeader};
-use peer::Peer;
+use messages::{Message,MessageHeader};
 use util::secs_since;
-use rx::Observable;
 use std::time::UNIX_EPOCH;
 
 use script::Script;
@@ -152,7 +145,7 @@ fn main() {
     let seed: SocketAddr = seed.to_socket_addrs().unwrap().choose(&mut rng).unwrap();
 
     use std::time::Duration;
-    use std::net::{Shutdown,TcpStream};
+    use std::net::TcpStream;
     
     let mut stream = TcpStream::connect_timeout(&seed, Duration::from_secs(1)).unwrap();
     // + kind: ConnectionRefused for next seed
@@ -245,60 +238,11 @@ fn main() {
         Ok(v)  => debug!("{:?}", v),
         Err(r) => {
             debug!("{:?}", r);
-            stream.shutdown(Shutdown::Both).unwrap();
         }
     };
 
-    // let pub_script      = pk_script(&opt.sender.in_address);
-    // let chng_pk_script  = pk_script(&opt.sender.out_address);
-    // let dump_pk_script  = pk_script(&opt.data.dust_address);
-
-    // trace!("pk: {:?}", &pub_script);
-    // trace!("ck: {:?}", &chng_pk_script);
-    // trace!("dk: {:?}", &dump_pk_script);
-
-    // let mut tx = Tx {
-    //     version: 2,
-    //     inputs: vec![TxIn{
-    //         prev_output: OutPoint {
-    //             hash:  opt.sender.outpoint_hash,
-    //             index: opt.sender.outpoint_index,
-    //         },
-    //         ..Default::default()
-    //     }],
-    //     outputs: vec![
-    //         TxOut{ amount: Amount::from(opt.sender.change, Units::Bch), pk_script: chng_pk_script,}, 
-    //         TxOut{ amount: Amount::from(opt.data.dust_amount, Units::Bch), pk_script: dump_pk_script, }],
-    //     lock_time:0
-    // };
-
-    // let secp = Secp256k1::new();
-    // let mut cache = SigHashCache::new();
-    
-    // let mut privk = [0;32];
-    // privk.copy_from_slice(&opt.sender.secret.from_base58().unwrap()[1..33]); 
-
-    // let secret_key = SecretKey::from_slice(&secp, &privk).expect("32 bytes, within curve order");
-    // let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
-
-    // trace!("secret: {:?} ", secret_key);
-    // trace!("public: {:?} ", hex::encode(&pub_key.serialize().as_ref()));
-
-    // let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
-    // let sighash = bip143_sighash(&tx, 0, &pub_script.0, Amount::from(opt.sender.in_amount, Units::Bch), sighash_type, &mut cache).unwrap();
-    // let signature = generate_signature(&privk, &sighash, sighash_type).unwrap();
-    // let sig_script = sig_script(&signature, &pub_key.serialize());
-
-    // tx.inputs[0].sig_script = sig_script;
-
-    // trace!{"transaction: {:#?}", tx};
-
-    //use messages::Message;
-    //peer.send(&Message::Tx(tx)).unwrap();
-    // todo: put some small timeout to wait for response in error case.
-    //let response = peer.messages().poll();
-    //info!("resp: {:?}", response);
-    //peer.disconnect();
+    use std::net::Shutdown;
+    stream.shutdown(Shutdown::Both).unwrap();
 }
 
 #[cfg(test)]
