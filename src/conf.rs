@@ -94,7 +94,7 @@ pub struct Opt {
     #[structopt(flatten)]
     pub data: Data,
 
-    #[structopt(short, long, default_value="BCH-regtest")]
+    #[structopt(short, long, default_value="parse(\"BCH-regtest\")")]
     /// Network for with the address is encoded
     /// 
     /// Supported networks: "BCH", "BCH-test", "BCH-reg"

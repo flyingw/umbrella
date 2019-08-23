@@ -38,6 +38,7 @@ use structopt::StructOpt;
 
 use network::Network;
 use messages::{Version, NODE_NONE, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut};
+use messages::{Message,MessageHeader};
 use peer::Peer;
 use util::secs_since;
 use rx::Observable;
@@ -93,14 +94,16 @@ fn main() {
 
     let network = opt.network;
 
-    use rand::seq::SliceRandom;
-    let seeds = network.seeds();
-    let seed = seeds.choose(&mut rand::thread_rng()).unwrap();
+    use rand::seq::{SliceRandom, IteratorRandom};
+
+    let mut rng = rand::thread_rng();
+    let seed = network.seeds();
+    let seed = seed.choose(&mut rng).unwrap();
     let seed = [&seed, ":", &network.port().to_string()].concat();
 
     use std::net::{SocketAddr, ToSocketAddrs};
-    let seed: SocketAddr = seed.to_socket_addrs().unwrap().next().unwrap();
-        
+    let seed: SocketAddr = seed.to_socket_addrs().unwrap().choose(&mut rng).unwrap();
+
     let version = Version {
         version: PROTOCOL_VERSION,
         services: NODE_NONE, 
@@ -109,8 +112,68 @@ fn main() {
         ..Default::default()
     };
 
-    let peer = Peer::connect(seed.ip(), seed.port(), network, version, 0, 0);
-    peer.connected_event().poll();
+    // > tcp
+    use std::time::Duration;
+    use std::net::{Shutdown,TcpStream};
+    
+    // no unwrap just go to next one.
+    let mut stream = TcpStream::connect_timeout(&seed, Duration::from_secs(1)).unwrap();
+    let mut is = stream.try_clone().unwrap();
+    
+    let mut partial: Option<MessageHeader> = None;
+
+    use std::thread;
+
+    let h = thread::spawn(move || {
+        info!("Connected");// lock atomic here?
+        // read/write shit here until handshake
+        
+        loop {
+            let message = match &partial {
+                Some(header) => Message::read_partial(&mut is, header),
+                None => Message::read(&mut is, network.magic()),
+            };
+
+            match message {
+                Ok(message) => {
+                    println!("message: {:?}", message);
+                    if let Message::Partial(header) = message {
+                        partial = Some(header);
+                    } else {
+                        partial = None;
+                        //handle message?
+                    }
+                }
+                Err(e) => {
+                    if let Error::IOError(ref e) = e {
+                        if e.kind() == std::io::ErrorKind::WouldBlock {
+                            continue;
+                        }
+                    }
+                    
+                    // handle timeouts 
+                    println!("  error: {:?}", e); // update atomic
+                    is.shutdown(Shutdown::Read).unwrap();
+                    return;
+                }
+            }
+        }
+    });
+
+    let out = &mut stream;
+
+    loop {
+        //out.write();
+        //out.flush();
+        
+    }
+
+    // may have an error on macos
+    stream.shutdown(Shutdown::Both).unwrap();
+    // <
+
+    //let peer = Peer::connect(seed.ip(), seed.port(), network, version, 0, 0);
+    //peer.connected_event().poll();
 
     let pub_script      = pk_script(&opt.sender.in_address);
     let chng_pk_script  = pk_script(&opt.sender.out_address);
@@ -156,14 +219,14 @@ fn main() {
 
     debug!{"transaction: {:#?}", tx};
 
-    use messages::Message;
+    //use messages::Message;
 
-    peer.send(&Message::Tx(tx)).unwrap();
+    //peer.send(&Message::Tx(tx)).unwrap();
 
     // todo: put some small timeout to wait for response in error case.
-    let response = peer.messages().poll();
-    info!("resp: {:?}", response);
-    peer.disconnect();
+    //let response = peer.messages().poll();
+    //info!("resp: {:?}", response);
+    //peer.disconnect();
 }
 
 #[cfg(test)]
