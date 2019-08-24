@@ -1,0 +1,9 @@
+[package]
+description = "Ethereum"
+homepage = " http://flighted.co"
+license = "MIT"
+name = "eth"
+version = "1.0.0"
+
+[dependencies]
+ethcore-network-devp2p = { path = "../../parity-ethereum/util/network-devp2p" }
