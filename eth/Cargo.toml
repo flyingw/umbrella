@@ -7,3 +7,7 @@ version = "1.0.0"
 
 [dependencies]
 ethcore-network-devp2p = { path = "../../parity-ethereum/util/network-devp2p" }
+ethkey = { path = "../../parity-ethereum/accounts/ethkey" }
+mio = "0.6"
+ethereum-types = "0.6.0"
+keccak-hash = "0.3.0"
