@@ -11,3 +11,5 @@ ethkey = { path = "../../parity-ethereum/accounts/ethkey" }
 mio = "0.6"
 ethereum-types = "0.6.0"
 keccak-hash = "0.3.0"
+parity-crypto = "0.4.0"
+tiny-keccak = "1.4"
