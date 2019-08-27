@@ -18,77 +18,15 @@ use parity_crypto::aes::{AesCtr256, AesEcb256};
 
 const V4_ACK_PACKET_SIZE: usize = 210;
 const NULL_IV : [u8; 16] = [0;16];
-
-pub struct LocalData {
-	
-}
-
-
+const HELLO_PACKET: u8 = 0x80;
 
 fn main() {
 	let enode: &str = "enode://16cabdd5c1049a54255a52ed775ee5ed1b4f3fd52bf25b751470a59bda8f093df563dc5d385103e46314ff5dacb8f37fcd988b20efc63b9b5fa78f5417971b48@127.0.0.1:30301";
-	let node: RemoteNode = parseEnode(enode).unwrap();
+	let node: RemoteNode = RemoteNode::parse(enode).unwrap();
 	// let node: Node = FromStr::from_str(enode).unwrap();
+	let connection: OriginatedConnection = OriginatedConnection::connect(node);
+	let connection: OriginatedEncryptedConnection = OriginatedEncryptedConnection::create(connection);
 
-	let nonce: H256 = H256::random();
-
-	let token: usize = 1; //for mio
-
-	let keys: KeyPair = Random.generate().unwrap();
-	println!("key={:?}", keys);
-
-	//handshake write
-	let ecdhe: KeyPair = Random.generate().unwrap();
-	let mut data = [0u8; /*Signature::SIZE*/ 65 + /*H256::SIZE*/ 32 + /*Public::SIZE*/ 64 + /*H256::SIZE*/ 32 + 1]; //TODO: use associated constants
-	let len = data.len();
-	
-	data[len - 1] = 0x0;
-	let (sig, rest) = data.split_at_mut(65);
-	let (hepubk, rest) = rest.split_at_mut(32);
-	let (pubk, rest) = rest.split_at_mut(64);
-	let (dataNonce, _) = rest.split_at_mut(32);
-
-	// E(remote-pubk, S(ecdhe-random, ecdh-shared-secret^nonce) || H(ecdhe-random-pubk) || pubk || nonce || 0x0)
-	let shared: H256 = *ecdh::agree(keys.secret(), &node.key).unwrap();
-	sig.copy_from_slice(&*sign(ecdhe.secret(), &(shared ^ nonce)).unwrap());
-	write_keccak(ecdhe.public(), hepubk);
-	pubk.copy_from_slice(keys.public().as_bytes());
-	dataNonce.copy_from_slice(nonce.as_bytes());
-	
-	let message: Vec<u8> = ecies::encrypt(&node.key, &[], &data).unwrap();
-	// self.auth_cipher = message.clone();
-	// self.connection.send(io, message);
-	// self.connection.expect(V4_ACK_PACKET_SIZE);
-	// self.state = HandshakeState::ReadingAck;
-	
-	let mut stream = TcpStream::connect(node.address).unwrap();
-	stream.write(message.as_ref()).unwrap();
-  
-	//handshake read
-	let mut data = [0u8; V4_ACK_PACKET_SIZE
-	];
-	let data_len = stream.read(&mut data).unwrap();
-
-	if data_len != V4_ACK_PACKET_SIZE {
-		println!("network: wrong ack packaet size. expect={}, actual={}", V4_ACK_PACKET_SIZE, data_len);
-		return;
-	}
-
-	let mut remote_ephemeral: Public = Public::default();
-	let mut remote_nonce: H256 = H256::zero();
-	match ecies::decrypt(keys.secret(), &[], &data) {
-		Ok(ack) => {
-			remote_ephemeral.assign_from_slice(&ack[0..64]);
-			remote_nonce.assign_from_slice(&ack[64..(64+32)]);		
-			println!("network: read ack ok");
-		}
-		Err(_) => {
-			// Try to interpret as EIP-8 packet
-			// not implemented
-			println!("network: EIP-8 packet not implemented");
-			return;
-		}
-	}
 }
 
 pub struct RemoteNode {
@@ -96,31 +34,93 @@ pub struct RemoteNode {
 	address: SocketAddr,
 }
 
-fn parseEnode(enode: &str) -> Result<RemoteNode, String> {
-	if enode.len() > 136 && &enode[0..8] == "enode://" && &enode[136..137] == "@" {
-		let key: H512 = enode[8..136].parse().map_err(|err| format!("network: failed to parse enode pub_key err={:?}", err))?;
-		let address_str: &str = &enode[137..];
-		match address_str.to_socket_addrs().map(|mut i| i.next()) {
-			Ok(Some(address)) => 
-				return Ok(RemoteNode {
-					key: key,
-					address: address,
-				}),
-			Ok(None) => return Err(format!("network: unable to resolve enode address {}", address_str)),
-			Err(err) => return Err(format!("network: failed to parse enode address={}, with err={:?}", address_str, err))
+impl RemoteNode {
+	fn parse(enode: &str) -> Result<RemoteNode, String> {
+		if enode.len() > 136 && &enode[0..8] == "enode://" && &enode[136..137] == "@" {
+			let key: Public = enode[8..136].parse().map_err(|err| format!("network: failed to parse enode pub_key err={:?}", err))?;
+			let address_str: &str = &enode[137..];
+			match address_str.to_socket_addrs().map(|mut i| i.next()) {
+				Ok(Some(address)) => 
+					return Ok(RemoteNode {
+						key: key,
+						address: address,
+					}),
+				Ok(None) => return Err(format!("network: unable to resolve enode address {}", address_str)),
+				Err(err) => return Err(format!("network: failed to parse enode address={}, with err={:?}", address_str, err))
+			}
+		} else {
+			return Err(format!("network: wrong enode={}, expect 'enode://pub_key@ip:port'", enode));
 		}
-	} else {
-		return Err(format!("network: wrong enode={}, expect 'enode://pub_key@ip:port'", enode));
 	}
 }
 
-pub struct OriginatedHandshake {
+pub struct OriginatedConnection {
+	stream: TcpStream,
 	nonce: H256,
 	remote_nonce: H256,
 	ecdhe: KeyPair,
 	auth_cipher: Vec<u8>,
 	ack_cipher: Vec<u8>,
 	remote_ephemeral: Public,
+}
+
+impl OriginatedConnection {
+	fn connect(node: RemoteNode) -> OriginatedConnection {
+		let nonce: H256 = H256::random();
+
+		let keys: KeyPair = Random.generate().unwrap();
+		println!("key={:?}", keys);
+
+		//handshake write
+		let ecdhe: KeyPair = Random.generate().unwrap();
+		let mut data = [0u8; /*Signature::SIZE*/ 65 + /*H256::SIZE*/ 32 + /*Public::SIZE*/ 64 + /*H256::SIZE*/ 32 + 1]; //TODO: use associated constants
+		let data_len = data.len();
+		
+		data[data_len - 1] = 0x0;
+		let (sig, rest) = data.split_at_mut(65);
+		let (hepubk, rest) = rest.split_at_mut(32);
+		let (pubk, rest) = rest.split_at_mut(64);
+		let (dataNonce, _) = rest.split_at_mut(32);
+
+		// E(remote-pubk, S(ecdhe-random, ecdh-shared-secret^nonce) || H(ecdhe-random-pubk) || pubk || nonce || 0x0)
+		let shared: H256 = *ecdh::agree(keys.secret(), &node.key).unwrap();
+		sig.copy_from_slice(&*sign(ecdhe.secret(), &(shared ^ nonce)).unwrap());
+		write_keccak(ecdhe.public(), hepubk);
+		pubk.copy_from_slice(keys.public().as_bytes());
+		dataNonce.copy_from_slice(nonce.as_bytes());
+		
+		let message: Vec<u8> = ecies::encrypt(&node.key, &[], &data).unwrap();
+		let auth_cipher: Vec<u8> = message.clone();
+		
+		let mut stream = TcpStream::connect(node.address).unwrap();
+		stream.write(message.as_ref()).unwrap();
+		
+		//handshake read
+		let mut data = [0u8; V4_ACK_PACKET_SIZE];
+		let data_len = stream.read(&mut data).unwrap();
+		if data_len != V4_ACK_PACKET_SIZE {
+			panic!("network: wrong ack packaet size. expect={}, actual={}", V4_ACK_PACKET_SIZE, data_len);
+		}
+		let ack_cipher: Vec<u8> = data.clone().to_vec();
+		let connection: OriginatedConnection = ecies::decrypt(keys.secret(), &[], &data).map(|ack| {
+			let mut remote_ephemeral: Public = Public::default();
+			let mut remote_nonce: H256 = H256::zero();
+
+			remote_ephemeral.assign_from_slice(&ack[0..64]);
+			remote_nonce.assign_from_slice(&ack[64..(64+32)]);		
+			println!("network: read ack ok");
+			OriginatedConnection {
+				stream: stream,
+				nonce: nonce,
+				remote_nonce: remote_nonce,
+				ecdhe: ecdhe,
+				auth_cipher: auth_cipher,
+				ack_cipher: ack_cipher,
+				remote_ephemeral: remote_ephemeral,
+			}
+		}).unwrap();
+		return connection;
+	}
 }
 
 pub struct OriginatedEncryptedConnection {
@@ -132,11 +132,12 @@ pub struct OriginatedEncryptedConnection {
 	ingress_mac: Keccak,
 }
 
-fn originatedEncriptedConnection(stream: TcpStream, Handshake: OriginatedHandshake) -> OriginatedEncryptedConnection {
-	let shared = ecdh::agree(Handshake.ecdhe.secret(), &Handshake.remote_ephemeral).unwrap();
+impl OriginatedEncryptedConnection {
+	fn create(connection: OriginatedConnection) -> OriginatedEncryptedConnection {
+		let shared = ecdh::agree(connection.ecdhe.secret(), &connection.remote_ephemeral).unwrap();
 		let mut nonce_material = H512::default();
-		(&mut nonce_material[0..32]).copy_from_slice(Handshake.remote_nonce.as_bytes());
-		(&mut nonce_material[32..64]).copy_from_slice(Handshake.nonce.as_bytes());
+		(&mut nonce_material[0..32]).copy_from_slice(connection.remote_nonce.as_bytes());
+		(&mut nonce_material[32..64]).copy_from_slice(connection.nonce.as_bytes());
 		let mut key_material = H512::default();
 		(&mut key_material[0..32]).copy_from_slice(shared.as_bytes());
 		write_keccak(&nonce_material, &mut key_material[32..64]);
@@ -156,21 +157,24 @@ fn originatedEncriptedConnection(stream: TcpStream, Handshake: OriginatedHandsha
 		let mac_encoder_key: Secret = Secret::from_slice(&key_material[32..64]).expect("can create Secret from 32 bytes; qed");
 
 		let mut egress_mac = Keccak::new_keccak256();
-		let mut mac_material = H256::from_slice(&key_material[32..64]) ^ Handshake.remote_nonce;
+		let mut mac_material = H256::from_slice(&key_material[32..64]) ^ connection.remote_nonce;
 		egress_mac.update(mac_material.as_bytes());
-		egress_mac.update(&Handshake.auth_cipher);
+		egress_mac.update(&connection.auth_cipher);
 
 		let mut ingress_mac = Keccak::new_keccak256();
-		mac_material = H256::from_slice(&key_material[32..64]) ^ Handshake.nonce;
+		mac_material = H256::from_slice(&key_material[32..64]) ^ connection.nonce;
 		ingress_mac.update(mac_material.as_bytes());
-		ingress_mac.update(&Handshake.ack_cipher);
+		ingress_mac.update(&connection.ack_cipher);
 
 		return OriginatedEncryptedConnection {
-			stream: stream,
+			stream: connection.stream,
 			encoder: encoder,
 			decoder: decoder,
 			mac_encoder_key: mac_encoder_key,
 			egress_mac: egress_mac,
 			ingress_mac: ingress_mac,
 		};
+	}
+
+	// fn say_hello()
 }
