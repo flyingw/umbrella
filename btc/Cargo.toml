@@ -1,0 +1,9 @@
+[package]
+name = "ubtc"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+byteorder = "1.3.2"
+stderrlog = "0.4.1"
+log = "0.4.8"
