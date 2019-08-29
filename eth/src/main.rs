@@ -14,24 +14,30 @@ use keccak_hash::{keccak, write_keccak};
 use tiny_keccak::Keccak;
 use ethereum_types::{H128, H256, H512};
 use ethkey::{Generator, Random, sign, Secret, Public, KeyPair};
-use ethkey::crypto::{ecdh, ecies, Error};
+use ethkey::crypto::{ecdh, ecies};
 use parity_crypto::aes::{AesCtr256, AesEcb256};
-use rlp::{RlpStream, Encodable};
+use rlp::{RlpStream, Rlp, Encodable};
 
-use std::{thread, time};
-
-const V4_ACK_PACKET_SIZE: usize = 210;
-const NULL_IV : [u8; 16] = [0;16];
+//configuration
+const CLIENT_NAME: &str = "umbrella";
+const LOCAL_PORT: u16 = 1234;
+//protocol
+const RLPX_TRANSPORT_PROTOCOL_VERSION: u32 = 5;
+const RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4: usize = 210;
+const ENCRYPTED_HEADER_LEN: usize = 32;
+const MAX_PAYLOAD_SIZE: usize = (1 << 24) - 1;
+//protocol messages
 const PACKET_HELLO: u8 = 0x80;
-const PROTOCOL_VERSION: u32 = 5;
-pub const MAX_PAYLOAD_SIZE: usize = (1 << 24) - 1;
+//global
+const NULL_IV: [u8; 16] = [0;16];
 
 fn main() {
 	let enode: &str = "enode://16cabdd5c1049a54255a52ed775ee5ed1b4f3fd52bf25b751470a59bda8f093df563dc5d385103e46314ff5dacb8f37fcd988b20efc63b9b5fa78f5417971b48@127.0.0.1:30301";
 	let node: RemoteNode = RemoteNode::parse(enode).unwrap();
 	let connection: OriginatedConnection = OriginatedConnection::connect(node);
 	let mut connection: OriginatedEncryptedConnection = OriginatedEncryptedConnection::create(connection);
-	connection.say_hello();
+	connection.write_hello();
+	connection.read_hello();
 }
 
 pub struct RemoteNode {
@@ -60,7 +66,7 @@ impl RemoteNode {
 }
 
 pub struct OriginatedConnection {
-	stream: TcpStream,
+	stream: TcpReader,
 	local_keys: KeyPair,
 	nonce: H256,
 	remote_nonce: H256,
@@ -85,27 +91,24 @@ impl OriginatedConnection {
 		let (sig, rest) = data.split_at_mut(65);
 		let (hepubk, rest) = rest.split_at_mut(32);
 		let (pubk, rest) = rest.split_at_mut(64);
-		let (dataNonce, _) = rest.split_at_mut(32);
+		let (data_nonce, _) = rest.split_at_mut(32);
 
 		// E(remote-pubk, S(ecdhe-random, ecdh-shared-secret^nonce) || H(ecdhe-random-pubk) || pubk || nonce || 0x0)
 		let shared: H256 = *ecdh::agree(keys.secret(), &node.key).unwrap();
 		sig.copy_from_slice(&*sign(ecdhe.secret(), &(shared ^ nonce)).unwrap());
 		write_keccak(ecdhe.public(), hepubk);
 		pubk.copy_from_slice(keys.public().as_bytes());
-		dataNonce.copy_from_slice(nonce.as_bytes());
+		data_nonce.copy_from_slice(nonce.as_bytes());
 		
 		let message: Vec<u8> = ecies::encrypt(&node.key, &[], &data).unwrap();
 		let auth_cipher: Vec<u8> = message.clone();
 		
-		let mut stream: TcpStream = TcpStream::connect(node.address).unwrap();
-		stream.write(message.as_ref()).unwrap();
+		let mut stream: TcpReader = TcpReader(TcpStream::connect(node.address).unwrap());
+		stream.write_bytes(message.as_ref());
 		
 		//handshake read
-		let mut data: [u8; V4_ACK_PACKET_SIZE] = [0u8; V4_ACK_PACKET_SIZE];
-		let data_len: usize = stream.read(&mut data).unwrap();
-		if data_len != V4_ACK_PACKET_SIZE {
-			panic!("network: wrong ack packaet size. expect={}, actual={}", V4_ACK_PACKET_SIZE, data_len);
-		}
+		let data: Vec<u8> = stream.read_bytes(RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4);
+
 		let ack_cipher: Vec<u8> = data.clone().to_vec();
 		let connection: OriginatedConnection = ecies::decrypt(keys.secret(), &[], &data).map(|ack| {
 			let mut remote_ephemeral: Public = Public::default();
@@ -113,7 +116,7 @@ impl OriginatedConnection {
 
 			remote_ephemeral.assign_from_slice(&ack[0..64]);
 			remote_nonce.assign_from_slice(&ack[64..(64+32)]);		
-			println!("network: read ack ok");
+			
 			OriginatedConnection {
 				stream: stream,
 				local_keys: keys,
@@ -130,7 +133,7 @@ impl OriginatedConnection {
 }
 
 pub struct OriginatedEncryptedConnection {
-	stream: TcpStream,
+	stream: TcpReader,
 	local_keys: KeyPair,
 	encoder: AesCtr256,
 	decoder: AesCtr256,
@@ -184,17 +187,27 @@ impl OriginatedEncryptedConnection {
 		};
 	}
 
-	fn say_hello(&mut self) -> () {
-		let fake_port: u16 = 1234;
+	fn write_hello(&mut self) -> () {
 		let mut rlp = RlpStream::new();
-		rlp.append_raw(&[PACKET_HELLO as u8], 0);
-		rlp.begin_list(5)
-			.append(&PROTOCOL_VERSION)
-			.append(&"simple-client")
-			.append_list(&vec!(ETH_63))
-			.append(&fake_port)
+		rlp.append_raw(&[PACKET_HELLO], 0)
+		  .begin_list(5)
+			.append(&RLPX_TRANSPORT_PROTOCOL_VERSION)
+			.append(&CLIENT_NAME)
+			.append_list(&vec!(ETH_63_CAPABILITY))
+			.append(&LOCAL_PORT)
 			.append(self.local_keys.public());
 		self.send_packet(&rlp.drain());
+	}
+	
+	fn read_hello(&mut self) -> () {
+		let packet: Vec<u8> = self.read_packet();
+		match packet.first() {
+			Some(&PACKET_HELLO) => {
+				let _rlp = Rlp::new(&packet[1..]);
+			},
+			Some(msg) => panic!("expect hello message but got message={}", msg),
+			None => panic!("empty hello message"),
+		}
 	}
 
 	pub fn send_packet(&mut self, payload: &[u8]) -> () {
@@ -214,7 +227,7 @@ impl OriginatedEncryptedConnection {
 		header.resize(HEADER_LEN, 0u8);
 		&mut packet[..HEADER_LEN].copy_from_slice(&mut header);
 		self.encoder.encrypt(&mut packet[..HEADER_LEN]).unwrap();
-		OriginatedEncryptedConnection::update_mac(&mut self.egress_mac, &self.mac_encoder_key, &packet[..HEADER_LEN]).unwrap();
+		OriginatedEncryptedConnection::update_mac(&mut self.egress_mac, &self.mac_encoder_key, &packet[..HEADER_LEN]);
 		self.egress_mac.clone().finalize(&mut packet[HEADER_LEN..32]);
 		&mut packet[32..32 + len].copy_from_slice(payload);
 		self.encoder.encrypt(&mut packet[32..32 + len]).unwrap();
@@ -222,46 +235,101 @@ impl OriginatedEncryptedConnection {
 			self.encoder.encrypt(&mut packet[(32 + len)..(32 + len + padding)]).unwrap();
 		}
 		self.egress_mac.update(&packet[32..(32 + len + padding)]);
-		OriginatedEncryptedConnection::update_mac(&mut self.egress_mac, &self.mac_encoder_key, &[0u8; 0]).unwrap();
+		OriginatedEncryptedConnection::update_mac(&mut self.egress_mac, &self.mac_encoder_key, &[0u8; 0]);
 		self.egress_mac.clone().finalize(&mut packet[(32 + len + padding)..]);
 
-
-		// self.connection.send(io, packet);
-
-		self.stream.write(packet.as_ref()).unwrap();
-
-		let mut data: [u8;1000] = [0u8;1000];
-		let data_len = self.stream.read(&mut data).unwrap();
-		println!("data_len={}", data_len);
-		let mut data: [u8;1000] = [0u8;1000];
-		let data_len = self.stream.read(&mut data).unwrap();
-		println!("data_len={}", data_len);
-		let mut data: [u8;1000] = [0u8;1000];
-		let data_len = self.stream.read(&mut data).unwrap();
-		println!("data_len={}", data_len);
-		let mut data: [u8;1000] = [0u8;1000];
-		let data_len = self.stream.read(&mut data).unwrap();
-		println!("data_len={}", data_len);
-		let mut data: [u8;1000] = [0u8;1000];
-		let data_len = self.stream.read(&mut data).unwrap();
-		println!("data_len={}", data_len);
-		let mut data: [u8;1000] = [0u8;1000];
-		let data_len = self.stream.read(&mut data).unwrap();
-		println!("data_len={}", data_len);
+		self.stream.write_bytes(packet.as_ref());
 	}
 
 	/// Update MAC after reading or writing any data.
-	fn update_mac(mac: &mut Keccak, mac_encoder_key: &Secret, seed: &[u8]) -> Result<(), Error> {
+	fn update_mac(mac: &mut Keccak, mac_encoder_key: &Secret, seed: &[u8]) -> () {
 		let mut prev = H128::default();
 		mac.clone().finalize(prev.as_bytes_mut());
 		let mut enc = H128::default();
 		&mut enc[..].copy_from_slice(prev.as_bytes());
-		let mac_encoder = AesEcb256::new(mac_encoder_key.as_bytes())?;
-		mac_encoder.encrypt(enc.as_bytes_mut())?;
+		let mac_encoder = AesEcb256::new(mac_encoder_key.as_bytes()).unwrap();
+		mac_encoder.encrypt(enc.as_bytes_mut()).unwrap();
 
 		enc = enc ^ if seed.is_empty() { prev } else { H128::from_slice(seed) };
 		mac.update(enc.as_bytes());
-		Ok(())
+	}
+
+	fn read_packet(&mut self) -> Vec<u8> {
+		let header: PacketHeader = self.read_header();
+		let payload: PacketPayload = self.read_payload(header);
+		return payload.data;
+	}
+	
+	fn read_header(&mut self) -> PacketHeader {
+		let mut header: Vec<u8> = self.stream.read_bytes(ENCRYPTED_HEADER_LEN);
+		OriginatedEncryptedConnection::update_mac(&mut self.ingress_mac, &self.mac_encoder_key, &header[0..16]);
+
+		let mac = &header[16..];
+		let mut expected = H256::zero();
+		self.ingress_mac.clone().finalize(expected.as_bytes_mut());
+		if mac != &expected[0..16] {
+			panic!("auth error. mac is not valid");
+		}
+		self.decoder.decrypt(&mut header[..16]).unwrap();
+
+		let length = ((((header[0] as u32) << 8) + (header[1] as u32)) << 8) + (header[2] as u32);
+		let header_rlp = Rlp::new(&header[3..6]);
+		let protocol_id = header_rlp.val_at::<u16>(0).unwrap();
+
+		let padding = (16 - (length % 16)) % 16;
+		let full_length = length + padding + 16;
+
+		return PacketHeader {
+ 			protocol_id: protocol_id as usize,
+ 			payload_len: length as usize,
+			full_length: full_length as usize,
+		}
+	}
+
+	fn read_payload(&mut self, packet_header: PacketHeader) -> PacketPayload {
+		let mut payload: Vec<u8> = self.stream.read_bytes(packet_header.full_length);
+		self.ingress_mac.update(&payload[0..payload.len() - 16]);
+		OriginatedEncryptedConnection::update_mac(&mut self.ingress_mac, &self.mac_encoder_key, &[0u8; 0]);
+
+
+		let mac = &payload[(payload.len() - 16)..];
+		let mut expected = H128::default();
+		self.ingress_mac.clone().finalize(expected.as_bytes_mut());
+		if mac != &expected[..] {
+			panic!("auth error. mac is not valid");
+		}
+		let padding = (16 - (packet_header.payload_len % 16)) % 16;
+		self.decoder.decrypt(&mut payload[..packet_header.payload_len + padding]).unwrap();
+		payload.truncate(packet_header.payload_len);
+		return PacketPayload {
+			protocol_id: packet_header.protocol_id,
+			data: payload
+		}
+	}
+}
+
+pub struct PacketHeader {
+	pub protocol_id: usize,
+	pub payload_len: usize,
+	pub full_length: usize,
+}
+
+pub struct PacketPayload {
+	pub protocol_id: usize,
+	pub data: Vec<u8>,
+}
+
+pub struct TcpReader(TcpStream);
+
+impl TcpReader {
+	fn read_bytes(&mut self, bytes_to_read: usize) -> Vec<u8> {
+		let mut buf: Vec<u8> = vec![0u8; bytes_to_read];
+		self.0.read_exact(buf.as_mut_slice()).unwrap();
+		return buf;
+	}
+
+	fn write_bytes(&mut self, buf: &[u8]) -> () {
+		self.0.write(buf).unwrap();
 	}
 }
 
@@ -282,4 +350,8 @@ impl Encodable for CapabilityInfo {
 
 pub const ETH_PROTOCOL: ProtocolId = *b"eth";
 pub const ETH_PROTOCOL_VERSION_63: (u8, u8) = (63, 0x11);
-pub const ETH_63: CapabilityInfo = CapabilityInfo { protocol: ETH_PROTOCOL, version: ETH_PROTOCOL_VERSION_63.0, packet_count: ETH_PROTOCOL_VERSION_63.1 };
+pub const ETH_63_CAPABILITY: CapabilityInfo = CapabilityInfo { 
+	protocol: ETH_PROTOCOL,
+	version: ETH_PROTOCOL_VERSION_63.0,
+	packet_count: ETH_PROTOCOL_VERSION_63.1
+};
