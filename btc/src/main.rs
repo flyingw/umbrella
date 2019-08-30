@@ -1,4 +1,4 @@
-use byteorder::{LittleEndian, BigEndian, WriteBytesExt};
+use byteorder::{LittleEndian, BigEndian, WriteBytesExt, ReadBytesExt};
 use log::{info};
 use ring::digest;
 use std::io;
@@ -65,9 +65,58 @@ fn run(network: Network) -> io::Result<()> {
   let mut c = Cursor::new(p);
   let mut magic1: [u8; 4] = Default::default();
   c.read(&mut magic1)?;
-  // c.read(&mut ret.command)?;
-  // ret.payload_size = c.read_u32::<LittleEndian>()?;
-  // c.read(&mut ret.checksum)?;
   info!("magic1={:?}", magic1);
+  // todo assert magic == magic1
+
+  let mut command_name1: [u8; 12] = Default::default();
+  c.read(&mut command_name1)?;
+  info!("command_name1={:?}", command_name1);
+  // todo assert command == command_name
+
+  let payload_size1 = c.read_u32::<LittleEndian>()?;
+  info!("payload_size1={:?}", payload_size1);
+  // todo assert payload_size1 <= 0x02000000 as u32 // 32 mb
+
+  let mut checksum1: [u8; 4] = Default::default();
+  c.read(&mut checksum1)?;
+  info!("checksum1={:?}", checksum1);
+
+  let mut p = vec![0; payload_size1 as usize];
+  stream.read_exact(p.as_mut())?;
+  info!("payload1={:?}", p);
+
+  // todo validate checksum of payload
+
+  // todo validate version (version, timestamp)
+
+  info!("sending verack");
+  stream.write(&magic)?; // start string
+  let command_name: [u8; 12] = *b"verack\0\0\0\0\0\0";
+  stream.write(&command_name)?; // command name
+  stream.write_u32::<LittleEndian>(0)?; // payload size
+  stream.write(&[0x5d, 0xf6, 0xe0, 0xe2])?; // checksum
+
+  info!("receiving verack");
+  let mut p = vec![0; 24];
+  stream.read_exact(p.as_mut())?;
+  let mut c = Cursor::new(p);
+  let mut magic1: [u8; 4] = Default::default();
+  c.read(&mut magic1)?;
+  info!("magic1={:?}", magic1);
+  // todo assert magic == magic1
+
+  let mut command_name1: [u8; 12] = Default::default();
+  c.read(&mut command_name1)?;
+  info!("command_name1={:?}", command_name1);
+  // todo assert command == command_name
+
+  let payload_size1 = c.read_u32::<LittleEndian>()?;
+  info!("payload_size1={:?}", payload_size1);
+  // todo assert payload_size1 == 0
+
+  let mut checksum1: [u8; 4] = Default::default();
+  c.read(&mut checksum1)?;
+  info!("checksum1={:?}", checksum1);
+
   Ok(())
 }
