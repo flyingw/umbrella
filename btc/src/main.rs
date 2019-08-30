@@ -2,7 +2,7 @@ use byteorder::{LittleEndian, BigEndian, WriteBytesExt};
 use log::{info};
 use ring::digest;
 use std::io;
-use std::io::{Write, Read};
+use std::io::{Write, Read, Cursor};
 use std::net::{TcpStream, Ipv6Addr};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -39,7 +39,6 @@ fn run(network: Network) -> io::Result<()> {
   let payload_size: usize = 86;
   stream.write_u32::<LittleEndian>(payload_size as u32)?; // payload size
   let mut payload = Vec::with_capacity(payload_size);
-  // 4+8+8+8+2+2+8+2+2+8+1+4+1
   payload.write_u32::<LittleEndian>(70015)?; // version
   payload.write_u64::<LittleEndian>(0)?; // services
   payload.write_i64::<LittleEndian>(SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64)?; // timestamp
@@ -48,11 +47,11 @@ fn run(network: Network) -> io::Result<()> {
   payload.write_u16::<BigEndian>(0)?; // addr_recv port
   payload.write_u64::<LittleEndian>(0)?; // addr_trans services
   payload.write(&Ipv6Addr::from([0; 16]).octets())?; // addr_trans IP address
-  payload.write_u16::<BigEndian>(0)?; // addr_trans port 2
-  payload.write_u64::<LittleEndian>(0)?; // nonce 8
-  payload.write_u8(0)?; // user_agent 1
-  payload.write_i32::<LittleEndian>(0)?; // start_height 4
-  payload.write_u8(0x01)?; // relay 1
+  payload.write_u16::<BigEndian>(0)?; // addr_trans port
+  payload.write_u64::<LittleEndian>(0)?; // nonce
+  payload.write_u8(0)?; // user_agent
+  payload.write_i32::<LittleEndian>(0)?; // start_height
+  payload.write_u8(0x01)?; // relay
   let hash = digest::digest(&digest::SHA256, payload.as_ref());
   let hash = digest::digest(&digest::SHA256, &hash.as_ref());
   let h = &hash.as_ref();
@@ -63,6 +62,12 @@ fn run(network: Network) -> io::Result<()> {
   info!("read version");
   let mut p = vec![0; 24];
   stream.read_exact(p.as_mut())?;
-  info!("0={}", p[0]);
+  let mut c = Cursor::new(p);
+  let mut magic1: [u8; 4] = Default::default();
+  c.read(&mut magic1)?;
+  // c.read(&mut ret.command)?;
+  // ret.payload_size = c.read_u32::<LittleEndian>()?;
+  // c.read(&mut ret.checksum)?;
+  info!("magic1={:?}", magic1);
   Ok(())
 }
