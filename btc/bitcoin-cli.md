@@ -43,3 +43,8 @@ bitcoin-cli -regtest sendrawtransaction $SIGNED_RAW_TX
 
 
 lsof -iTCP -sTCP:LISTEN -n -P
+18443
+18444
+
+bitcoind -regtest -rpcport=
+bitcoind -regtest -port=18444 -debug=1 -bind=127.0.0.1
