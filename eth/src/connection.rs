@@ -195,14 +195,14 @@ impl OriginatedEncryptedConnection {
 	}
 
 	pub fn read_packet(&mut self) -> Option<Vec<u8>> {
-		return self.read_header().and_then(|header| self.read_payload(header)).map(|payload| payload.data);
+		return self.read_header().and_then(|header| self.read_payload(header));
 	}
 	
 	fn read_header(&mut self) -> Option<PacketHeader> {
 		return self.stream.read_bytes(ENCRYPTED_HEADER_LEN).map(|data| self.parse_header(&data));
 	}
 	
-	fn read_payload(&mut self, packet_header: PacketHeader) -> Option<PacketPayload> {
+	fn read_payload(&mut self, packet_header: PacketHeader) -> Option<Vec<u8>> {
 		return self.stream.read_bytes(packet_header.full_length).map(|data| self.parse_payload(packet_header, &data));
 	}
 
@@ -233,7 +233,7 @@ impl OriginatedEncryptedConnection {
 		}
 	}
 
-	fn parse_payload(&mut self, packet_header: PacketHeader, data: &Vec<u8>) -> PacketPayload {
+	fn parse_payload(&mut self, packet_header: PacketHeader, data: &Vec<u8>) -> Vec<u8> {
 		if data.len() != packet_header.full_length { panic!("wrong payload len={}, expect={}", data.len(), packet_header.full_length); }
 		let mut payload: Vec<u8> = data.to_owned();
 		self.ingress_mac.update(&payload[0..payload.len() - 16]);
@@ -248,10 +248,7 @@ impl OriginatedEncryptedConnection {
 		let padding = (16 - (packet_header.payload_len % 16)) % 16;
 		self.decoder.decrypt(&mut payload[..packet_header.payload_len + padding]).unwrap();
 		payload.truncate(packet_header.payload_len);
-		return PacketPayload {
-			protocol_id: packet_header.protocol_id,
-			data: payload
-		}
+    return payload;
 	}
 
   /// Update MAC after reading or writing any data.
@@ -272,11 +269,6 @@ pub struct PacketHeader {
 	pub protocol_id: usize,
 	pub payload_len: usize,
 	pub full_length: usize,
-}
-
-pub struct PacketPayload {
-	pub protocol_id: usize,
-	pub data: Vec<u8>,
 }
 
 pub struct TcpReader(TcpStream);

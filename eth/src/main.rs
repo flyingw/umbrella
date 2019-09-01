@@ -22,8 +22,8 @@ use ethstore::json;
 use keccak_hash::{keccak, write_keccak};
 use parity_crypto::aes::{AesCtr256, AesEcb256};
 use std::str::FromStr;
-// use std::thread;
-// use std::time::Duration;
+use std::thread;
+use std::time::Duration;
 
 use connection::{RemoteNode, OriginatedConnection, OriginatedEncryptedConnection};
 use eth_protocol::EthProtocol;
@@ -36,37 +36,27 @@ fn main() {
 	let mut protocol: EthProtocol = EthProtocol::new(connection);
 	protocol.write_hello();
 	protocol.read_hello();
-
+	protocol.read_packet();
+	// let file = File::open("secret_keyfile").unwrap();
+	// let keyfile = json::KeyFile::load(&file).unwrap();
+	// let qwe = Crypto::from(keyfile.crypto);
+	// let c: Crypto = Crypto::from(qwe);
+	// let password = Password::from("test");
+	// let secret = c.secret(&password).unwrap();
 	let secret = Secret::from_str("ee5ae874c0e346ba986801a16745920b8eb49fe2f21d8c15b362c552ae7d6d41").unwrap();	
 	let t = Transaction {
-		nonce: U256::from(1234),
-		gas_price: U256::from(23u64),
+		nonce: U256::from(2),
+		gas_price: U256::from(1_000_000_000u64),
 		gas: U256::from(21_000),
 		action: Action::Call(Address::from_str("448e67382b81db59f6cd35ccf4df7f774930a05a").unwrap()),
-		value: U256::from(1),
+		value: U256::from(10),
 		data: Vec::new(),
 	};
 	let singedTransaction = t.sign(&secret, Some(123));
 	protocol.write_transactions(&vec![&singedTransaction]);
 	loop {
-	// 	connection.write_ping();
-	// 	connection.skip_packet();
-	// 	thread::sleep(Duration::from_millis(2000))
+		protocol.read_packet();
+		thread::sleep(Duration::from_millis(3000));
+		protocol.write_ping();
 	}
-	// let file = File::open("/Users/shmishleniy/Downloads/eth/accounts/keystore/UTC--2019-08-25T21-34-27.799058000Z--517d972a3731abd541601a3cfadfa15080b35944").unwrap();
-	
-	// let keyfile = json::KeyFile::load(&file).unwrap();
-
-	// println!("keyfile={:?}", keyfile);
-	// let qwe = Crypto::from(keyfile.crypto);
-	// println!("qwe={:?}", qwe);
-	// let c: Crypto = Crypto::from(qwe);
-	// let password = Password::from("test");
-	// println!("crypto={:?}", c);
-	// let secret = c.secret(&password).unwrap();
-	// println!("secret={:?}", &secret);
-
-	// let salt = Secret::from_str("99137ea910dbddaa00b30c7e899f56a169ecb2496e5489dae8fb08a6e9c2c7f8").unwrap();
-	// let res = parity_crypto::scrypt::derive_key(b"test", &salt[..], 262144, 1, 8);
-	// println!("res={:?}", res);
 }

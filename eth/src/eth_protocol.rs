@@ -1,3 +1,4 @@
+use ethereum_types::{U256, H256};
 use common_types::transaction::{SignedTransaction};
 use rlp::{RlpStream, Rlp, Encodable, EMPTY_LIST_RLP};
 
@@ -10,7 +11,9 @@ const PACKET_HELLO: u8 = 0x80; // actually 0x00 rlp doc "The integer 0 = [ 0x80 
 const PACKET_PING: u8 = 0x02;
 const PACKET_PONG: u8 = 0x03;
 const PACKET_USER: u8 = 0x10;
-const PACKET_TRANSACTIONS: u8 = 0x02;
+const PACKET_STATUS: u8 = 0x00 + PACKET_USER;
+const PACKET_TRANSACTIONS: u8 = 0x02 + PACKET_USER;
+const PACKET_NEW_BLOCK: u8 = 0x07 + PACKET_USER;
 
 pub struct EthProtocol {
 	connection: OriginatedEncryptedConnection,
@@ -64,7 +67,7 @@ impl EthProtocol {
 		for t in transactions {
 			rlp.append(*t);
 		}
-		self.write_packet(PACKET_USER + PACKET_TRANSACTIONS, &rlp.out());
+		self.write_packet(PACKET_TRANSACTIONS, &rlp.out());
 	}
 
 	pub fn read_status(&mut self) -> () {
@@ -79,6 +82,41 @@ impl EthProtocol {
 		let payload = &compressed[0..len];
 		rlp.append_raw(payload, 1);
 		self.connection.write_packet(&rlp.out());
+	}
+
+	pub fn read_packet(&mut self) -> () {
+		let res: Option<Vec<u8>> = self.connection.read_packet();
+		let data: &[u8] = match res {
+			Some(ref data) if data.len() > 1 => data,
+			Some(data) => panic!("broken packet={:?}", &data),
+			None => return,
+		};
+		let packet_id: u8 = data[0];
+		let compressed: &[u8] = &data[1..];
+		let packet: Vec<u8> = parity_snappy::decompress(compressed).unwrap();
+		let rlp: Rlp = Rlp::new(&packet);
+		match packet_id {
+			PACKET_PONG => println!("pong packet"),
+			PACKET_STATUS => {
+				let protocol_version: u8 = rlp.val_at(0).unwrap();
+				let network_id: u64 = rlp.val_at(1).unwrap();
+				let difficulty: U256 = rlp.val_at(2).unwrap();
+				let latest_hash: H256 = rlp.val_at(3).unwrap();
+				let genesis: H256 = rlp.val_at(4).unwrap();
+				println!("status packet. protocol_version={}, network_id={}, difficulty={}, latest_hash={}, genesis={}", protocol_version, network_id, difficulty, latest_hash, genesis);
+
+				let mut rlp = RlpStream::new_list(5);
+				rlp.append(&protocol_version)
+					.append(&network_id)
+					.append(&difficulty)
+					.append(&latest_hash)
+					.append(&genesis);
+				self.write_packet(PACKET_STATUS, &rlp.out());
+			},
+			PACKET_TRANSACTIONS => println!("transactions packet"),
+			PACKET_NEW_BLOCK => println!("new block packet"),
+			_ => println!("unknown packet={}", packet_id),
+		}
 	}
 }
 
