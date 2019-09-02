@@ -117,6 +117,35 @@ fn run(network: Network) -> io::Result<()> {
   let mut checksum1: [u8; 4] = Default::default();
   c.read(&mut checksum1)?;
   info!("checksum1={:?}", checksum1);
+  // todo assert checksum1 == 0x5df6e0e2
+
+  info!("send tx"); //todo
+  stream.write(&magic)?; // start string
+  let command_name: [u8; 12] = *b"tx\0\0\0\0\0\0\0\0\0\0";
+  stream.write(&command_name)?; // command name
+  let payload_size: usize = ???;
+  // validate payload size?
+  stream.write_u32::<LittleEndian>(payload_size as u32)?; // payload size
+  let mut payload = Vec::with_capacity(payload_size);
+  payload.write_u32::<LittleEndian>(1)?; // version
+  payload.write_u8(1 as u8)?; // tx_in count
+  // tx_in: previous_output: hash
+  // tx_in: previous_output: index
+  // tx_in: script bytes
+  // tx_in: signature script
+  // tx_in: sequence
+  payload.write_u8(1 as u8)?; // tx_out count
+  // tx_out: value
+  // tx_out: pk_script bytes
+  // tx_out: pk_script
+  payload.write_u32::<LittleEndian>(0)?; // lock_time
+
+  let hash = digest::digest(&digest::SHA256, payload.as_ref());
+  let hash = digest::digest(&digest::SHA256, &hash.as_ref());
+  let h = &hash.as_ref();
+  let checksum = [h[0], h[1], h[2], h[3]];
+  stream.write(&checksum)?; // checksum
+  stream.write(&payload)?; // payload
 
   Ok(())
 }
