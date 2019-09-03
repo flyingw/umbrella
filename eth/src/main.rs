@@ -37,13 +37,13 @@ fn main() {
 	protocol.write_hello();
 	protocol.read_hello();
 	protocol.read_packet();
-	// let file = File::open("secret_keyfile").unwrap();
-	// let keyfile = json::KeyFile::load(&file).unwrap();
-	// let qwe = Crypto::from(keyfile.crypto);
-	// let c: Crypto = Crypto::from(qwe);
-	// let password = Password::from("test");
-	// let secret = c.secret(&password).unwrap();
-	let secret = Secret::from_str("ee5ae874c0e346ba986801a16745920b8eb49fe2f21d8c15b362c552ae7d6d41").unwrap();	
+	let file = File::open("secret_keyfile").unwrap();
+	let keyfile = json::KeyFile::load(&file).unwrap();
+	let qwe = Crypto::from(keyfile.crypto);
+	let c: Crypto = Crypto::from(qwe);
+	let password = Password::from("test");
+	let secret = c.secret(&password).unwrap();
+	// let secret = Secret::from_str("ee5ae874c0e346ba986801a16745920b8eb49fe2f21d8c15b362c552ae7d6d41").unwrap();	
 	let t = Transaction {
 		nonce: U256::from(2),
 		gas_price: U256::from(1_000_000_000u64),
