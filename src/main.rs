@@ -6,7 +6,6 @@ extern crate lazy_static;
 pub mod address;
 pub mod messages;
 pub mod network;
-pub mod peer;
 pub mod script;
 pub mod transaction;
 pub mod util;
@@ -14,16 +13,12 @@ pub mod sighash;
 pub mod hash256;
 pub mod amount;
 pub mod bits;
-pub mod future;
 pub mod hash160;
-pub mod latch;
 pub mod result;
-pub mod rx;
 pub mod serdes;
 pub mod conf;
 pub mod cashaddr;
 pub mod var_int;
-pub mod atomic_reader;
 pub mod op_codes;
 pub mod stack;
 pub mod interpreter;
@@ -38,9 +33,8 @@ use structopt::StructOpt;
 
 use network::Network;
 use messages::{Version, NODE_NONE, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut};
-use peer::Peer;
+use messages::{Message,MessageHeader};
 use util::secs_since;
-use rx::Observable;
 use std::time::UNIX_EPOCH;
 
 use script::Script;
@@ -77,41 +71,7 @@ fn sig_script(sig: &[u8], public_key: &[u8; 33]) -> Script {
     sig_script
 }
 
-///
-/// Send transaction to selected network.
-/// 
-fn main() {
-    let opt = Opt::from_args();
-    
-    stderrlog::new().module(module_path!())
-        .quiet(opt.quiet)
-        .verbosity(opt.verbose)
-        .modules(vec!("umbrella", "bch"))
-        .init().unwrap();
-
-    trace!("Options {:?}", opt);
-
-    let network = opt.network;
-
-    use rand::seq::SliceRandom;
-    let seeds = network.seeds();
-    let seed = seeds.choose(&mut rand::thread_rng()).unwrap();
-    let seed = [&seed, ":", &network.port().to_string()].concat();
-
-    use std::net::{SocketAddr, ToSocketAddrs};
-    let seed: SocketAddr = seed.to_socket_addrs().unwrap().next().unwrap();
-        
-    let version = Version {
-        version: PROTOCOL_VERSION,
-        services: NODE_NONE, 
-        timestamp: secs_since(UNIX_EPOCH) as i64,
-        user_agent: "didactic".to_string(),
-        ..Default::default()
-    };
-
-    let peer = Peer::connect(seed.ip(), seed.port(), network, version, 0, 0);
-    peer.connected_event().poll();
-
+fn create_transaction(opt: &Opt) -> Tx {
     let pub_script      = pk_script(&opt.sender.in_address);
     let chng_pk_script  = pk_script(&opt.sender.out_address);
     let dump_pk_script  = pk_script(&opt.data.dust_address);
@@ -154,16 +114,135 @@ fn main() {
 
     tx.inputs[0].sig_script = sig_script;
 
-    debug!{"transaction: {:#?}", tx};
+    trace!{"transaction: {:#?}", tx};
+    return tx;
+}
 
-    use messages::Message;
+///
+/// Send transaction to selected network.
+/// 
+fn main() {
+    let opt = Opt::from_args();
+    
+    stderrlog::new().module(module_path!())
+        .quiet(opt.quiet)
+        .verbosity(opt.verbose)
+        .modules(vec!("umbrella", "bch"))
+        .init().unwrap();
 
-    peer.send(&Message::Tx(tx)).unwrap();
+    trace!("Options {:?}", opt);
 
-    // todo: put some small timeout to wait for response in error case.
-    let response = peer.messages().poll();
-    info!("resp: {:?}", response);
-    peer.disconnect();
+    let network = opt.network;
+
+    use rand::seq::{SliceRandom, IteratorRandom};
+
+    let mut rng = rand::thread_rng();
+    let seed = network.seeds();
+    let seed = seed.choose(&mut rng).unwrap();
+    let seed = [&seed, ":", &network.port().to_string()].concat();
+
+    use std::net::{SocketAddr, ToSocketAddrs};
+    let seed: SocketAddr = seed.to_socket_addrs().unwrap().choose(&mut rng).unwrap();
+
+    use std::time::Duration;
+    use std::net::TcpStream;
+    
+    let mut stream = TcpStream::connect_timeout(&seed, Duration::from_secs(1)).unwrap();
+    // + kind: ConnectionRefused for next seed
+    stream.set_nodelay(true).unwrap();
+    stream.set_nonblocking(true).unwrap();
+    stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+    
+    let magic = network.magic();
+    let mut partial: Option<MessageHeader> = None;
+    let mut is = stream.try_clone().unwrap();
+    
+    let tx = Message::Tx(create_transaction(&opt));
+
+    let version = Version {
+        version: PROTOCOL_VERSION,
+        services: NODE_NONE, 
+        timestamp: secs_since(UNIX_EPOCH) as i64,
+        user_agent: "didactic".to_string(),
+        ..Default::default()
+    };
+
+    let our_version = Message::Version(version);
+    debug!("Write {:#?}", our_version);
+    
+    our_version.write(&mut stream, magic).unwrap();
+
+    use std::thread;
+    use std::io;
+
+    let lis = thread::spawn(move || {
+        debug!("Connected {:?}", &seed);
+        loop {
+            let message = match &partial {
+                Some(header) => Message::read_partial(&mut is, header),
+                None => Message::read(&mut is, network.magic()),
+            };
+
+            match message {
+                Ok(message) => {
+                    if let Message::Partial(header) = message {
+                        partial = Some(header);
+                    } else {
+                        partial = None;
+                        println!("message: {:?}", message);
+
+                        match message {
+                            Message::Version(v) => {
+                                debug!("Version {:?}, verract", v);
+                            }
+                            Message::Verack => {
+                                debug!("Write {:#?}", Message::Verack);
+                                Message::Verack.write(&mut is, magic).unwrap();
+                                // debug!("Write ping");
+                                // Message::Ping(Ping {nonce: secs_since(UNIX_EPOCH) as u64,}).write(&mut is, magic).unwrap();
+                            }
+                            Message::Ping(ref ping) => {
+                                debug!("Write {:#?}", ping);
+                                Message::Pong(ping.clone()).write(&mut is, magic).unwrap();
+                            }
+                            Message::FeeFilter(ref fee) => {
+                                debug!("min fee received {:?}", fee.minfee);
+                                debug!("Write {:#?}", &tx);
+                                tx.write(&mut is, magic).unwrap();
+                                return Ok(tx);
+                            }
+                            Message::Reject(ref reject) => {
+                                debug!("rejected {:?}", reject);
+                                return Ok(Message::Reject(reject.clone()));
+                            }
+                            _ => {
+                                debug!("not handled {:?}",  message);
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    if let Error::IOError(ref e) = e {
+                        if e.kind() == io::ErrorKind::WouldBlock || 
+                            e.kind() == io::ErrorKind::TimedOut {
+                            continue;
+                        }
+                    }
+                    return Err(e);
+                }
+            }
+        }
+    });
+
+    match lis.join() {
+        Ok(v)  => debug!("{:?}", v),
+        Err(r) => {
+            debug!("{:?}", r);
+        }
+    };
+
+    use std::net::Shutdown;
+    stream.shutdown(Shutdown::Both).unwrap();
 }
 
 #[cfg(test)]

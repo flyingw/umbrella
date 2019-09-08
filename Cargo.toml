@@ -10,6 +10,7 @@ structopt = "0.2.18"
 stderrlog="0.4.1"
 log = { version = "0.4", features = ["max_level_trace", "release_max_level_warn"] }
 hex = "0.3"
+rand = "0.7.0" # check rand_core
 secp256k1 = "0.11"
 rust-base58 = "0.0.4"
 ring = "0.14"
@@ -17,7 +18,6 @@ byteorder = "1.2"
 digest = "0.7"
 dns-lookup = "0.9"
 lazy_static = "1.0"
-rand = "0.5"
 ripemd160 = "0.7"
 snowflake = "1.3"
 
