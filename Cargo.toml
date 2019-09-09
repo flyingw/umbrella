@@ -35,5 +35,6 @@ ethstore = {path = "../parity-ethereum/accounts/ethstore"}
 [patch.crates-io]
 
 [profile.release]
-opt-level = "s" # prefer size
+opt-level = "z" # s
 lto = true      # shrink binary
+debug = false
