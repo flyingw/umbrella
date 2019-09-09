@@ -98,6 +98,12 @@ pub enum Network {
         #[structopt(flatten)] sender: Wallet,
         #[structopt(flatten)] data: Data,
     },
+    #[structopt(name="eth-whatever", raw(setting="structopt::clap::AppSettings::ColoredHelp"))]
+    // Stup for ethereum network settings
+    Eth{
+        #[structopt(flatten)] sender: Wallet,
+        #[structopt(flatten)] data: Data,
+    }
 }
 
 impl Network {
@@ -106,6 +112,7 @@ impl Network {
             Network::BCH{..}    => crate::network::Network::Mainnet,
             Network::BCHTest{..}=> crate::network::Network::Testnet,
             Network::BCHReg{..} => crate::network::Network::Regtest,
+            Network::Eth{..}    => crate::network::Network::Ethereum,
         }
     }
 }
@@ -130,6 +137,7 @@ impl Opt {
             Network::BCH{sender, ..}    => sender,
             Network::BCHTest{sender, ..}=> sender,
             Network::BCHReg{sender, ..} => sender,
+            Network::Eth{sender, ..} => sender,
         }
     }
     pub fn data(&self) -> &Data{
@@ -137,6 +145,7 @@ impl Opt {
             Network::BCH{sender:_, data}    => data,
             Network::BCHTest{sender:_, data}=> data,
             Network::BCHReg{sender:_, data} => data,
+            Network::Eth{sender:_, data} => data,
         }
     }
 }
