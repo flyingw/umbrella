@@ -23,6 +23,9 @@ pub mod op_codes;
 pub mod stack;
 pub mod interpreter;
 
+mod connection;
+mod eth_protocol;
+
 pub use serdes::Serializable;
 pub use result::{Error, Result};
 pub use amount::{Amount, Units};
@@ -35,7 +38,7 @@ use network::Network;
 use messages::{Version, NODE_NONE, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut};
 use messages::{Message,MessageHeader};
 use util::secs_since;
-use std::time::UNIX_EPOCH;
+use std::time::{UNIX_EPOCH, Duration};
 
 use script::Script;
 use secp256k1::{Secp256k1, SecretKey, PublicKey};
@@ -144,7 +147,6 @@ fn main() {
     use std::net::{SocketAddr, ToSocketAddrs};
     let seed: SocketAddr = seed.to_socket_addrs().unwrap().choose(&mut rng).unwrap();
 
-    use std::time::Duration;
     use std::net::TcpStream;
     
     let mut stream = TcpStream::connect_timeout(&seed, Duration::from_secs(1)).unwrap();
@@ -172,7 +174,6 @@ fn main() {
     
     our_version.write(&mut stream, magic).unwrap();
 
-    use std::thread;
     use std::io;
 
     let lis = thread::spawn(move || {
@@ -243,6 +244,52 @@ fn main() {
 
     use std::net::Shutdown;
     stream.shutdown(Shutdown::Both).unwrap();
+}
+
+use common_types::transaction::{Transaction, Action};
+use ethereum_types::{U256};
+use ethkey::{Address, Password};
+use ethstore::{Crypto};
+use ethstore::json::KeyFile;
+use std::str::FromStr;
+use std::thread;
+
+use std::fs::File;
+
+use connection::{RemoteNode, OriginatedConnection, OriginatedEncryptedConnection};
+use eth_protocol::EthProtocol;
+
+fn eth_main() {
+	let enode: &str = "enode://16cabdd5c1049a54255a52ed775ee5ed1b4f3fd52bf25b751470a59bda8f093df563dc5d385103e46314ff5dacb8f37fcd988b20efc63b9b5fa78f5417971b48@127.0.0.1:30301";
+	let node: RemoteNode = RemoteNode::parse(enode).unwrap();
+	let connection: OriginatedConnection = OriginatedConnection::new(node);
+	let connection: OriginatedEncryptedConnection = OriginatedEncryptedConnection::new(connection);
+	let mut protocol: EthProtocol = EthProtocol::new(connection);
+	protocol.write_hello();
+	protocol.read_hello();
+	protocol.read_packet();
+	let file = File::open("secret_keyfile").unwrap();
+	let keyfile = KeyFile::load(&file).unwrap();
+	let qwe = Crypto::from(keyfile.crypto);
+	let c: Crypto = Crypto::from(qwe);
+	let password = Password::from("test");
+	let secret = c.secret(&password).unwrap();
+	// let secret = Secret::from_str("ee5ae874c0e346ba986801a16745920b8eb49fe2f21d8c15b362c552ae7d6d41").unwrap();	
+	let t = Transaction {
+		nonce: U256::from(2),
+		gas_price: U256::from(1_000_000_000u64),
+		gas: U256::from(21_000),
+		action: Action::Call(Address::from_str("448e67382b81db59f6cd35ccf4df7f774930a05a").unwrap()),
+		value: U256::from(10),
+		data: Vec::new(),
+	};
+	let singedTransaction = t.sign(&secret, Some(123));
+	protocol.write_transactions(&vec![&singedTransaction]);
+	loop {
+		protocol.read_packet();
+		thread::sleep(Duration::from_millis(3000));
+		protocol.write_ping();
+	}
 }
 
 #[cfg(test)]

@@ -2,7 +2,7 @@ use ethereum_types::{U256, H256};
 use common_types::transaction::{SignedTransaction};
 use rlp::{RlpStream, Rlp, Encodable, EMPTY_LIST_RLP};
 
-use connection::{OriginatedEncryptedConnection, RLPX_TRANSPORT_PROTOCOL_VERSION};
+use crate::connection::{OriginatedEncryptedConnection, RLPX_TRANSPORT_PROTOCOL_VERSION};
 
 const CLIENT_NAME: &str = "umbrella";
 const LOCAL_PORT: u16 = 1234;
