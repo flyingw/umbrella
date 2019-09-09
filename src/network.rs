@@ -8,6 +8,7 @@ pub enum Network {
     Testnet = 1,
     Regtest = 2,
     Ethereum= 3,
+    BtcRegtest = 4,
 }
 
 impl Network {
@@ -18,6 +19,7 @@ impl Network {
             x if x == Network::Testnet as u8 => Ok(Network::Testnet),
             x if x == Network::Regtest as u8 => Ok(Network::Regtest),
             x if x == Network::Ethereum as u8 => Ok(Network::Ethereum),
+            x if x == Network::BtcRegtest as u8 => Ok(Network::Regtest),
             _ => {
                 let msg = format!("Unknown network type: {}", x);
                 Err(Error::BadArgument(msg))
@@ -32,6 +34,7 @@ impl Network {
             Network::Testnet => 18333,
             Network::Regtest => 18444,
             Network::Ethereum => 30303,
+            Network::BtcRegtest => 18444,
         }
     }
 
@@ -42,6 +45,7 @@ impl Network {
             Network::Testnet => [0xf4, 0xe5, 0xf3, 0xf4],
             Network::Regtest => [0xda, 0xb5, 0xbf, 0xfa],
             Network::Ethereum => [0x00, 0x00, 0x00, 0x00],
+            Network::BtcRegtest => [0xfa, 0xbf, 0xb5, 0xda],
         }
     }
 
@@ -64,6 +68,10 @@ impl Network {
                 Hash256::decode("0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206")
                     .unwrap()
             }
+            Network::BtcRegtest => {
+                Hash256::decode("0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206")
+                    .unwrap()
+            }
         }
     }
 
@@ -74,6 +82,7 @@ impl Network {
             Network::Testnet => "bchtest".to_string(),
             Network::Regtest => "bchreg".to_string(),
             Network::Ethereum => "eth".to_string(),
+            Network::BtcRegtest => "btcreg".to_string(),
         }
     }
 
@@ -84,6 +93,7 @@ impl Network {
             Network::Testnet => 0x6f,
             Network::Regtest => 0x00,
             Network::Ethereum => 0x00,
+            Network::BtcRegtest => 0x00,
         }
     }
 
@@ -94,6 +104,7 @@ impl Network {
             Network::Testnet => 0xc4,
             Network::Regtest => 0x00,
             Network::Ethereum => 0x00,
+            Network::BtcRegtest => 0x00,
         }
     }
 
@@ -120,6 +131,7 @@ impl Network {
             // and add some parsing for enode:// format.
             Network::Regtest => vec!["localhost".to_string()],
             Network::Ethereum => vec!["localhost".to_string()],
+            Network::BtcRegtest => vec!["127.0.0.1".to_string()],
         }
     }
 }

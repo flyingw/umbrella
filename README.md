@@ -16,6 +16,13 @@ $ rustup update
 $ cargo build
 ```
 
+```
+cargo build
+./target/debug/umbrella
+cargo run
+cargo build --release
+```
+
 ## test setup
 
 Setup Bitcoin Node and CLI tools
@@ -24,7 +31,6 @@ Setup Bitcoin Node and CLI tools
 $ brew install bitcoin
 $ git clone https://github.com/Bitcoin-ABC/bitcoin-abc.git | make
 $ etc.
-
 ```
 
 ## run 
@@ -39,6 +45,12 @@ $ umbrella -vvvv --in_address $IN_ADD --in_amount $BALANCE --secret $SECRET
     --dust_address $DST_ADD --dust_amount $DUST
     --data $DATA --network $NETWORK
 [--help: for details]
+```
+
+### btc
+```bash
+bitcoind -regtest -debug=1
+cargo run btc-reg --change 0.01 --data "68" --dust_address "" --dust_amount 0.1 --in_address "" --in_amount 1.0 --out_address "" --outpoint_hash "ff8c7c3c77aa2e43932ad497cf0c8ba5a24f542ec1bcb7afe329a7166ae8dccd" --outpoint_index 0 --secret ""
 ```
 
 # links
