@@ -9,22 +9,6 @@ pub enum Network {
     Regtest = 2,
 }
 
-use std::str::FromStr;
-
-impl FromStr for Network {
-    type Err = Error;
-    fn from_str(s: &str) -> Result<Self> {
-        match s {
-            "BCH"       => Ok(Network::Mainnet),
-            "BCH-test"  => Ok(Network::Testnet),
-            "BCH-reg"   => Ok(Network::Regtest),
-            _ => {
-                Err(Error::BadArgument(format!("Unknown network type: {}", s)))
-            }
-        }
-    }
-}
-
 impl Network {
     /// Converts an integer to a network type
     pub fn from_u8(x: u8) -> Result<Network> {

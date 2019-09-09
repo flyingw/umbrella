@@ -72,9 +72,9 @@ fn sig_script(sig: &[u8], public_key: &[u8; 33]) -> Script {
 }
 
 fn create_transaction(opt: &Opt) -> Tx {
-    let pub_script      = pk_script(&opt.sender.in_address);
-    let chng_pk_script  = pk_script(&opt.sender.out_address);
-    let dump_pk_script  = pk_script(&opt.data.dust_address);
+    let pub_script      = pk_script(&opt.sender().in_address);
+    let chng_pk_script  = pk_script(&opt.sender().out_address);
+    let dump_pk_script  = pk_script(&opt.data().dust_address);
 
     trace!("pk: {:?}", &pub_script);
     trace!("ck: {:?}", &chng_pk_script);
@@ -84,14 +84,14 @@ fn create_transaction(opt: &Opt) -> Tx {
         version: 2,
         inputs: vec![TxIn{
             prev_output: OutPoint {
-                hash:  opt.sender.outpoint_hash,
-                index: opt.sender.outpoint_index,
+                hash:  opt.sender().outpoint_hash,
+                index: opt.sender().outpoint_index,
             },
             ..Default::default()
         }],
         outputs: vec![
-            TxOut{ amount: Amount::from(opt.sender.change, Units::Bch), pk_script: chng_pk_script,}, 
-            TxOut{ amount: Amount::from(opt.data.dust_amount, Units::Bch), pk_script: dump_pk_script, }],
+            TxOut{ amount: Amount::from(opt.sender().change, Units::Bch), pk_script: chng_pk_script,}, 
+            TxOut{ amount: Amount::from(opt.data().dust_amount, Units::Bch), pk_script: dump_pk_script, }],
         lock_time:0
     };
 
@@ -99,7 +99,7 @@ fn create_transaction(opt: &Opt) -> Tx {
     let mut cache = SigHashCache::new();
     
     let mut privk = [0;32];
-    privk.copy_from_slice(&opt.sender.secret.from_base58().unwrap()[1..33]); 
+    privk.copy_from_slice(&opt.sender().secret.from_base58().unwrap()[1..33]); 
 
     let secret_key = SecretKey::from_slice(&secp, &privk).expect("32 bytes, within curve order");
     let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
@@ -108,7 +108,7 @@ fn create_transaction(opt: &Opt) -> Tx {
     trace!("public: {:?} ", hex::encode(&pub_key.serialize().as_ref()));
 
     let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
-    let sighash = bip143_sighash(&tx, 0, &pub_script.0, Amount::from(opt.sender.in_amount, Units::Bch), sighash_type, &mut cache).unwrap();
+    let sighash = bip143_sighash(&tx, 0, &pub_script.0, Amount::from(opt.sender().in_amount, Units::Bch), sighash_type, &mut cache).unwrap();
     let signature = generate_signature(&privk, &sighash, sighash_type).unwrap();
     let sig_script = sig_script(&signature, &pub_key.serialize());
 
@@ -126,13 +126,13 @@ fn main() {
     
     stderrlog::new().module(module_path!())
         .quiet(opt.quiet)
-        .verbosity(opt.verbose)
+        .verbosity(4)
         .modules(vec!("umbrella", "bch"))
         .init().unwrap();
 
     trace!("Options {:?}", opt);
 
-    let network = opt.network;
+    let network = opt.network.network();
 
     use rand::seq::{SliceRandom, IteratorRandom};
 

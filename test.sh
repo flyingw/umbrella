@@ -26,14 +26,14 @@ OUT_PNT=0
 OUT_ADD="bchreg:qpfh27rjv367hst75sq8fghwz3hpn5ygpu9as55x0h"
 DST_ADD="bchreg:qzjh3l4drhzq2cy6a0xaped7xwtsxuk9usfzhthe5h"
 DATA="68686c6c6f2c7361696c6f72"
-NETWORK="BCH-reg"
+NETWORK="bch-reg"
 
-RUST_BACKTRACE=1 cargo run -- -vvvv \
+RUST_BACKTRACE=1 cargo run -- $NETWORK \
     --in_address $IN_ADD --in_amount $BALANCE --secret $SECRET \
     --outpoint_hash $OUT_HSH --outpoint_index $OUT_PNT \
     --out_address $OUT_ADD --change $CHANGE \
     --dust_address $DST_ADD --dust_amount $DUST \
-    --data $DATA --network $NETWORK
+    --data $DATA
 
 # in regtest mode you can't receive any network message yet except errors
 # so just put transaction in block to terinate:

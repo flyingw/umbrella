@@ -1,6 +1,5 @@
 [package]
 description = "Ethereum"
-homepage = " http://flighted.co"
 license = "MIT"
 name = "eth"
 version = "1.0.0"

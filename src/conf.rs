@@ -1,9 +1,9 @@
 use structopt::StructOpt;
 use std::str::FromStr;
 use crate::hash256::Hash256;
-use crate::network::Network;
 
 #[derive(StructOpt,Debug)]
+/// Sender information.
 pub struct Wallet {
     #[structopt(long)]
     /// Public address of sender to be used as input.
@@ -70,41 +70,81 @@ pub struct Data {
     /// 
     pub dust_amount: f64,
     
-    #[structopt(short,long="data")]
+    #[structopt(long)]
     /// Data to be incuded in output.
     /// 
     pub data: HexData,
 }
 
 #[derive(StructOpt, Debug)]
+/// Network configuration.
+/// 
+pub enum Network {
+    #[structopt(name="bch", raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
+    /// Operate on Bitcoin Cash main network
+    BCH{
+        #[structopt(flatten)] sender: Wallet,
+        #[structopt(flatten)] data: Data,
+    },
+    #[structopt(name="bch-test", raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
+    /// Operate on Bitcoin Cash test network
+    BCHTest{
+        #[structopt(flatten)] sender: Wallet,
+        #[structopt(flatten)] data: Data,
+    },
+    #[structopt(name="bch-reg", raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
+    /// Operate on Bitcoin Cash Regtest network
+    BCHReg{
+        #[structopt(flatten)] sender: Wallet,
+        #[structopt(flatten)] data: Data,
+    },
+}
+
+impl Network {
+    pub fn network(&self) -> crate::network::Network {
+        match *self {
+            Network::BCH{..}    => crate::network::Network::Mainnet,
+            Network::BCHTest{..}=> crate::network::Network::Testnet,
+            Network::BCHReg{..} => crate::network::Network::Regtest,
+        }
+    }
+}
+
+#[derive(StructOpt, Debug)]
 #[structopt(name="umbrella", raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
-/// Make a note on transaction.
+/// Make a note on transaction within a network selected by <SUBCOMMAND>.
 /// 
-/// Sender wallet is a pair of address and secret.
-/// We don't create it so it should exist.
-/// 
-/// Recipient address is encoded (base58 160-bit hash) form of hash of their public key.
-/// 
-/// Address encode the network, so we need a network parameter too.
-/// 
+/// Run `help <SUBCOMMAND>` for [OPTIONS] description.
 pub struct Opt {
-    #[structopt(flatten)]
-    pub sender: Wallet,
-
-    #[structopt(flatten)]
-    pub data: Data,
-
-    #[structopt(short, long, default_value="parse(\"BCH-regtest\")")]
-    /// Network for with the address is encoded
-    /// 
-    /// Supported networks: "BCH", "BCH-test", "BCH-reg"
+    #[structopt(subcommand)]
     pub network: Network,
 
-    /// Verbose mode (-v, -vv, -vvv, -vvvv)
-    #[structopt(short="v", long="verbose", parse(from_occurrences))]
-    pub verbose:usize,
-    
     /// Silence all output
     #[structopt(short = "q", long = "quiet")]
     pub quiet: bool,
+}
+
+impl Opt {
+    pub fn sender(&self) -> &Wallet {
+        match &self.network {
+            Network::BCH{sender, ..}    => sender,
+            Network::BCHTest{sender, ..}=> sender,
+            Network::BCHReg{sender, ..} => sender,
+        }
+    }
+    pub fn data(&self) -> &Data{
+        match &self.network {
+            Network::BCH{sender:_, data}    => data,
+            Network::BCHTest{sender:_, data}=> data,
+            Network::BCHReg{sender:_, data} => data,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests{
+    #[test] fn help_network() {
+        use super::*;
+        Opt::from_iter(&["umbrella", "help", "bch-reg"]);
+    }
 }
