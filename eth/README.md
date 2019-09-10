@@ -103,14 +103,17 @@ Init ethereum node:
 $ geth --datadir network1/ init network1.json
 INFO [09-09|21:01:55.814] Successfully wrote genesis state
 ```
-Run node. 
-
+Copy private keys from accounts to node data directory
+```
+$ cp accounts/keystore/* network1/keystore/
+```
+Start node
 ```
 geth --datadir network1/ -verbosity 7 --port 30301 --networkid NETWORK_ID --unlock PUB_KEY --mine console --nodiscover
 ```
 where 
  - NETWORK_ID - network id from genesis. In this readme it's `123`
- - PUB_KEY - account pub key from genesis on question `"Which accounts are allowed to seal?". In this readme it's `0x3ae3f64b827e51b1a49c57a5caff88f60ac68816`
+ - PUB_KEY - wen need to unlock account for mining. account pub key from genesis on question `"Which accounts are allowed to seal?". In this readme it's `0x3ae3f64b827e51b1a49c57a5caff88f60ac68816`
  
  So for out setup we have:
 ```
