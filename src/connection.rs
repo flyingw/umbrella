@@ -78,7 +78,7 @@ impl OriginatedConnection {
 		let message: Vec<u8> = ecies::encrypt(&node.key, &[], &data).unwrap();
 		let auth_cipher: Vec<u8> = message.clone();
 		
-		let mut tcp_stream = TcpStream::connect(node.address).unwrap();
+		let tcp_stream = TcpStream::connect(node.address).unwrap();
 		let mut stream: TcpReader = TcpReader(tcp_stream);
 		stream.write_bytes(message.as_ref());
 		

@@ -70,10 +70,6 @@ impl EthProtocol {
 		self.write_packet(PACKET_TRANSACTIONS, &rlp.out());
 	}
 
-	pub fn read_status(&mut self) -> () {
-
-	}
-
 	pub fn write_packet(&mut self, packet_id: u8, data: &[u8]) -> () {
 		let mut rlp = RlpStream::new();
 		rlp.append(&(u32::from(packet_id)));

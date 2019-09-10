@@ -259,7 +259,7 @@ use std::fs::File;
 use connection::{RemoteNode, OriginatedConnection, OriginatedEncryptedConnection};
 use eth_protocol::EthProtocol;
 
-fn eth_main() {
+pub fn eth_main() {
 	let enode: &str = "enode://16cabdd5c1049a54255a52ed775ee5ed1b4f3fd52bf25b751470a59bda8f093df563dc5d385103e46314ff5dacb8f37fcd988b20efc63b9b5fa78f5417971b48@127.0.0.1:30301";
 	let node: RemoteNode = RemoteNode::parse(enode).unwrap();
 	let connection: OriginatedConnection = OriginatedConnection::new(node);
@@ -283,8 +283,8 @@ fn eth_main() {
 		value: U256::from(10),
 		data: Vec::new(),
 	};
-	let singedTransaction = t.sign(&secret, Some(123));
-	protocol.write_transactions(&vec![&singedTransaction]);
+	let singed_transaction = t.sign(&secret, Some(123));
+	protocol.write_transactions(&vec![&singed_transaction]);
 	loop {
 		protocol.read_packet();
 		thread::sleep(Duration::from_millis(3000));
