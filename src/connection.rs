@@ -1,4 +1,4 @@
-use ethereum_types::{H128, H256, H512};
+use ethereum_types::{H256, H512};
 use ethkey::{Generator, Random, sign, Secret, Public, KeyPair};
 use ethkey::crypto::{ecdh, ecies};
 use keccak_hash::{keccak, write_keccak};
@@ -7,6 +7,7 @@ use rlp::{RlpStream, Rlp};
 use std::io::{Write, Read};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use tiny_keccak::Keccak;
+use crate::hash128::{Hash128};
 
 pub const RLPX_TRANSPORT_PROTOCOL_VERSION: u32 = 5;
 pub const RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4: usize = 210;
@@ -212,7 +213,7 @@ impl OriginatedEncryptedConnection {
 		OriginatedEncryptedConnection::update_mac(&mut self.ingress_mac, &self.mac_encoder_key, &header[0..16]);
 
 		let mac = &header[16..];
-		let mut expected = H256::zero();
+		let mut expected = H256::default();
 		self.ingress_mac.clone().finalize(expected.as_bytes_mut());
 		if mac != &expected[0..16] {
 			panic!("auth error. mac is not valid");
@@ -240,7 +241,7 @@ impl OriginatedEncryptedConnection {
 		OriginatedEncryptedConnection::update_mac(&mut self.ingress_mac, &self.mac_encoder_key, &[0u8; 0]);
 
 		let mac = &payload[(payload.len() - 16)..];
-		let mut expected = H128::default();
+		let mut expected = Hash128::default();
 		self.ingress_mac.clone().finalize(expected.as_bytes_mut());
 		if mac != &expected[..] {
 			panic!("auth error. mac is not valid");
@@ -253,14 +254,14 @@ impl OriginatedEncryptedConnection {
 
   /// Update MAC after reading or writing any data.
 	fn update_mac(mac: &mut Keccak, mac_encoder_key: &Secret, seed: &[u8]) -> () {
-		let mut prev = H128::default();
+		let mut prev = Hash128::default();
 		mac.clone().finalize(prev.as_bytes_mut());
-		let mut enc = H128::default();
+		let mut enc = Hash128::default();
 		&mut enc[..].copy_from_slice(prev.as_bytes());
 		let mac_encoder = AesEcb256::new(mac_encoder_key.as_bytes()).unwrap();
 		mac_encoder.encrypt(enc.as_bytes_mut()).unwrap();
 
-		enc = enc ^ if seed.is_empty() { prev } else { H128::from_slice(seed) };
+		enc = enc ^ if seed.is_empty() { prev } else { Hash128::from_slice(seed) };
 		mac.update(enc.as_bytes());
 	}
 }

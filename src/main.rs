@@ -10,6 +10,7 @@ pub mod script;
 pub mod transaction;
 pub mod util;
 pub mod sighash;
+pub mod hash128;
 pub mod hash256;
 pub mod amount;
 pub mod bits;
@@ -22,6 +23,7 @@ pub mod var_int;
 pub mod op_codes;
 pub mod stack;
 pub mod interpreter;
+pub mod keys;
 
 mod connection;
 mod eth_protocol;
@@ -104,7 +106,7 @@ fn create_transaction(opt: &Opt) -> Tx {
     let mut privk = [0;32];
     privk.copy_from_slice(&opt.sender().secret.from_base58().unwrap()[1..33]); 
 
-    let secret_key = SecretKey::from_slice(&secp, &privk).expect("32 bytes, within curve order");
+    let secret_key = SecretKey::from_slice(&privk).expect("32 bytes, within curve order");
     let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
 
     trace!("secret: {:?} ", secret_key);
@@ -248,7 +250,7 @@ fn main() {
 
 use common_types::transaction::{Transaction, Action};
 use ethereum_types::{U256};
-use ethkey::{Address, Password};
+use ethkey::{Address, Password, Secret};
 use ethstore::{Crypto};
 use ethstore::json::KeyFile;
 use std::str::FromStr;
@@ -268,13 +270,13 @@ pub fn eth_main() {
 	protocol.write_hello();
 	protocol.read_hello();
 	protocol.read_packet();
-	let file = File::open("secret_keyfile").unwrap();
-	let keyfile = KeyFile::load(&file).unwrap();
-	let qwe = Crypto::from(keyfile.crypto);
-	let c: Crypto = Crypto::from(qwe);
-	let password = Password::from("test");
-	let secret = c.secret(&password).unwrap();
-	// let secret = Secret::from_str("ee5ae874c0e346ba986801a16745920b8eb49fe2f21d8c15b362c552ae7d6d41").unwrap();	
+	// let file = File::open("secret_keyfile").unwrap();
+	// let keyfile = KeyFile::load(&file).unwrap();
+	// let qwe = Crypto::from(keyfile.crypto);
+	// let c: Crypto = Crypto::from(qwe);
+	// let password = Password::from("test");
+	// let secret = c.secret(&password).unwrap();
+	let secret = Secret::from_str("ee5ae874c0e346ba986801a16745920b8eb49fe2f21d8c15b362c552ae7d6d41").unwrap();	
 	let t = Transaction {
 		nonce: U256::from(2),
 		gas_price: U256::from(1_000_000_000u64),

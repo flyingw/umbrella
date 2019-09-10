@@ -6,7 +6,8 @@ use std::io;
 use std::io::{Read, Write};
 use super::result::{Error, Result};
 use super::serdes::Serializable;
-
+use rand;
+use rand::RngCore;
 
 /// 256-bit hash for blocks and transactions
 ///
@@ -20,6 +21,19 @@ impl Hash256 {
         let mut r = self.0.clone();
         r.reverse();
         hex::encode(r)
+    }
+
+    #[inline]
+    pub fn as_bytes_mut(&mut self) -> &mut [u8] {
+        &mut self.0
+    }
+
+    pub fn random() -> Self {
+        use rand::distributions::Distribution;
+        let mut res = Self::default();
+        let mut rng = rand::rngs::EntropyRng::new();
+        rng.fill_bytes(res.as_bytes_mut());
+        res
     }
 
     /// Converts a string of 64 hex characters into a hash

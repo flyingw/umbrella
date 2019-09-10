@@ -11,7 +11,7 @@ stderrlog="0.4.1"
 log = { version = "0.4", features = ["max_level_trace", "release_max_level_warn"] }
 hex = "0.3"
 rand = "0.7.0" # check rand_core
-secp256k1 = "0.11"
+secp256k1 = "0.15.5"
 rust-base58 = "0.0.4"
 ring = "0.14"
 byteorder = "1.2"
@@ -38,3 +38,6 @@ ethstore = {path = "../parity-ethereum/accounts/ethstore"}
 opt-level = "z" # s
 lto = true      # shrink binary
 debug = false
+
+[features]
+default = ["secp256k1/recovery"]
