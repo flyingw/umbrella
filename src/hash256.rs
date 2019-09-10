@@ -24,6 +24,11 @@ impl Hash256 {
     }
 
     #[inline]
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+    
+    #[inline]
     pub fn as_bytes_mut(&mut self) -> &mut [u8] {
         &mut self.0
     }
