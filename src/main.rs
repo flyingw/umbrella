@@ -24,7 +24,6 @@ pub mod var_int;
 pub mod op_codes;
 pub mod stack;
 pub mod interpreter;
-pub mod keys;
 
 mod connection;
 mod eth_protocol;
