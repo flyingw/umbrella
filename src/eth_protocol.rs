@@ -1,7 +1,7 @@
 use ethereum_types::{U256, H256};
 use common_types::transaction::{SignedTransaction};
 use rlp::{RlpStream, Rlp, Encodable, EMPTY_LIST_RLP};
-
+use crate::keys::{public_to_slice};
 use crate::connection::{OriginatedEncryptedConnection, RLPX_TRANSPORT_PROTOCOL_VERSION};
 
 const CLIENT_NAME: &str = "umbrella";
@@ -26,13 +26,14 @@ impl EthProtocol {
 
 	pub fn write_hello(&mut self) -> () {
 		let mut rlp = RlpStream::new();
+		let u_public_key = &public_to_slice(&self.connection.public_key)[..];
 		rlp.append_raw(&[PACKET_HELLO], 0)
 		  .begin_list(5)
 			.append(&RLPX_TRANSPORT_PROTOCOL_VERSION)
 			.append(&CLIENT_NAME)
 			.append_list(&vec!(ETH_63_CAPABILITY))
 			.append(&LOCAL_PORT)
-			.append(self.connection.local_keys.public());
+			.append(&u_public_key);
 		self.connection.write_packet(&rlp.out());
 	}
 
@@ -92,6 +93,7 @@ impl EthProtocol {
 		let packet: Vec<u8> = parity_snappy::decompress(compressed).unwrap();
 		let rlp: Rlp = Rlp::new(&packet);
 		match packet_id {
+			PACKET_PING => println!("ping packet"),
 			PACKET_PONG => println!("pong packet"),
 			PACKET_STATUS => {
 				let protocol_version: u8 = rlp.val_at(0).unwrap();

@@ -22,6 +22,10 @@ impl Hash512 {
 //     hash.as_bytes_mut().copy_from_slice(d);
 //     hash
 //   }
+  pub fn copy_from_slice(&mut self, d: &[u8]) {
+    assert_eq!(64, d.len());
+    self.as_bytes_mut().copy_from_slice(d);
+  }
 }
 
 impl Default for Hash512 {

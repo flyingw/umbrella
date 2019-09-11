@@ -8,6 +8,9 @@ use super::result::{Error, Result};
 use super::serdes::Serializable;
 use rand;
 use rand::RngCore;
+use std::ops::{Index, IndexMut};
+use core::slice::SliceIndex;
+use core::ops::{BitXor, BitXorAssign};
 
 /// 256-bit hash for blocks and transactions
 ///
@@ -39,6 +42,18 @@ impl Hash256 {
         let mut rng = rand::rngs::EntropyRng::new();
         rng.fill_bytes(res.as_bytes_mut());
         res
+    }
+
+    pub fn from_slice(d: &[u8]) -> Self {
+        assert_eq!(32, d.len());
+        let mut hash = Hash256::default();
+        hash.as_bytes_mut().copy_from_slice(d);
+        hash
+    }
+
+    pub fn copy_from_slice(&mut self, d: &[u8]) {
+      assert_eq!(32, d.len());
+      self.as_bytes_mut().copy_from_slice(d);
     }
 
     /// Converts a string of 64 hex characters into a hash
@@ -102,4 +117,31 @@ impl fmt::Debug for Hash256 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.encode())
     }
+}
+
+impl<I> Index<I> for Hash256 where I: SliceIndex<[u8]> {
+  type Output = I::Output;
+
+  #[inline]
+  fn index(&self, index: I) -> &I::Output {
+    &self.as_bytes()[index]
+  }
+}
+
+impl BitXor for Hash256 {
+  type Output = Hash256;
+
+  fn bitxor(self, x2: Hash256) -> Self::Output {
+    let mut x1 = self.clone();
+    x1 ^= x2;
+    x1
+  }
+}
+
+impl BitXorAssign for Hash256 {
+  fn bitxor_assign(&mut self, x2: Hash256) {
+    for (x1, x2) in self.as_bytes_mut().iter_mut().zip(x2.as_bytes()) {
+      *x1 ^= x2;
+    }
+  }
 }
