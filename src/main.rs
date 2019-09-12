@@ -128,7 +128,7 @@ fn create_transaction(opt: &Opt) -> Tx {
 ///
 /// Send transaction to selected network.
 /// 
-fn main() {
+pub fn main1() {
     let opt = Opt::from_args();
     
     stderrlog::new().module(module_path!())
@@ -258,15 +258,22 @@ use std::thread;
 
 // to read secret file
 // use std::fs::File;
-// use ethstore::{Crypto};
+use ethstore::Crypto;
+use ethkey::Password;
 // use ethstore::json::KeyFile;
-// use ethkey::{Password};
 
 use connection::{RemoteNode, OriginatedConnection, OriginatedEncryptedConnection};
 use eth_protocol::EthProtocol;
 
-pub fn eth_main() {
-	let enode: &str = "enode://16cabdd5c1049a54255a52ed775ee5ed1b4f3fd52bf25b751470a59bda8f093df563dc5d385103e46314ff5dacb8f37fcd988b20efc63b9b5fa78f5417971b48@127.0.0.1:30301";
+/// 
+fn main() {
+    stderrlog::new().module(module_path!())
+        .quiet(false)
+        .verbosity(4)
+        .modules(vec!("umbrella", "eth"))
+        .init().unwrap();
+
+	let enode: &str = "enode://1437e5f4c83cad9a4cd598d42565a95dd001e3077fba4ac4ffaf0a0b5b6635da43e1e640c49eb57d0d599319a4d2d02812d0017c9b26dd6febd991c03a73fd60@127.0.0.1:30301";
 	let node: RemoteNode = RemoteNode::parse(enode).unwrap();
 	let connection: OriginatedConnection = OriginatedConnection::new(node);
 	let connection: OriginatedEncryptedConnection = OriginatedEncryptedConnection::new(connection);
@@ -274,28 +281,31 @@ pub fn eth_main() {
 	protocol.write_hello();
 	protocol.read_hello();
 	protocol.read_packet();
-	// let file = File::open("secret_keyfile").unwrap();
-	// let keyfile = KeyFile::load(&file).unwrap();
-	// let qwe = Crypto::from(keyfile.crypto);
-	// let c: Crypto = Crypto::from(qwe);
-	// let password = Password::from("test");
-	// let secret = c.secret(&password).unwrap();
-	let secret = Secret::from_str("ee5ae874c0e346ba986801a16745920b8eb49fe2f21d8c15b362c552ae7d6d41").unwrap();	
+	
+    // part of secret key file generated for the account which is prefunded
+    //let crypto = r#"{"cipher":"aes-128-ctr","ciphertext":"1136fa95f0c48a068de4a409c37090db672cca0c791f4aee7717bd1e7bee163f","cipherparams":{"iv":"7f2f229a768293ce248c8ee5e983e867"},"kdf":"scrypt","kdfparams":{"dklen":32,"n":262144,"p":1,"r":8,"salt":"3e6c59e25aa376d6cc8ea200af91b45af11f32e37fdfcce7280ff82c2e112106"},"mac":"a8db24ae8d14cb5f321639691f198595c30a7006817a35492900065271dc79c3"}"#;
+	//let c: Crypto = Crypto::from_str(crypto).unwrap();
+	//let password = Password::from("test");
+	//let secret: Secret = c.secret(&password).unwrap();
+
+	let secret = Secret::from_str("700bba5e847d9895312de03200fc005ed64fec8542e4b6b7cb81063b2fdf5b9e").unwrap();	
+
+    debug!("secret: {:?}", secret);
 	let t = Transaction {
-		nonce: U256::from(2),
+		nonce: U256::from(1),
 		gas_price: U256::from(1_000_000_000u64),
 		gas: U256::from(21_000),
-		action: Action::Call(Address::from_str("448e67382b81db59f6cd35ccf4df7f774930a05a").unwrap()),
+		action: Action::Call(Address::from_str("39f64d1564c9f110771debd039c22ef555b9f363").unwrap()),
 		value: U256::from(10),
 		data: Vec::new(),
 	};
 	let singed_transaction = t.sign(&secret, Some(123));
+
+    debug!("transaction {:?}", singed_transaction);
+
 	protocol.write_transactions(&vec![&singed_transaction]);
-	loop {
-		protocol.read_packet();
-		thread::sleep(Duration::from_millis(3000));
-		protocol.write_ping();
-	}
+
+    debug!("done");
 }
 
 #[cfg(test)]
@@ -328,7 +338,7 @@ mod tests {
 
         let secp = Secp256k1::new();
 
-        let secret_key = SecretKey::from_slice(&secp, &payload[..32]).expect("32 bytes, within curve order");
+        let secret_key = SecretKey::from_slice(&payload[..32]).expect("32 bytes, within curve order");
         let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
         println!("sec: {:?}", secret_key);
         println!("pub: {:?}", hex::encode(&pub_key.serialize().as_ref()));
