@@ -133,7 +133,7 @@ fn create_transaction(opt: &Opt) -> Tx {
 ///
 /// Send transaction to selected network.
 /// 
-fn main() {
+pub fn main1() {
     let opt = Opt::from_args();
     
     stderrlog::new().module(module_path!())
@@ -261,60 +261,24 @@ use ethkey::{Address, Secret};
 use std::str::FromStr;
 use std::thread;
 
-use std::fs::File;
-use rust_scrypt::{scrypt, ScryptParams};
+// to read secret file
+// use std::fs::File;
+use ethstore::Crypto;
+use ethkey::Password;
+// use ethstore::json::KeyFile;
+
 use connection::{RemoteNode, OriginatedConnection, OriginatedEncryptedConnection};
 use eth_protocol::EthProtocol;
 
-fn get_string(v: &serde_json::Value, path: &Vec<&str>) -> String {
-    let mut curr = v;
-    for p in path {
-        curr = curr.get(p).expect(&format!("missing {}", p));
-    };
-    curr.as_str().expect(&format!("{} not a string", path.join("."))).to_string()
-}
+/// 
+fn main() {
+    stderrlog::new().module(module_path!())
+        .quiet(false)
+        .verbosity(4)
+        .modules(vec!("umbrella", "eth"))
+        .init().unwrap();
 
-fn get_u64(v: &serde_json::Value, path: &Vec<&str>) -> u64 {
-    let mut curr = v;
-    for p in path {
-        curr = curr.get(p).expect(&format!("missing {}", p));
-    };
-    curr.as_u64().expect(&format!("{} not a as_u64", path.join(".")))
-}
-
-pub fn eth_main() {
-    let key_path = "keystore/secret_key";
-    let password = "test";
-
-    let file = File::open(key_path).expect(&format!("missing secret key file={:?}", key_path));
-    let json: serde_json::Value = serde_json::from_reader(&file).expect(&format!("failed to parse secret key file={:?}", key_path));
-    
-    let version = get_u64(&json, &vec!["version"]);
-    if version != 3 { panic!("unsupported secret key file version={}", version) };
-    let cipher = get_string(&json, &vec!["crypto", "cipher"]);
-    if cipher != "aes-128-ctr" { panic!("unsupported cipher={}", cipher) };
-    let iv_hex = get_string(&json, &vec!["crypto", "cipherparams", "iv"]);
-    let ciphertext_hex = get_string(&json, &vec!["crypto", "ciphertext"]);
-    let kdf = get_string(&json, &vec!["crypto", "kdf"]);
-    if kdf != "scrypt" { panic!("kdf={} is not supported", kdf) };
-    let dklen = get_u64(&json, &vec!["crypto", "kdfparams", "dklen"]);
-    let n = get_u64(&json, &vec!["crypto", "kdfparams", "n"]);
-    let p = get_u64(&json, &vec!["crypto", "kdfparams", "p"]);
-    let r = get_u64(&json, &vec!["crypto", "kdfparams", "r"]);
-    let salt_hex = get_string(&json, &vec!["crypto", "kdfparams", "salt"]);
-
-    let salt = RemoteNode::decode_hex(&salt_hex).unwrap();
-    let params = ScryptParams { n: n, r: r as u32, p: p as u32 };
-    let mut secret_part: Vec<u8> = vec![0;32];
-    scrypt(password.as_bytes(), &salt, &params, &mut secret_part);
-
-    let iv = RemoteNode::decode_hex(&iv_hex).unwrap();
-    let ciphertext = RemoteNode::decode_hex(&ciphertext_hex).unwrap();
-    let mut secret_key: Vec<u8> = vec![0;32];
-    parity_crypto::aes::decrypt_128_ctr(&secret_part[0..16], &iv, &ciphertext, &mut secret_key).unwrap();
-    
-    let secret = Secret::from_slice(&secret_key).unwrap();
-    let enode: &str = "enode://16cabdd5c1049a54255a52ed775ee5ed1b4f3fd52bf25b751470a59bda8f093df563dc5d385103e46314ff5dacb8f37fcd988b20efc63b9b5fa78f5417971b48@127.0.0.1:30301";
+	let enode: &str = "enode://1437e5f4c83cad9a4cd598d42565a95dd001e3077fba4ac4ffaf0a0b5b6635da43e1e640c49eb57d0d599319a4d2d02812d0017c9b26dd6febd991c03a73fd60@127.0.0.1:30301";
 	let node: RemoteNode = RemoteNode::parse(enode).unwrap();
 	let connection: OriginatedConnection = OriginatedConnection::new(node);
 	let connection: OriginatedEncryptedConnection = OriginatedEncryptedConnection::new(connection);
@@ -322,22 +286,31 @@ pub fn eth_main() {
 	protocol.write_hello();
 	protocol.read_hello();
 	protocol.read_packet();
+	
+    // part of secret key file generated for the account which is prefunded
+    //let crypto = r#"{"cipher":"aes-128-ctr","ciphertext":"1136fa95f0c48a068de4a409c37090db672cca0c791f4aee7717bd1e7bee163f","cipherparams":{"iv":"7f2f229a768293ce248c8ee5e983e867"},"kdf":"scrypt","kdfparams":{"dklen":32,"n":262144,"p":1,"r":8,"salt":"3e6c59e25aa376d6cc8ea200af91b45af11f32e37fdfcce7280ff82c2e112106"},"mac":"a8db24ae8d14cb5f321639691f198595c30a7006817a35492900065271dc79c3"}"#;
+	//let c: Crypto = Crypto::from_str(crypto).unwrap();
+	//let password = Password::from("test");
+	//let secret: Secret = c.secret(&password).unwrap();
+
+	let secret = Secret::from_str("700bba5e847d9895312de03200fc005ed64fec8542e4b6b7cb81063b2fdf5b9e").unwrap();	
+
+    debug!("secret: {:?}", secret);
 	let t = Transaction {
-		nonce: U256::from(2),
+		nonce: U256::from(1),
 		gas_price: U256::from(1_000_000_000u64),
 		gas: U256::from(21_000),
-		action: Action::Call(Address::from_str("448e67382b81db59f6cd35ccf4df7f774930a05a").unwrap()),
+		action: Action::Call(Address::from_str("39f64d1564c9f110771debd039c22ef555b9f363").unwrap()),
 		value: U256::from(10),
 		data: Vec::new(),
 	};
 	let singed_transaction = t.sign(&secret, Some(123));
+
+    debug!("transaction {:?}", singed_transaction);
+
 	protocol.write_transactions(&vec![&singed_transaction]);
-    println!("transaction hash={:?}", singed_transaction.hash());
-    loop {
-		protocol.read_packet();
-		thread::sleep(Duration::from_millis(3000));
-		protocol.write_ping();
-	}
+
+    debug!("done");
 }
 
 #[cfg(test)]
@@ -370,7 +343,7 @@ mod tests {
 
         let secp = Secp256k1::new();
 
-        let secret_key = SecretKey::from_slice(&secp, &payload[..32]).expect("32 bytes, within curve order");
+        let secret_key = SecretKey::from_slice(&payload[..32]).expect("32 bytes, within curve order");
         let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
         println!("sec: {:?}", secret_key);
         println!("pub: {:?}", hex::encode(&pub_key.serialize().as_ref()));
