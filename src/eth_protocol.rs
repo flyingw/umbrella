@@ -99,7 +99,6 @@ impl EthProtocol {
 				let protocol_version: u8 = rlp.val_at(0).unwrap();
 				let network_id: u64 = rlp.val_at(1).unwrap();
 				let difficulty: U256 = rlp.val_at(2).unwrap();
-				let difficulty_v: Vec<u8> = rlp.val_at(2).unwrap();
 				let latest_hash: Vec<u8> = rlp.val_at(3).unwrap();
 				let genesis: Vec<u8> = rlp.val_at(4).unwrap();
 

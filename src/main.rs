@@ -12,6 +12,7 @@ pub mod util;
 pub mod sighash;
 pub mod hash128;
 pub mod hash256;
+pub mod hashu256;
 pub mod hash512;
 pub mod amount;
 pub mod bits;
@@ -251,13 +252,15 @@ fn main() {
 
 use common_types::transaction::{Transaction, Action};
 use ethereum_types::{U256};
-use ethkey::{Address, Password, Secret};
-use ethstore::{Crypto};
-use ethstore::json::KeyFile;
+use ethkey::{Address, Secret};
 use std::str::FromStr;
 use std::thread;
 
-use std::fs::File;
+// to read secret file
+// use std::fs::File;
+// use ethstore::{Crypto};
+// use ethstore::json::KeyFile;
+// use ethkey::{Password};
 
 use connection::{RemoteNode, OriginatedConnection, OriginatedEncryptedConnection};
 use eth_protocol::EthProtocol;

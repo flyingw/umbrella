@@ -1,6 +1,5 @@
 use std::ops::{Index, IndexMut};
 use core::slice::SliceIndex;
-use core::ops::{BitXor, BitXorAssign};
 
 // #[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Hash512([u8;64]);

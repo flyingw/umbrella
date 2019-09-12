@@ -7,16 +7,17 @@ use crate::hash256::{Hash256};
 use crate::hash512::{Hash512};
 use crate::keys::{slice_to_public, public_to_slice};
 use ethereum_types::{H256};
-use ethkey::{Generator, Random, sign, Secret, Public, KeyPair};
+use ethkey::{sign, Secret, Public};
 use ethkey::crypto::{ecdh, ecies};
 use parity_crypto::aes::{AesCtr256, AesEcb256};
-use rand::RngCore;
+// use rand::RngCore;
 use rand::rngs::OsRng;
 use rlp::{RlpStream, Rlp};
-use secp256k1::{Message, Secp256k1, Error};
-use secp256k1::ecdh::{SharedSecret};
+// use secp256k1::{Message, Secp256k1, Error};
+use secp256k1::{Secp256k1};
+// use secp256k1::ecdh::{SharedSecret};
 use secp256k1::key::{SecretKey, PublicKey};
-use secp256k1::recovery::{RecoverableSignature, RecoveryId};
+// use secp256k1::recovery::{RecoverableSignature, RecoveryId};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use tiny_keccak::Keccak;
 
@@ -84,7 +85,6 @@ impl OriginatedConnection {
 		// let keys: KeyPair = Random.generate().unwrap();
 		let (secret_key, public_key) = secp.generate_keypair(&mut rng);
 		let public_key_slice = public_to_slice(&public_key);
-		let public = Public::from_slice(&public_key_slice);
 		let secret = Secret::from_slice(&secret_key[0..32]).unwrap();
 
 		let (ecdhe_secret_key, ecdhe_public_key) = secp.generate_keypair(&mut rng);

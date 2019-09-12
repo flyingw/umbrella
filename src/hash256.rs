@@ -8,7 +8,7 @@ use super::result::{Error, Result};
 use super::serdes::Serializable;
 use rand;
 use rand::RngCore;
-use std::ops::{Index, IndexMut};
+use std::ops::{Index};
 use core::slice::SliceIndex;
 use core::ops::{BitXor, BitXorAssign};
 
@@ -37,7 +37,6 @@ impl Hash256 {
     }
 
     pub fn random() -> Self {
-        use rand::distributions::Distribution;
         let mut res = Self::default();
         let mut rng = rand::rngs::EntropyRng::new();
         rng.fill_bytes(res.as_bytes_mut());

@@ -1,13 +1,13 @@
-use secp256k1::recovery::{RecoverableSignature, RecoveryId};
+use secp256k1::recovery::{RecoverableSignature};
 use secp256k1::{Message, Secp256k1, Error};
-use secp256k1::ecdh::{SharedSecret};
+// use secp256k1::ecdh::{SharedSecret};
 use secp256k1::key::{SecretKey, PublicKey};
-use secp256k1::constants::SECRET_KEY_SIZE;
+// use secp256k1::constants::SECRET_KEY_SIZE;
 // use ethereum_types::{H256, H512};
-use rand::rngs::OsRng;
-use rand::RngCore;
+// use rand::rngs::OsRng;
+// use rand::RngCore;
 // use std::convert::From;
-use crate::hash256::{Hash256};
+// use crate::hash256::{Hash256};
 
 // // pub type SecretKey = H256;
 // // pub type PublicKey = H512;
@@ -16,7 +16,7 @@ pub type Signature = [u8; 65];
 
 pub struct KeyPair {
 	secret: SecretKey,
-	public: PublicKey,
+// 	public: PublicKey,
 }
 
 lazy_static! {
@@ -24,7 +24,7 @@ lazy_static! {
 }
 
 pub fn slice_to_public(d: &[u8]) -> Result<PublicKey, Error> {
-	if (d.len() < 64) { return Err(Error::InvalidSecretKey) }
+	if d.len() < 64 { return Err(Error::InvalidSecretKey) }
 	let mut x = [0u8; 65];
 	x[0] = 4u8;
 	x[1..65].copy_from_slice(&d[0..64]);
@@ -125,8 +125,8 @@ pub fn sign(secret: &SecretKey, message: &Message) -> Signature {
 
 /// ECDH functions
 /// Agree on a shared secret
-pub fn agree(secret_key: &SecretKey, public_key: &PublicKey) -> SecretKey {
-  let context = &SECP256K1;
+pub fn agree(_secret_key: &SecretKey, _public_key: &PublicKey) -> SecretKey {
+  let _context = &SECP256K1;
   // let pdata = {
   //   let mut temp = [4u8; 65];
   //   (&mut temp[1..65]).copy_from_slice(&public_key[0..64]);
