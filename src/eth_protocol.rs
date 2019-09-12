@@ -1,4 +1,4 @@
-use ethereum_types::{U256, H256};
+use ethereum_types::{U256};
 use common_types::transaction::{SignedTransaction};
 use rlp::{RlpStream, Rlp, Encodable, EMPTY_LIST_RLP};
 use crate::keys::{public_to_slice};
@@ -99,9 +99,12 @@ impl EthProtocol {
 				let protocol_version: u8 = rlp.val_at(0).unwrap();
 				let network_id: u64 = rlp.val_at(1).unwrap();
 				let difficulty: U256 = rlp.val_at(2).unwrap();
-				let latest_hash: H256 = rlp.val_at(3).unwrap();
-				let genesis: H256 = rlp.val_at(4).unwrap();
-				println!("status packet. protocol_version={}, network_id={}, difficulty={}, latest_hash={}, genesis={}", protocol_version, network_id, difficulty, latest_hash, genesis);
+				let difficulty_v: Vec<u8> = rlp.val_at(2).unwrap();
+				let latest_hash: Vec<u8> = rlp.val_at(3).unwrap();
+				let genesis: Vec<u8> = rlp.val_at(4).unwrap();
+
+				println!("status packet. protocol_version={}, network_id={}, difficulty={:?}, latest_hash={:?}, genesis={:?}", protocol_version, network_id, difficulty.0, latest_hash, &genesis);
+
 
 				let mut rlp = RlpStream::new_list(5);
 				rlp.append(&protocol_version)
