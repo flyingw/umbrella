@@ -26,6 +26,8 @@ pub mod op_codes;
 pub mod stack;
 pub mod interpreter;
 pub mod keys;
+pub mod ecies;
+pub mod ecdh;
 
 mod connection;
 mod eth_protocol;
@@ -291,6 +293,7 @@ pub fn eth_main() {
 	};
 	let singed_transaction = t.sign(&secret, Some(123));
 	protocol.write_transactions(&vec![&singed_transaction]);
+    println!("transaction hash={:?}", singed_transaction.hash());
 	loop {
 		protocol.read_packet();
 		thread::sleep(Duration::from_millis(3000));

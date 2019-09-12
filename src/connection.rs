@@ -20,7 +20,7 @@ use secp256k1::key::{SecretKey, PublicKey};
 // use secp256k1::recovery::{RecoverableSignature, RecoveryId};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use tiny_keccak::Keccak;
-
+use crate::ecies as ecies2;
 
 pub const RLPX_TRANSPORT_PROTOCOL_VERSION: u32 = 5;
 pub const RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4: usize = 210;
