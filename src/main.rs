@@ -39,7 +39,7 @@ use conf::Opt;
 use structopt::StructOpt;
 
 use network::Network;
-use messages::{Version, NODE_NONE, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut};
+use messages::{Version, NODE_NONE, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut, NodeKey};
 use messages::{Message,MessageHeader};
 use util::secs_since;
 use std::time::{UNIX_EPOCH, Duration};
@@ -241,9 +241,7 @@ pub fn main1() {
 
     match lis.join() {
         Ok(v)  => debug!("{:?}", v),
-        Err(r) => {
-            debug!("{:?}", r);
-        }
+        Err(r) => debug!("{:?}", r),
     };
 
     use std::net::Shutdown;
@@ -252,17 +250,13 @@ pub fn main1() {
 
 use common_types::transaction::{Transaction, Action};
 use ethereum_types::{U256};
-use ethkey::{Address, Secret};
+use ethkey::Address;
 use std::str::FromStr;
 use std::thread;
-
-// to read secret file
-// use std::fs::File;
 use ethstore::Crypto;
 use ethkey::Password;
-// use ethstore::json::KeyFile;
 
-use connection::{OriginatedConnection, OriginatedEncryptedConnection};
+use connection::OriginatedEncryptedConnection;
 use eth_protocol::EthProtocol;
 
 /// 
@@ -285,8 +279,6 @@ fn main() {
     let seed = seed.choose(&mut rng).unwrap();
     let seed = [&seed, ":", &network.port().to_string()].concat();
 
-	//let enode: &str = "enode://1437e5f4c83cad9a4cd598d42565a95dd001e3077fba4ac4ffaf0a0b5b6635da43e1e640c49eb57d0d599319a4d2d02812d0017c9b26dd6febd991c03a73fd60@127.0.0.1:30301";
-
     let pub_key = opt.sender().pub_key();
     use crate::keys::slice_to_public;
     let pub_key:PublicKey = slice_to_public(&pub_key).unwrap();
@@ -294,16 +286,6 @@ fn main() {
     use std::net::{SocketAddr, ToSocketAddrs};
     let seed: SocketAddr = seed.to_socket_addrs().unwrap().choose(&mut rng).unwrap();
 
-    trace!("pubkey: {:?}", pub_key);
-    trace!("seed node: {:?}", seed);
-
-	let connection: OriginatedConnection = OriginatedConnection::new(pub_key, seed);
-	let connection: OriginatedEncryptedConnection = OriginatedEncryptedConnection::new(connection);
-	let mut protocol: EthProtocol = EthProtocol::new(connection);
-	protocol.write_hello();
-	protocol.read_hello();
-	protocol.read_packet();
-	
     let secret: Secret = match opt.sender().crypto() {
         Some(ref s) => {
             let cry: Crypto = Crypto::from_str(s).unwrap();
@@ -313,10 +295,89 @@ fn main() {
         None => Secret::from_str(&opt.sender().secret().unwrap()).unwrap(),
     };
 
-    debug!("secret: {:?}", secret);
+    trace!("secret: {:?}", secret);
+    trace!("pubkey: {:?}", pub_key);
+    trace!("seed node: {:?}", seed);
 
+    use rand::rngs::OsRng;
+    use tiny_keccak::Keccak;
+    use ethkey::crypto::{ecdh, ecies};
+    use crate::keys::public_to_slice;
+    use ethkey::{sign, Secret, Public};
+    use ethereum_types::H256;
+
+    let nonce: Hash256 = Hash256::random();
+    let secp = Secp256k1::new();
+    let mut rng = OsRng::new().unwrap();
+    
+    //handshake write
+    let (secret_key, public_key) = secp.generate_keypair(&mut rng);
+    let public_key_slice = public_to_slice(&public_key);
+    let secret = Secret::from_slice(&secret_key[0..32]).unwrap();
+
+    let (ecdhe_secret_key, ecdhe_public_key) = secp.generate_keypair(&mut rng);
+    let ecdhe_public_key_slice = public_to_slice(&ecdhe_public_key);
+    let ecdhe_secret = Secret::from_slice(&ecdhe_secret_key[0..32]).unwrap();
+
+    let mut data = [0u8; /*Signature::SIZE*/ 65 + /*H256::SIZE*/ 32 + /*Public::SIZE*/ 64 + /*H256::SIZE*/ 32 + 1]; //TODO: use associated constants
+    let data_len = data.len();
+    
+    data[data_len - 1] = 0x0;
+    let (sig, rest) = data.split_at_mut(65);
+    let (hepubk, rest) = rest.split_at_mut(32);
+    let (pubk, rest) = rest.split_at_mut(64);
+    let (data_nonce, _) = rest.split_at_mut(32);
+
+    // E(remote-pubk, S(ecdhe-random, ecdh-shared-secret^nonce) || H(ecdhe-random-pubk) || pubk || nonce || 0x0)
+    let node_key = Public::from_slice(&public_to_slice(&pub_key));
+    let shared: H256 = *ecdh::agree(&secret, &node_key).unwrap();
+
+    let xor = Hash256::from_slice(shared.as_bytes()) ^ nonce;
+    sig.copy_from_slice(&*sign(&ecdhe_secret, &H256::from_slice(xor.as_bytes())).unwrap());
+    Keccak::keccak256(&ecdhe_public_key_slice, hepubk);
+    pubk.copy_from_slice(&public_key_slice);
+    data_nonce.copy_from_slice(nonce.as_bytes());
+    
+    let message: Vec<u8> = ecies::encrypt(&node_key, &[], &data).unwrap();
+    let auth_cipher: Vec<u8> = message.clone();
+    
+    use connection::TcpReader;
+    use std::net::TcpStream;
+
+    let mut stream = TcpStream::connect_timeout(&seed, Duration::from_secs(1)).unwrap();
+    let magic = [0; 4];
+    let version = NodeKey {
+        version: message
+    };
+    let our_version = Message::NodeKey(version);
+    debug!("Write {:#?}", our_version);
+    our_version.write(&mut stream, magic).unwrap();
+
+    let mut stream: TcpReader = TcpReader(stream);
+    
+    //handshake read
+    let data: Vec<u8> = stream.read_bytes(connection::RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4).unwrap();
+
+    let ack_cipher: Vec<u8> = data.clone().to_vec();
+    let connection: OriginatedEncryptedConnection = ecies::decrypt(&secret, &[], &data).map(|ack| {
+        let mut remote_ephemeral: Public = Public::default();
+        let mut remote_nonce: Hash256 = Hash256::default();
+
+        remote_ephemeral.assign_from_slice(&ack[0..64]);
+        remote_nonce.copy_from_slice(&ack[64..(64+32)]);		
+        
+        OriginatedEncryptedConnection::new(stream, public_key,
+            nonce, remote_nonce, ecdhe_secret_key, auth_cipher, ack_cipher, remote_ephemeral)
+    }).unwrap();
+
+	let mut protocol: EthProtocol = EthProtocol::new(connection);
+
+	protocol.write_hello();
+	protocol.read_hello();
+	protocol.read_packet();
+	
 	let t = Transaction {
-		nonce: U256::from(1),
+		nonce: U256::from(2),
 		gas_price: U256::from(1_000_000_000u64),
 		gas: U256::from(21_000),
 		action: Action::Call(Address::from_str(&opt.sender().out_address()).unwrap()),
