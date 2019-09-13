@@ -1,24 +1,19 @@
 // use keccak_hash::{keccak, write_keccak};
 use std::io::{Write, Read};
-use core::fmt::Write as Write2;
-use core::num::ParseIntError;
+// use core::fmt::Write;
 use crate::hash128::{Hash128};
 use crate::hash256::{Hash256};
 use crate::hash512::{Hash512};
-use crate::keys::{slice_to_public, public_to_slice};
+use crate::keys::public_to_slice;
 use ethereum_types::{H256};
 use ethkey::{sign, Secret, Public};
 use ethkey::crypto::{ecdh, ecies};
 use parity_crypto::aes::{AesCtr256, AesEcb256};
-// use rand::RngCore;
 use rand::rngs::OsRng;
 use rlp::{RlpStream, Rlp};
-// use secp256k1::{Message, Secp256k1, Error};
 use secp256k1::{Secp256k1};
-// use secp256k1::ecdh::{SharedSecret};
 use secp256k1::key::{SecretKey, PublicKey};
-// use secp256k1::recovery::{RecoverableSignature, RecoveryId};
-use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
+use std::net::{SocketAddr, TcpStream};
 use tiny_keccak::Keccak;
 use crate::ecies as ecies2;
 
@@ -28,48 +23,6 @@ pub const ENCRYPTED_HEADER_LEN: usize = 32;
 pub const MAX_PAYLOAD_SIZE: usize = (1 << 24) - 1;
 
 const NULL_IV: [u8; 16] = [0;16];
-
-pub struct RemoteNode {
-	public_key: PublicKey,
-	address: SocketAddr,
-}
-
-impl RemoteNode {
-	pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
-		(0..s.len())
-			.step_by(2)
-			.map(|i| u8::from_str_radix(&s[i..i + 2], 16))
-			.collect()
-	}
-
-	pub fn encode_hex(bytes: &[u8]) -> String {
-    let mut s = String::with_capacity(bytes.len() * 2);
-    for &b in bytes {
-      write!(&mut s, "{:02x}", b);
-    }
-    s
-	}
-
-	pub fn parse(enode: &str) -> Result<RemoteNode, String> {
-		if enode.len() > 136 && &enode[0..8] == "enode://" && &enode[136..137] == "@" {
-
-			let key: Vec<u8> = RemoteNode::decode_hex(&enode[8..136]).map_err(|err| format!("failed to parse enode pub_key err={:?}", err))?;
-			let public_key: PublicKey = slice_to_public(&key).map_err(|err| format!("failed to parse public key={:?}", err))?;
-			let address_str: &str = &enode[137..];
-			match address_str.to_socket_addrs().map(|mut i| i.next()) {
-				Ok(Some(address)) => 
-					return Ok(RemoteNode {
-						public_key: public_key,
-						address: address,
-					}),
-				Ok(None) => return Err(format!("unable to resolve enode address {}", address_str)),
-				Err(err) => return Err(format!("failed to parse enode address={}, with err={:?}", address_str, err))
-			}
-		} else {
-			return Err(format!("wrong enode={}, expect 'enode://pub_key@ip:port'", enode));
-		}
-	}
-}
 
 pub struct OriginatedConnection {
 	stream: TcpReader,
@@ -83,7 +36,7 @@ pub struct OriginatedConnection {
 }
 
 impl OriginatedConnection {
-	pub fn new(node: RemoteNode) -> OriginatedConnection {
+	pub fn new(pub_key: PublicKey, address: SocketAddr) -> OriginatedConnection {
 		let nonce: Hash256 = Hash256::random();
 		
 		let secp = Secp256k1::new();
@@ -109,7 +62,7 @@ impl OriginatedConnection {
 		let (data_nonce, _) = rest.split_at_mut(32);
 
 		// E(remote-pubk, S(ecdhe-random, ecdh-shared-secret^nonce) || H(ecdhe-random-pubk) || pubk || nonce || 0x0)
-		let node_key = Public::from_slice(&public_to_slice(&node.public_key));
+		let node_key = Public::from_slice(&public_to_slice(&pub_key));
 		let shared: H256 = *ecdh::agree(&secret, &node_key).unwrap();
 
 		let xor = Hash256::from_slice(shared.as_bytes()) ^ nonce;
@@ -121,7 +74,7 @@ impl OriginatedConnection {
 		let message: Vec<u8> = ecies::encrypt(&node_key, &[], &data).unwrap();
 		let auth_cipher: Vec<u8> = message.clone();
 		
-		let tcp_stream = TcpStream::connect(node.address).unwrap();
+		let tcp_stream = TcpStream::connect(address).unwrap();
 		let mut stream: TcpReader = TcpReader(tcp_stream);
 		stream.write_bytes(message.as_ref());
 		
