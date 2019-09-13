@@ -8,9 +8,7 @@ PASS="test"
 OUT_ADDRESS="2217F561635a924F2C7ad1149Ca1dCf35Eaee961"
 SECRET="426ab013650cbe3c615c2455fb414130ce45ca67e7205cb3104ec79a57ef1227"
 
-# all that dust shit is a shit
-# remote as fast as possible
-  #--crypto $CRYPTO \ fucking crypto
+  #--crypto $CRYPTO
 
 RUST_BACKTRACE=1 cargo run -- $NETWORK \
   --pub_key $NODE_KEY \
@@ -20,5 +18,3 @@ RUST_BACKTRACE=1 cargo run -- $NETWORK \
   --dust_address "" \
   --dust_amount "0.0" \
   --data ""
-
-

@@ -5,6 +5,7 @@ use super::send_cmpct::SendCmpct;
 use super::fee_filter::FeeFilter;
 use super::tx::Tx;
 use super::version::Version;
+use super::node_key::NodeKey;
 use ring::digest;
 use std::fmt;
 use std::io;
@@ -46,20 +47,6 @@ pub mod commands {
     // [Fee filter command](https://en.bitcoin.it/wiki/Protocol_documentation#feefilter)
     pub const FEEFILTER: [u8; 12] = *b"feefilter\0\0\0";
 
-    lazy_static! {
-        /// Commands that this node is allowed to receive after handshake is complete.
-        /// Includes everything but version and verack.
-        pub static ref ALLOWED: HashSet<[u8; 12]> = {
-            let mut s = HashSet::new();
-            s.insert(PING);
-            s.insert(PONG);
-            s.insert(FEEFILTER);
-            s.insert(REJECT);
-            s.insert(SENDCMPCT);
-            s.insert(TX);
-            s
-        };
-    }
 }
 
 /// Bitcoin peer-to-peer message with its payload
@@ -75,6 +62,7 @@ pub enum Message {
     Tx(Tx),
     Verack,
     Version(Version),
+    NodeKey(NodeKey),
 }
 
 impl Message {
@@ -188,6 +176,9 @@ impl Message {
             Message::Tx(p) => write_with_payload(writer, TX, p, magic),
             Message::Verack => write_without_payload(writer, VERACK, magic),
             Message::Version(v) => write_with_payload(writer, VERSION, v, magic),
+            Message::NodeKey(v) => {
+                v.write(writer)
+            },
         }
     }
 }
@@ -205,6 +196,7 @@ impl fmt::Debug for Message {
             Message::Tx(p) => f.write_str(&format!("{:#?}", p)),
             Message::Verack => f.write_str("Verack"),
             Message::Version(p) => f.write_str(&format!("{:#?}", p)),
+            Message::NodeKey(v) => f.write_str(&format!("{:#?}", v)),
         }
     }
 }

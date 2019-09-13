@@ -1,21 +1,15 @@
-// use keccak_hash::{keccak, write_keccak};
 use std::io::{Write, Read};
-// use core::fmt::Write;
 use crate::hash128::{Hash128};
 use crate::hash256::{Hash256};
 use crate::hash512::{Hash512};
-use crate::keys::public_to_slice;
 use ethereum_types::{H256};
-use ethkey::{sign, Secret, Public};
-use ethkey::crypto::{ecdh, ecies};
+use ethkey::{Secret, Public};
+use ethkey::crypto::{ecdh};
 use parity_crypto::aes::{AesCtr256, AesEcb256};
-use rand::rngs::OsRng;
 use rlp::{RlpStream, Rlp};
-use secp256k1::{Secp256k1};
 use secp256k1::key::{SecretKey, PublicKey};
-use std::net::{SocketAddr, TcpStream};
+use std::net::TcpStream;
 use tiny_keccak::Keccak;
-use crate::ecies as ecies2;
 
 pub const RLPX_TRANSPORT_PROTOCOL_VERSION: u32 = 5;
 pub const RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4: usize = 210;
@@ -23,86 +17,6 @@ pub const ENCRYPTED_HEADER_LEN: usize = 32;
 pub const MAX_PAYLOAD_SIZE: usize = (1 << 24) - 1;
 
 const NULL_IV: [u8; 16] = [0;16];
-
-pub struct OriginatedConnection {
-	stream: TcpReader,
-	pub public_key: PublicKey,
-	nonce: Hash256,
-	remote_nonce: Hash256,
-	ecdhe_secret_key: SecretKey,
-	auth_cipher: Vec<u8>,
-	ack_cipher: Vec<u8>,
-	remote_ephemeral: Public,
-}
-
-impl OriginatedConnection {
-	pub fn new(pub_key: PublicKey, address: SocketAddr) -> OriginatedConnection {
-		let nonce: Hash256 = Hash256::random();
-		
-		let secp = Secp256k1::new();
-		let mut rng = OsRng::new().unwrap();
-		
-		//handshake write
-		// let keys: KeyPair = Random.generate().unwrap();
-		let (secret_key, public_key) = secp.generate_keypair(&mut rng);
-		let public_key_slice = public_to_slice(&public_key);
-		let secret = Secret::from_slice(&secret_key[0..32]).unwrap();
-
-		let (ecdhe_secret_key, ecdhe_public_key) = secp.generate_keypair(&mut rng);
-		let ecdhe_public_key_slice = public_to_slice(&ecdhe_public_key);
-		let ecdhe_secret = Secret::from_slice(&ecdhe_secret_key[0..32]).unwrap();
-
-		let mut data = [0u8; /*Signature::SIZE*/ 65 + /*H256::SIZE*/ 32 + /*Public::SIZE*/ 64 + /*H256::SIZE*/ 32 + 1]; //TODO: use associated constants
-		let data_len = data.len();
-		
-		data[data_len - 1] = 0x0;
-		let (sig, rest) = data.split_at_mut(65);
-		let (hepubk, rest) = rest.split_at_mut(32);
-		let (pubk, rest) = rest.split_at_mut(64);
-		let (data_nonce, _) = rest.split_at_mut(32);
-
-		// E(remote-pubk, S(ecdhe-random, ecdh-shared-secret^nonce) || H(ecdhe-random-pubk) || pubk || nonce || 0x0)
-		let node_key = Public::from_slice(&public_to_slice(&pub_key));
-		let shared: H256 = *ecdh::agree(&secret, &node_key).unwrap();
-
-		let xor = Hash256::from_slice(shared.as_bytes()) ^ nonce;
-		sig.copy_from_slice(&*sign(&ecdhe_secret, &H256::from_slice(xor.as_bytes())).unwrap());
-		Keccak::keccak256(&ecdhe_public_key_slice, hepubk);
-		pubk.copy_from_slice(&public_key_slice);
-		data_nonce.copy_from_slice(nonce.as_bytes());
-		
-		let message: Vec<u8> = ecies::encrypt(&node_key, &[], &data).unwrap();
-		let auth_cipher: Vec<u8> = message.clone();
-		
-		let tcp_stream = TcpStream::connect(address).unwrap();
-		let mut stream: TcpReader = TcpReader(tcp_stream);
-		stream.write_bytes(message.as_ref());
-		
-		//handshake read
-		let data: Vec<u8> = stream.read_bytes(RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4).unwrap();
-
-		let ack_cipher: Vec<u8> = data.clone().to_vec();
-		let connection: OriginatedConnection = ecies::decrypt(&secret, &[], &data).map(|ack| {
-			let mut remote_ephemeral: Public = Public::default();
-			let mut remote_nonce: Hash256 = Hash256::default();
-
-			remote_ephemeral.assign_from_slice(&ack[0..64]);
-			remote_nonce.copy_from_slice(&ack[64..(64+32)]);		
-			
-			OriginatedConnection {
-				stream: stream,
-				public_key: public_key,
-				nonce: nonce,
-				remote_nonce: remote_nonce,
-				ecdhe_secret_key: ecdhe_secret_key,
-				auth_cipher: auth_cipher,
-				ack_cipher: ack_cipher,
-				remote_ephemeral: remote_ephemeral,
-			}
-		}).unwrap();
-		return connection;
-	}
-}
 
 pub struct OriginatedEncryptedConnection {
 	stream: TcpReader,
@@ -115,12 +29,19 @@ pub struct OriginatedEncryptedConnection {
 }
 
 impl OriginatedEncryptedConnection {
-	pub fn new(connection: OriginatedConnection) -> OriginatedEncryptedConnection {
-		let ecdhe_secret = Secret::from_slice(&connection.ecdhe_secret_key[0..32]).unwrap();
-		let shared = ecdh::agree(&ecdhe_secret, &connection.remote_ephemeral).unwrap();
+	pub fn new(stream: TcpReader,
+        public_key: PublicKey,
+        nonce: Hash256,
+        remote_nonce: Hash256,
+        ecdhe_secret_key: SecretKey,
+        auth_cipher: Vec<u8>,
+        ack_cipher: Vec<u8>,
+        remote_ephemeral: Public) -> OriginatedEncryptedConnection {
+		let ecdhe_secret = Secret::from_slice(&ecdhe_secret_key[0..32]).unwrap();
+		let shared = ecdh::agree(&ecdhe_secret, &remote_ephemeral).unwrap();
 		let mut nonce_material = Hash512::default();
-		(&mut nonce_material[0..32]).copy_from_slice(connection.remote_nonce.as_bytes());
-		(&mut nonce_material[32..64]).copy_from_slice(connection.nonce.as_bytes());
+		(&mut nonce_material[0..32]).copy_from_slice(remote_nonce.as_bytes());
+		(&mut nonce_material[32..64]).copy_from_slice(nonce.as_bytes());
 		let mut key_material = Hash512::default();
 		(&mut key_material[0..32]).copy_from_slice(shared.as_bytes());
 		Keccak::keccak256(nonce_material.as_bytes_mut(), &mut key_material[32..64]);
@@ -140,23 +61,23 @@ impl OriginatedEncryptedConnection {
 		let mac_encoder_key: Secret = Secret::from_slice(&key_material[32..64]).unwrap();
 
 		let mut egress_mac = Keccak::new_keccak256();
-		let mut mac_material = Hash256::from_slice(&key_material[32..64]) ^ connection.remote_nonce;
+		let mut mac_material = Hash256::from_slice(&key_material[32..64]) ^ remote_nonce;
 		egress_mac.update(mac_material.as_bytes());
-		egress_mac.update(&connection.auth_cipher);
+		egress_mac.update(&auth_cipher);
 
 		let mut ingress_mac = Keccak::new_keccak256();
-		mac_material = Hash256::from_slice(&key_material[32..64]) ^ connection.nonce;
+		mac_material = Hash256::from_slice(&key_material[32..64]) ^ nonce;
 		ingress_mac.update(mac_material.as_bytes());
-		ingress_mac.update(&connection.ack_cipher);
+		ingress_mac.update(&ack_cipher);
 
 		return OriginatedEncryptedConnection {
-			stream: connection.stream,
+			stream: stream,
 			encoder: encoder,
 			decoder: decoder,
 			mac_encoder_key: mac_encoder_key,
 			egress_mac: egress_mac,
 			ingress_mac: ingress_mac,
-			public_key: connection.public_key,
+			public_key: public_key,
 		};
 	}
 
@@ -274,10 +195,10 @@ pub struct PacketHeader {
 	pub full_length: usize,
 }
 
-pub struct TcpReader(TcpStream);
+pub struct TcpReader(pub TcpStream);
 
 impl TcpReader {
-	fn read_bytes(&mut self, bytes_to_read: usize) -> Option<Vec<u8>> {
+	pub fn read_bytes(&mut self, bytes_to_read: usize) -> Option<Vec<u8>> {
 		let mut buf: Vec<u8> = vec![0u8; bytes_to_read];
 		let buf_len: usize = self.0.read(buf.as_mut_slice()).unwrap();
 		if buf_len == 0 {
@@ -290,7 +211,7 @@ impl TcpReader {
 		}
 	}
 
-	fn write_bytes(&mut self, buf: &[u8]) -> () {
+	pub fn write_bytes(&mut self, buf: &[u8]) -> () {
 		self.0.write(buf).unwrap();
 	}
 }
