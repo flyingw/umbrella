@@ -79,8 +79,8 @@ fn sig_script(sig: &[u8], public_key: &[u8; 33]) -> Script {
 }
 
 fn create_transaction(opt: &Opt) -> Tx {
-    let pub_script      = pk_script(&opt.sender().in_address);
-    let chng_pk_script  = pk_script(&opt.sender().out_address);
+    let pub_script      = pk_script(&opt.sender().in_address());
+    let chng_pk_script  = pk_script(&opt.sender().out_address());
     let dump_pk_script  = pk_script(&opt.data().dust_address);
 
     trace!("pk: {:?}", &pub_script);
@@ -91,13 +91,13 @@ fn create_transaction(opt: &Opt) -> Tx {
         version: 2,
         inputs: vec![TxIn{
             prev_output: OutPoint {
-                hash:  opt.sender().outpoint_hash,
-                index: opt.sender().outpoint_index,
+                hash:  opt.sender().outpoint_hash(),
+                index: opt.sender().outpoint_index(),
             },
             ..Default::default()
         }],
         outputs: vec![
-            TxOut{ amount: Amount::from(opt.sender().change, Units::Bch), pk_script: chng_pk_script,}, 
+            TxOut{ amount: Amount::from(opt.sender().change(), Units::Bch), pk_script: chng_pk_script,}, 
             TxOut{ amount: Amount::from(opt.data().dust_amount, Units::Bch), pk_script: dump_pk_script, }],
         lock_time:0
     };
@@ -106,7 +106,7 @@ fn create_transaction(opt: &Opt) -> Tx {
     let mut cache = SigHashCache::new();
     
     let mut privk = [0;32];
-    privk.copy_from_slice(&opt.sender().secret.from_base58().unwrap()[1..33]); 
+    privk.copy_from_slice(&opt.sender().secret().unwrap().from_base58().unwrap()[1..33]); 
 
     let secret_key = SecretKey::from_slice(&privk).expect("32 bytes, within curve order");
     let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
@@ -115,7 +115,7 @@ fn create_transaction(opt: &Opt) -> Tx {
     trace!("public: {:?} ", hex::encode(&pub_key.serialize().as_ref()));
 
     let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
-    let sighash = bip143_sighash(&tx, 0, &pub_script.0, Amount::from(opt.sender().in_amount, Units::Bch), sighash_type, &mut cache).unwrap();
+    let sighash = bip143_sighash(&tx, 0, &pub_script.0, Amount::from(opt.sender().in_amount(), Units::Bch), sighash_type, &mut cache).unwrap();
     let signature = generate_signature(&privk, &sighash, sighash_type).unwrap();
     let sig_script = sig_script(&signature, &pub_key.serialize());
 
@@ -262,50 +262,72 @@ use ethstore::Crypto;
 use ethkey::Password;
 // use ethstore::json::KeyFile;
 
-use connection::{RemoteNode, OriginatedConnection, OriginatedEncryptedConnection};
+use connection::{OriginatedConnection, OriginatedEncryptedConnection};
 use eth_protocol::EthProtocol;
 
 /// 
 fn main() {
+    let opt = Opt::from_args();
+
     stderrlog::new().module(module_path!())
-        .quiet(false)
+        .quiet(opt.quiet)
         .verbosity(4)
         .modules(vec!("umbrella", "eth"))
         .init().unwrap();
 
-	let enode: &str = "enode://1437e5f4c83cad9a4cd598d42565a95dd001e3077fba4ac4ffaf0a0b5b6635da43e1e640c49eb57d0d599319a4d2d02812d0017c9b26dd6febd991c03a73fd60@127.0.0.1:30301";
-	let node: RemoteNode = RemoteNode::parse(enode).unwrap();
-	let connection: OriginatedConnection = OriginatedConnection::new(node);
+    trace!("Options {:?}", opt);
+
+    use rand::seq::{SliceRandom, IteratorRandom};
+    let mut rng = rand::thread_rng();
+
+    let network = opt.network.network();
+    let seed = network.seeds();
+    let seed = seed.choose(&mut rng).unwrap();
+    let seed = [&seed, ":", &network.port().to_string()].concat();
+
+	//let enode: &str = "enode://1437e5f4c83cad9a4cd598d42565a95dd001e3077fba4ac4ffaf0a0b5b6635da43e1e640c49eb57d0d599319a4d2d02812d0017c9b26dd6febd991c03a73fd60@127.0.0.1:30301";
+
+    let pub_key = opt.sender().pub_key();
+    use crate::keys::slice_to_public;
+    let pub_key:PublicKey = slice_to_public(&pub_key).unwrap();
+
+    use std::net::{SocketAddr, ToSocketAddrs};
+    let seed: SocketAddr = seed.to_socket_addrs().unwrap().choose(&mut rng).unwrap();
+
+    trace!("pubkey: {:?}", pub_key);
+    trace!("seed node: {:?}", seed);
+
+	let connection: OriginatedConnection = OriginatedConnection::new(pub_key, seed);
 	let connection: OriginatedEncryptedConnection = OriginatedEncryptedConnection::new(connection);
 	let mut protocol: EthProtocol = EthProtocol::new(connection);
 	protocol.write_hello();
 	protocol.read_hello();
 	protocol.read_packet();
 	
-    // part of secret key file generated for the account which is prefunded
-    //let crypto = r#"{"cipher":"aes-128-ctr","ciphertext":"1136fa95f0c48a068de4a409c37090db672cca0c791f4aee7717bd1e7bee163f","cipherparams":{"iv":"7f2f229a768293ce248c8ee5e983e867"},"kdf":"scrypt","kdfparams":{"dklen":32,"n":262144,"p":1,"r":8,"salt":"3e6c59e25aa376d6cc8ea200af91b45af11f32e37fdfcce7280ff82c2e112106"},"mac":"a8db24ae8d14cb5f321639691f198595c30a7006817a35492900065271dc79c3"}"#;
-	//let c: Crypto = Crypto::from_str(crypto).unwrap();
-	//let password = Password::from("test");
-	//let secret: Secret = c.secret(&password).unwrap();
-
-	let secret = Secret::from_str("700bba5e847d9895312de03200fc005ed64fec8542e4b6b7cb81063b2fdf5b9e").unwrap();	
+    let secret: Secret = match opt.sender().crypto() {
+        Some(ref s) => {
+            let cry: Crypto = Crypto::from_str(s).unwrap();
+            let password = Password::from(opt.sender().password());
+            cry.secret(&password).unwrap()
+        }
+        None => Secret::from_str(&opt.sender().secret().unwrap()).unwrap(),
+    };
 
     debug!("secret: {:?}", secret);
+
 	let t = Transaction {
 		nonce: U256::from(1),
 		gas_price: U256::from(1_000_000_000u64),
 		gas: U256::from(21_000),
-		action: Action::Call(Address::from_str("39f64d1564c9f110771debd039c22ef555b9f363").unwrap()),
+		action: Action::Call(Address::from_str(&opt.sender().out_address()).unwrap()),
 		value: U256::from(10),
 		data: Vec::new(),
 	};
 	let singed_transaction = t.sign(&secret, Some(123));
-
-    debug!("transaction {:?}", singed_transaction);
-
 	protocol.write_transactions(&vec![&singed_transaction]);
 
-    debug!("done");
+    debug!("transaction : {:?}", singed_transaction);
+    debug!("        hash: {:?}", singed_transaction.hash());
 }
 
 #[cfg(test)]
