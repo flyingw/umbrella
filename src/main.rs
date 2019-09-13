@@ -3,6 +3,9 @@ extern crate log;
 #[macro_use]
 extern crate lazy_static;
 
+extern crate rust_scrypt;
+extern crate serde_json;
+
 pub mod address;
 pub mod messages;
 pub mod network;
@@ -258,23 +261,59 @@ use ethkey::{Address, Secret};
 use std::str::FromStr;
 use std::thread;
 
-// to read secret file
-// use std::fs::File;
-// use ethstore::{Crypto};
-// use ethstore::json::KeyFile;
-// use ethkey::{Password};
-
+use std::fs::File;
+use rust_scrypt::{scrypt, ScryptParams};
 use connection::{RemoteNode, OriginatedConnection, OriginatedEncryptedConnection};
 use eth_protocol::EthProtocol;
 
+fn get_string(v: &serde_json::Value, path: &Vec<&str>) -> String {
+    let mut curr = v;
+    for p in path {
+        curr = curr.get(p).expect(&format!("missing {}", p));
+    };
+    curr.as_str().expect(&format!("{} not a string", path.join("."))).to_string()
+}
+
+fn get_u64(v: &serde_json::Value, path: &Vec<&str>) -> u64 {
+    let mut curr = v;
+    for p in path {
+        curr = curr.get(p).expect(&format!("missing {}", p));
+    };
+    curr.as_u64().expect(&format!("{} not a as_u64", path.join(".")))
+}
+
 pub fn eth_main() {
-	// let file = File::open("secret_keyfile").unwrap();
-	// let keyfile = KeyFile::load(&file).unwrap();
-	// let qwe = Crypto::from(keyfile.crypto);
-	// let c: Crypto = Crypto::from(qwe);
-	// let password = Password::from("test");
-	// let secret = c.secret(&password).unwrap();
-	let secret = Secret::from_str("ee5ae874c0e346ba986801a16745920b8eb49fe2f21d8c15b362c552ae7d6d41").unwrap();
+    let key_path = "keystore/secret_key";
+    let password = "test";
+
+    let file = File::open(key_path).expect(&format!("missing secret key file={:?}", key_path));
+    let json: serde_json::Value = serde_json::from_reader(&file).expect(&format!("failed to parse secret key file={:?}", key_path));
+    
+    let version = get_u64(&json, &vec!["version"]);
+    if version != 3 { panic!("unsupported secret key file version={}", version) };
+    let cipher = get_string(&json, &vec!["crypto", "cipher"]);
+    if cipher != "aes-128-ctr" { panic!("unsupported cipher={}", cipher) };
+    let iv_hex = get_string(&json, &vec!["crypto", "cipherparams", "iv"]);
+    let ciphertext_hex = get_string(&json, &vec!["crypto", "ciphertext"]);
+    let kdf = get_string(&json, &vec!["crypto", "kdf"]);
+    if kdf != "scrypt" { panic!("kdf={} is not supported", kdf) };
+    let dklen = get_u64(&json, &vec!["crypto", "kdfparams", "dklen"]);
+    let n = get_u64(&json, &vec!["crypto", "kdfparams", "n"]);
+    let p = get_u64(&json, &vec!["crypto", "kdfparams", "p"]);
+    let r = get_u64(&json, &vec!["crypto", "kdfparams", "r"]);
+    let salt_hex = get_string(&json, &vec!["crypto", "kdfparams", "salt"]);
+
+    let salt = RemoteNode::decode_hex(&salt_hex).unwrap();
+    let params = ScryptParams { n: n, r: r as u32, p: p as u32 };
+    let mut secret_part: Vec<u8> = vec![0;32];
+    scrypt(password.as_bytes(), &salt, &params, &mut secret_part);
+
+    let iv = RemoteNode::decode_hex(&iv_hex).unwrap();
+    let ciphertext = RemoteNode::decode_hex(&ciphertext_hex).unwrap();
+    let mut secret_key: Vec<u8> = vec![0;32];
+    parity_crypto::aes::decrypt_128_ctr(&secret_part[0..16], &iv, &ciphertext, &mut secret_key).unwrap();
+    
+    let secret = Secret::from_slice(&secret_key).unwrap();
     let enode: &str = "enode://16cabdd5c1049a54255a52ed775ee5ed1b4f3fd52bf25b751470a59bda8f093df563dc5d385103e46314ff5dacb8f37fcd988b20efc63b9b5fa78f5417971b48@127.0.0.1:30301";
 	let node: RemoteNode = RemoteNode::parse(enode).unwrap();
 	let connection: OriginatedConnection = OriginatedConnection::new(node);

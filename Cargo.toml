@@ -27,6 +27,8 @@ tiny-keccak = "1.4"
 parity-crypto = "0.4.0"
 keccak-hash = "0.3.0"
 ethereum-types = "0.6.0"
+rust-scrypt = "1.3.0"
+serde_json = "1.0"
 
 ethkey = {path = "../parity-ethereum/accounts/ethkey"}
 common-types = {path = "../parity-ethereum/ethcore/types"}

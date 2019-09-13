@@ -1,6 +1,6 @@
 // use keccak_hash::{keccak, write_keccak};
 use std::io::{Write, Read};
-// use core::fmt::Write;
+use core::fmt::Write as Write2;
 use core::num::ParseIntError;
 use crate::hash128::{Hash128};
 use crate::hash256::{Hash256};
@@ -40,6 +40,14 @@ impl RemoteNode {
 			.step_by(2)
 			.map(|i| u8::from_str_radix(&s[i..i + 2], 16))
 			.collect()
+	}
+
+	pub fn encode_hex(bytes: &[u8]) -> String {
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for &b in bytes {
+      write!(&mut s, "{:02x}", b);
+    }
+    s
 	}
 
 	pub fn parse(enode: &str) -> Result<RemoteNode, String> {
