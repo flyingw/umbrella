@@ -268,7 +268,14 @@ use connection::{RemoteNode, OriginatedConnection, OriginatedEncryptedConnection
 use eth_protocol::EthProtocol;
 
 pub fn eth_main() {
-	let enode: &str = "enode://16cabdd5c1049a54255a52ed775ee5ed1b4f3fd52bf25b751470a59bda8f093df563dc5d385103e46314ff5dacb8f37fcd988b20efc63b9b5fa78f5417971b48@127.0.0.1:30301";
+	// let file = File::open("secret_keyfile").unwrap();
+	// let keyfile = KeyFile::load(&file).unwrap();
+	// let qwe = Crypto::from(keyfile.crypto);
+	// let c: Crypto = Crypto::from(qwe);
+	// let password = Password::from("test");
+	// let secret = c.secret(&password).unwrap();
+	let secret = Secret::from_str("ee5ae874c0e346ba986801a16745920b8eb49fe2f21d8c15b362c552ae7d6d41").unwrap();
+    let enode: &str = "enode://16cabdd5c1049a54255a52ed775ee5ed1b4f3fd52bf25b751470a59bda8f093df563dc5d385103e46314ff5dacb8f37fcd988b20efc63b9b5fa78f5417971b48@127.0.0.1:30301";
 	let node: RemoteNode = RemoteNode::parse(enode).unwrap();
 	let connection: OriginatedConnection = OriginatedConnection::new(node);
 	let connection: OriginatedEncryptedConnection = OriginatedEncryptedConnection::new(connection);
@@ -276,13 +283,6 @@ pub fn eth_main() {
 	protocol.write_hello();
 	protocol.read_hello();
 	protocol.read_packet();
-	// let file = File::open("secret_keyfile").unwrap();
-	// let keyfile = KeyFile::load(&file).unwrap();
-	// let qwe = Crypto::from(keyfile.crypto);
-	// let c: Crypto = Crypto::from(qwe);
-	// let password = Password::from("test");
-	// let secret = c.secret(&password).unwrap();
-	let secret = Secret::from_str("ee5ae874c0e346ba986801a16745920b8eb49fe2f21d8c15b362c552ae7d6d41").unwrap();	
 	let t = Transaction {
 		nonce: U256::from(2),
 		gas_price: U256::from(1_000_000_000u64),
@@ -294,7 +294,7 @@ pub fn eth_main() {
 	let singed_transaction = t.sign(&secret, Some(123));
 	protocol.write_transactions(&vec![&singed_transaction]);
     println!("transaction hash={:?}", singed_transaction.hash());
-	loop {
+    loop {
 		protocol.read_packet();
 		thread::sleep(Duration::from_millis(3000));
 		protocol.write_ping();
