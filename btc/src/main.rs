@@ -1,13 +1,14 @@
-use byteorder::{LittleEndian, BigEndian, WriteBytesExt, ReadBytesExt};
+use byteorder::{LittleEndian, ReadBytesExt};
 use log::{info};
-use ring::digest;
 use std::io;
 use std::io::{Write, Read, Cursor};
-use std::net::{TcpStream, Ipv6Addr};
+use std::net::{TcpStream, SocketAddr, IpAddr, Ipv6Addr};
 use std::time::{SystemTime, UNIX_EPOCH};
 use bitcoin::network::constants::Network;
 use bitcoin::network::message::{NetworkMessage, RawNetworkMessage};
+use bitcoin::network::address::Address;
 use bitcoin::consensus::encode::serialize;
+use bitcoin::network::message_network::VersionMessage;
 
 fn main() {
   stderrlog::new().module(module_path!()).verbosity(2).init().unwrap();
@@ -19,39 +20,10 @@ fn run() -> io::Result<()> {
   let mut stream = TcpStream::connect("127.0.0.1:18444")?;
   stream.set_nodelay(true)?;
   stream.set_read_timeout(None)?;
-  info!("send version");
-  // let magic: [u8; 4] = match network {
-  //   Network::Mainnet => [0xf9, 0xbe, 0xb4, 0xd9],
-  //   Network::Testnet => [0x0b, 0x11, 0x09, 0x07],
-  //   Network::Regtest => [0xfa, 0xbf, 0xb5, 0xda],
-  // };
   let network = Network::Regtest;
-  let magic = serialize(&network.magic());
-  stream.write(&magic)?; // start string
-  let command_name: [u8; 12] = *b"version\0\0\0\0\0";
-  stream.write(&command_name)?; // command name
-  let payload_size: usize = 86;
-  stream.write_u32::<LittleEndian>(payload_size as u32)?; // payload size
-  let mut payload = Vec::with_capacity(payload_size);
-  payload.write_u32::<LittleEndian>(70015)?; // version
-  payload.write_u64::<LittleEndian>(0)?; // services
-  payload.write_i64::<LittleEndian>(SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64)?; // timestamp
-  payload.write_u64::<LittleEndian>(0)?; // addr_recv services
-  payload.write(&Ipv6Addr::from([0; 16]).octets())?; // addr_recv IP address
-  payload.write_u16::<BigEndian>(0)?; // addr_recv port
-  payload.write_u64::<LittleEndian>(0)?; // addr_trans services
-  payload.write(&Ipv6Addr::from([0; 16]).octets())?; // addr_trans IP address
-  payload.write_u16::<BigEndian>(0)?; // addr_trans port
-  payload.write_u64::<LittleEndian>(0)?; // nonce
-  payload.write_u8(0)?; // user_agent
-  payload.write_i32::<LittleEndian>(0)?; // start_height
-  payload.write_u8(0x01)?; // relay
-  let hash = digest::digest(&digest::SHA256, payload.as_ref());
-  let hash = digest::digest(&digest::SHA256, &hash.as_ref());
-  let h = &hash.as_ref();
-  let checksum = [h[0], h[1], h[2], h[3]];
-  stream.write(&checksum)?; // checksum
-  stream.write(&payload)?; // payload
+  info!("sending version");
+  let version = serialize(&RawNetworkMessage { magic: network.magic(), payload: NetworkMessage::Version(VersionMessage { version: 70015, services: 0, timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64, receiver: Address::new(&SocketAddr::new(IpAddr::V6(Ipv6Addr::from([0; 16])), 0), 0), sender: Address::new(&SocketAddr::new(IpAddr::V6(Ipv6Addr::from([0; 16])), 0), 0), nonce: 0, user_agent: "".to_string(), start_height: 0, relay: true })});
+  stream.write(&version)?;
 
   info!("read version");
   let mut p = vec![0; 24];
