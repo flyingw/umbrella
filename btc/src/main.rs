@@ -5,6 +5,9 @@ use std::io;
 use std::io::{Write, Read, Cursor};
 use std::net::{TcpStream, Ipv6Addr};
 use std::time::{SystemTime, UNIX_EPOCH};
+use bitcoin::network::constants::Network;
+use bitcoin::network::message::{NetworkMessage, RawNetworkMessage};
+use bitcoin::consensus::encode::serialize;
 
 fn main() {
   stderrlog::new().module(module_path!()).verbosity(2).init().unwrap();
@@ -22,8 +25,6 @@ fn run() -> io::Result<()> {
   //   Network::Testnet => [0x0b, 0x11, 0x09, 0x07],
   //   Network::Regtest => [0xfa, 0xbf, 0xb5, 0xda],
   // };
-  use bitcoin::network::constants::Network;
-  use bitcoin::consensus::encode::serialize;
   let network = Network::Regtest;
   let magic = serialize(&network.magic());
   stream.write(&magic)?; // start string
@@ -83,11 +84,8 @@ fn run() -> io::Result<()> {
   // todo validate version (version, timestamp)
 
   info!("sending verack");
-  stream.write(&magic)?; // start string
-  let command_name: [u8; 12] = *b"verack\0\0\0\0\0\0";
-  stream.write(&command_name)?; // command name
-  stream.write_u32::<LittleEndian>(0)?; // payload size
-  stream.write(&[0x5d, 0xf6, 0xe0, 0xe2])?; // checksum
+  let verack = serialize(&RawNetworkMessage { magic: network.magic(), payload: NetworkMessage::Verack });
+  stream.write(&verack)?;
 
   info!("receiving verack");
   let mut p = vec![0; 24];
