@@ -6,33 +6,26 @@ use std::io::{Write, Read, Cursor};
 use std::net::{TcpStream, Ipv6Addr};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub enum Network {
-  Mainnet = 0,
-  Testnet = 1,
-  Regtest = 2,
-}
-
 fn main() {
   stderrlog::new().module(module_path!()).verbosity(2).init().unwrap();
   info!("starting");
-  run(Network::Regtest).unwrap();
+  run().unwrap();
 }
 
-fn run(network: Network) -> io::Result<()> {
-  let port = match network {
-    Network::Mainnet => 8333,
-    Network::Testnet => 18333,
-    Network::Regtest => 18444,
-  };
-  let mut stream = TcpStream::connect(format!("127.0.0.1:{}", port))?;
+fn run() -> io::Result<()> {
+  let mut stream = TcpStream::connect("127.0.0.1:18444")?;
   stream.set_nodelay(true)?;
   stream.set_read_timeout(None)?;
   info!("send version");
-  let magic: [u8; 4] = match network {
-    Network::Mainnet => [0xf9, 0xbe, 0xb4, 0xd9],
-    Network::Testnet => [0x0b, 0x11, 0x09, 0x07],
-    Network::Regtest => [0xfa, 0xbf, 0xb5, 0xda],
-  };
+  // let magic: [u8; 4] = match network {
+  //   Network::Mainnet => [0xf9, 0xbe, 0xb4, 0xd9],
+  //   Network::Testnet => [0x0b, 0x11, 0x09, 0x07],
+  //   Network::Regtest => [0xfa, 0xbf, 0xb5, 0xda],
+  // };
+  use bitcoin::network::constants::Network;
+  use bitcoin::consensus::encode::serialize;
+  let network = Network::Regtest;
+  let magic = serialize(&network.magic());
   stream.write(&magic)?; // start string
   let command_name: [u8; 12] = *b"version\0\0\0\0\0";
   stream.write(&command_name)?; // command name
@@ -120,32 +113,32 @@ fn run(network: Network) -> io::Result<()> {
   // todo assert checksum1 == 0x5df6e0e2
 
   info!("send tx"); //todo
-  stream.write(&magic)?; // start string
-  let command_name: [u8; 12] = *b"tx\0\0\0\0\0\0\0\0\0\0";
-  stream.write(&command_name)?; // command name
-  let payload_size: usize = ???;
-  // validate payload size?
-  stream.write_u32::<LittleEndian>(payload_size as u32)?; // payload size
-  let mut payload = Vec::with_capacity(payload_size);
-  payload.write_u32::<LittleEndian>(1)?; // version
-  payload.write_u8(1 as u8)?; // tx_in count
-  // tx_in: previous_output: hash
-  // tx_in: previous_output: index
-  // tx_in: script bytes
-  // tx_in: signature script
-  // tx_in: sequence
-  payload.write_u8(1 as u8)?; // tx_out count
-  // tx_out: value
-  // tx_out: pk_script bytes
-  // tx_out: pk_script
-  payload.write_u32::<LittleEndian>(0)?; // lock_time
+  // stream.write(&magic)?; // start string
+  // let command_name: [u8; 12] = *b"tx\0\0\0\0\0\0\0\0\0\0";
+  // stream.write(&command_name)?; // command name
+  // let payload_size: usize = ???;
+  // // validate payload size?
+  // stream.write_u32::<LittleEndian>(payload_size as u32)?; // payload size
+  // let mut payload = Vec::with_capacity(payload_size);
+  // payload.write_u32::<LittleEndian>(1)?; // version
+  // payload.write_u8(1 as u8)?; // tx_in count
+  // // tx_in: previous_output: hash
+  // // tx_in: previous_output: index
+  // // tx_in: script bytes
+  // // tx_in: signature script
+  // // tx_in: sequence
+  // payload.write_u8(1 as u8)?; // tx_out count
+  // // tx_out: value
+  // // tx_out: pk_script bytes
+  // // tx_out: pk_script
+  // payload.write_u32::<LittleEndian>(0)?; // lock_time
 
-  let hash = digest::digest(&digest::SHA256, payload.as_ref());
-  let hash = digest::digest(&digest::SHA256, &hash.as_ref());
-  let h = &hash.as_ref();
-  let checksum = [h[0], h[1], h[2], h[3]];
-  stream.write(&checksum)?; // checksum
-  stream.write(&payload)?; // payload
+  // let hash = digest::digest(&digest::SHA256, payload.as_ref());
+  // let hash = digest::digest(&digest::SHA256, &hash.as_ref());
+  // let h = &hash.as_ref();
+  // let checksum = [h[0], h[1], h[2], h[3]];
+  // stream.write(&checksum)?; // checksum
+  // stream.write(&payload)?; // payload
 
   Ok(())
 }
