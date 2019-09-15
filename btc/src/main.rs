@@ -1,14 +1,14 @@
+use bitcoin::consensus::encode::serialize;
+use bitcoin::network::address::Address;
+use bitcoin::network::constants::Network;
+use bitcoin::network::message_network::VersionMessage;
+use bitcoin::network::message::{NetworkMessage, RawNetworkMessage};
+use bitcoin::network::stream_reader::StreamReader;
 use log::{info};
 use std::io;
 use std::io::{Write};
 use std::net::{TcpStream, SocketAddr, IpAddr, Ipv6Addr};
 use std::time::{SystemTime, UNIX_EPOCH};
-use bitcoin::network::constants::Network;
-use bitcoin::network::message::{NetworkMessage, RawNetworkMessage};
-use bitcoin::network::address::Address;
-use bitcoin::consensus::encode::serialize;
-use bitcoin::network::message_network::VersionMessage;
-use bitcoin::network::stream_reader::StreamReader;
 
 fn main() {
   stderrlog::new().module(module_path!()).verbosity(2).init().unwrap();
