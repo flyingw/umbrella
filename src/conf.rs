@@ -1,7 +1,6 @@
 use structopt::StructOpt;
 use std::str::FromStr;
 use crate::hash256::Hash256;
-use secp256k1::PublicKey;
 
 #[derive(StructOpt,Debug)]
 /// Sender information.
