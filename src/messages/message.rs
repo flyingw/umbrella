@@ -21,8 +21,6 @@ pub const MAX_PAYLOAD_SIZE: u32 = 0x02000000;
 
 /// Message commands for the header
 pub mod commands {
-    use std::collections::HashSet;
-
     /// [Ping command](https://en.bitcoin.it/wiki/Protocol_documentation#ping)
     pub const PING: [u8; 12] = *b"ping\0\0\0\0\0\0\0\0";
 
@@ -47,6 +45,7 @@ pub mod commands {
     // [Fee filter command](https://en.bitcoin.it/wiki/Protocol_documentation#feefilter)
     pub const FEEFILTER: [u8; 12] = *b"feefilter\0\0\0";
 
+    
 }
 
 /// Bitcoin peer-to-peer message with its payload
