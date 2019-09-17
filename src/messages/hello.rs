@@ -6,6 +6,7 @@ use crate::serdes::Serializable;
 use crate::keys::public_to_slice;
 use super::message::Payload;
 use crate::connection::{MAX_PAYLOAD_SIZE, OriginatedEncryptedConnection, RLPX_TRANSPORT_PROTOCOL_VERSION};
+//use ethkey::Secret; - this fucking import leads to SegFail
 
 const PACKET_HELLO: u8 = 0x80; // actually 0x00 rlp doc "The integer 0 = [ 0x80 ]"
 const CLIENT_NAME: &str = "umbrella";
@@ -24,7 +25,8 @@ impl <'a> Serializable<Hello<'a>> for Hello<'a>{
         println!("write hello");
 
         use rlp::RlpStream;
-        
+        use crate::hash128::Hash128;
+        use parity_crypto::aes::AesEcb256;
         use super::message::ETH_63_CAPABILITY;
 
         let mut rlp = RlpStream::new();
@@ -55,7 +57,17 @@ impl <'a> Serializable<Hello<'a>> for Hello<'a>{
 		header.resize(HEADER_LEN, 0u8);
 		&mut packet[..HEADER_LEN].copy_from_slice(&mut header);
 		self.connection.encoder.encrypt(&mut packet[..HEADER_LEN]).unwrap();
-		OriginatedEncryptedConnection::update_mac(&mut self.connection.egress_mac, &self.connection.mac_encoder_key, &packet[..HEADER_LEN]);
+
+		let mut prev = Hash128::default();
+		self.connection.egress_mac.clone().finalize(prev.as_bytes_mut());
+		let mut enc = Hash128::default();
+		&mut enc[..].copy_from_slice(prev.as_bytes());
+		let mac_encoder = AesEcb256::new(&self.connection.mac_encoder_key.as_bytes()).unwrap();
+		mac_encoder.encrypt(enc.as_bytes_mut()).unwrap();
+
+		enc = enc ^ if packet[..HEADER_LEN].is_empty() { prev } else { Hash128::from_slice(&packet[..HEADER_LEN]) };
+		self.connection.egress_mac.update(enc.as_bytes());
+
 		self.connection.egress_mac.clone().finalize(&mut packet[HEADER_LEN..32]);
 		&mut packet[32..32 + len].copy_from_slice(payload);
 		self.connection.encoder.encrypt(&mut packet[32..32 + len]).unwrap();
@@ -63,11 +75,19 @@ impl <'a> Serializable<Hello<'a>> for Hello<'a>{
 			self.connection.encoder.encrypt(&mut packet[(32 + len)..(32 + len + padding)]).unwrap();
 		}
 		self.connection.egress_mac.update(&packet[32..(32 + len + padding)]);
-		OriginatedEncryptedConnection::update_mac(&mut self.connection.egress_mac, &self.connection.mac_encoder_key, &[0u8; 0]);
-		self.connection.egress_mac.clone().finalize(&mut packet[(32 + len + padding)..]);
+
+        let mut prev = Hash128::default();
+		self.connection.egress_mac.clone().finalize(prev.as_bytes_mut());
+		let mut enc = Hash128::default();
+		&mut enc[..].copy_from_slice(prev.as_bytes());
+		let mac_encoder = AesEcb256::new(&self.connection.mac_encoder_key.as_bytes()).unwrap();
+		mac_encoder.encrypt(enc.as_bytes_mut()).unwrap();
+
+		enc = enc ^ if [0u8; 0].is_empty() { prev } else { Hash128::from_slice(&[0u8; 0]) };
+		self.connection.egress_mac.update(enc.as_bytes());        
 
         
-        // self.connection.write_packet(payload.as_ref());
+		self.connection.egress_mac.clone().finalize(&mut packet[(32 + len + padding)..]);
         writer.write_all(packet.as_ref())
     }
 
