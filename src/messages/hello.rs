@@ -58,36 +58,59 @@ impl <'a> Serializable<Hello<'a>> for Hello<'a>{
 		&mut packet[..HEADER_LEN].copy_from_slice(&mut header);
 		self.connection.encoder.encrypt(&mut packet[..HEADER_LEN]).unwrap();
 
+        // connection drops previous shit here
 		let mut prev = Hash128::default();
-		self.connection.egress_mac.clone().finalize(prev.as_bytes_mut());
+        debug!("default bytes? 1{:?}", prev.as_bytes());
+
+        self.connection.egress_mac.clone().finalize(prev.as_bytes_mut());
+        debug!("default bytes? 2{:?}", prev.as_bytes());
+
+        // we encrypt this previous shit
 		let mut enc = Hash128::default();
 		&mut enc[..].copy_from_slice(prev.as_bytes());
+
 		let mac_encoder = AesEcb256::new(&self.connection.mac_encoder_key.as_bytes()).unwrap();
 		mac_encoder.encrypt(enc.as_bytes_mut()).unwrap();
 
-		enc = enc ^ if packet[..HEADER_LEN].is_empty() { prev } else { Hash128::from_slice(&packet[..HEADER_LEN]) };
+        // to previous mac we've add fucking xor of header
+        // and update tha mac 
+		enc = enc ^ Hash128::from_slice(&packet[..HEADER_LEN]);
 		self.connection.egress_mac.update(enc.as_bytes());
 
+        // write that shit next to packet header
 		self.connection.egress_mac.clone().finalize(&mut packet[HEADER_LEN..32]);
+
+        // add fucking payload and encrypt it
 		&mut packet[32..32 + len].copy_from_slice(payload);
 		self.connection.encoder.encrypt(&mut packet[32..32 + len]).unwrap();
+
+        // padding + encrypted padding
 		if padding != 0 {
 			self.connection.encoder.encrypt(&mut packet[(32 + len)..(32 + len + padding)]).unwrap();
 		}
+        // update mac with new fucking data
 		self.connection.egress_mac.update(&packet[32..(32 + len + padding)]);
 
+        //
         let mut prev = Hash128::default();
 		self.connection.egress_mac.clone().finalize(prev.as_bytes_mut());
+
+        // write it as previous shit
 		let mut enc = Hash128::default();
 		&mut enc[..].copy_from_slice(prev.as_bytes());
 		let mac_encoder = AesEcb256::new(&self.connection.mac_encoder_key.as_bytes()).unwrap();
 		mac_encoder.encrypt(enc.as_bytes_mut()).unwrap();
+        // do all the useless shit with that and just use its as an output
 
-		enc = enc ^ if [0u8; 0].is_empty() { prev } else { Hash128::from_slice(&[0u8; 0]) };
-		self.connection.egress_mac.update(enc.as_bytes());        
 
-        
+		enc = enc ^ prev;
+		
+        self.connection.egress_mac.update(enc.as_bytes());
+        // egress will be updated with whole package here, but what aboit finilize of clone?
+
 		self.connection.egress_mac.clone().finalize(&mut packet[(32 + len + padding)..]);
+
+        // write final doubly encrypted package?
         writer.write_all(packet.as_ref())
     }
 
