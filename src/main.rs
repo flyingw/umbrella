@@ -341,6 +341,7 @@ fn main() {
     use std::net::TcpStream;
 
     let mut stream = TcpStream::connect_timeout(&seed, Duration::from_secs(1)).unwrap();
+    let mut is = stream.try_clone().unwrap();
     let magic = [0; 4];
     let version = NodeKey {
         version: message
@@ -349,21 +350,65 @@ fn main() {
     debug!("Write {:#?}", our_version);
     our_version.write(&mut stream, magic).unwrap();
 
-    let mut stream: TcpReader = TcpReader(stream);
+    let mut reader: TcpReader = TcpReader(is);
     
     //handshake read
-    let data: Vec<u8> = stream.read_bytes(connection::RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4).unwrap();
+    let data: Vec<u8> = reader.read_bytes(connection::RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4).unwrap();
 
     let ack_cipher: Vec<u8> = data.clone().to_vec();
     let mut connection: OriginatedEncryptedConnection = ecies::decrypt(&secret, &[], &data).map(|ack| {
+        use crate::hash512::Hash512;
+        use parity_crypto::aes::{AesCtr256, AesEcb256};
+        use crate::connection::NULL_IV;
+
         let mut remote_ephemeral: Public = Public::default();
         let mut remote_nonce: Hash256 = Hash256::default();
 
         remote_ephemeral.assign_from_slice(&ack[0..64]);
         remote_nonce.copy_from_slice(&ack[64..(64+32)]);		
-        
-        OriginatedEncryptedConnection::new(stream, public_key,
-            nonce, remote_nonce, ecdhe_secret_key, auth_cipher, ack_cipher, remote_ephemeral)
+
+        let ecdhe_secret = Secret::from_slice(&ecdhe_secret_key[0..32]).unwrap();
+		let shared = ecdh::agree(&ecdhe_secret, &remote_ephemeral).unwrap();
+		let mut nonce_material = Hash512::default();
+		(&mut nonce_material[0..32]).copy_from_slice(remote_nonce.as_bytes());
+		(&mut nonce_material[32..64]).copy_from_slice(nonce.as_bytes());
+		let mut key_material = Hash512::default();
+		(&mut key_material[0..32]).copy_from_slice(shared.as_bytes());
+		Keccak::keccak256(nonce_material.as_bytes_mut(), &mut key_material[32..64]);
+		let key_material_keccak = OriginatedEncryptedConnection::keccak(key_material.as_bytes());
+		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
+		let key_material_keccak = OriginatedEncryptedConnection::keccak(key_material.as_bytes());
+		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
+
+		// Using a 0 IV with CTR is fine as long as the same IV is never reused with the same key.
+		// This is the case here: ecdh creates a new secret which will be the symmetric key used
+		// only for this session the 0 IV is only use once with this secret, so we are in the case
+		// of same IV use for different key.
+		let encoder = AesCtr256::new(&key_material[32..64], &NULL_IV).unwrap();
+		let decoder = AesCtr256::new(&key_material[32..64], &NULL_IV).unwrap();
+		let key_material_keccak = OriginatedEncryptedConnection::keccak(key_material.as_bytes());
+		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
+		let mac_encoder_key: Secret = Secret::from_slice(&key_material[32..64]).unwrap();
+
+		let mut egress_mac = Keccak::new_keccak256();
+		let mut mac_material = Hash256::from_slice(&key_material[32..64]) ^ remote_nonce;
+		egress_mac.update(mac_material.as_bytes());
+		egress_mac.update(&auth_cipher);
+
+		let mut ingress_mac = Keccak::new_keccak256();
+		mac_material = Hash256::from_slice(&key_material[32..64]) ^ nonce;
+		ingress_mac.update(mac_material.as_bytes());
+		ingress_mac.update(&ack_cipher);
+
+		OriginatedEncryptedConnection {
+			stream: reader,
+			encoder: encoder,
+			decoder: decoder,
+			mac_encoder_key: mac_encoder_key,
+			egress_mac: egress_mac,
+			ingress_mac: ingress_mac,
+			public_key: public_key,
+		}
     }).unwrap();
 
 	//let mut protocol: EthProtocol = EthProtocol::new(connection);
@@ -412,7 +457,11 @@ fn main() {
         .append(&LOCAL_PORT)
         .append(&u_public_key);
 
-    connection.write_packet(&rlp.out());
+    let our_hello = Hello {
+        payload: &rlp.out(),
+    };
+    //our_hello.write(&mut stream).unwrap();
+    connection.write_packet(our_hello.payload);
 
     //fn read_hello()
 	connection.read_packet().map(|packet| {

@@ -51,7 +51,7 @@ pub mod commands {
 
 /// Bitcoin peer-to-peer message with its payload
 #[derive(PartialEq, Eq, Hash, Clone)]
-pub enum Message {
+pub enum Message<'a> {
     FeeFilter(FeeFilter),
     Other(String),
     Partial(MessageHeader),
@@ -63,10 +63,10 @@ pub enum Message {
     Verack,
     Version(Version),
     NodeKey(NodeKey),
-    Hello(Hello),
+    Hello(Hello<'a>),
 }
 
-impl Message {
+impl Message<'_> {
     /// Reads a Bitcoin P2P message with its payload from bytes
     ///
     /// It's possible for a message's header to be read but not its payload. In this case, the
@@ -178,12 +178,12 @@ impl Message {
             Message::Verack => write_without_payload(writer, VERACK, magic),
             Message::Version(v) => write_with_payload(writer, VERSION, v, magic),
             Message::NodeKey(v) => v.write(writer),
-            Message::Hello(v) => v.write(writer),
+            Message::Hello(h) => h.write(writer),
         }
     }
 }
 
-impl fmt::Debug for Message {
+impl <'a> fmt::Debug for Message<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Message::Other(p) => f.write_str(&format!("{:#?}", p)),
@@ -197,7 +197,7 @@ impl fmt::Debug for Message {
             Message::Verack => f.write_str("Verack"),
             Message::Version(p) => f.write_str(&format!("{:#?}", p)),
             Message::NodeKey(v) => f.write_str(&format!("{:#?}", v)),
-            Message::Hello(v) => f.write_str(&format!("{:#?}", v)),
+            Message::Hello(h) => f.write_str(&format!("{:#?}", h)),
         }
     }
 }
