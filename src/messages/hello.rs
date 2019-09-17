@@ -12,7 +12,6 @@ const CLIENT_NAME: &str = "umbrella";
 const LOCAL_PORT: u16 = 1234;
 
 pub struct Hello<'a> {
-    pub payload: &'a mut Vec<u8>,
     pub connection: &'a mut OriginatedEncryptedConnection,
 }
 
@@ -21,7 +20,7 @@ impl <'a> Serializable<Hello<'a>> for Hello<'a>{
         panic!("can't read yet");
     }
 
-    fn write(&mut self, _writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
         println!("write hello");
 
         use rlp::RlpStream;
@@ -38,11 +37,11 @@ impl <'a> Serializable<Hello<'a>> for Hello<'a>{
             .append(&LOCAL_PORT)
             .append(&u_public_key);
         
-        self.payload.extend(rlp.out().clone());
+        let payload = &rlp.out();
 
         // const HEADER_LEN: usize = 16;
 		// let mut header = RlpStream::new();
-		// let len = self.payload.len();
+		// let len = payload.len();
 		// if len > MAX_PAYLOAD_SIZE {
 		// 	panic!("OversizedPacket {}", len);
 		// }
@@ -55,12 +54,10 @@ impl <'a> Serializable<Hello<'a>> for Hello<'a>{
 		// let mut header = header.out();
 		// header.resize(HEADER_LEN, 0u8);
 		// &mut packet[..HEADER_LEN].copy_from_slice(&mut header);
-
 		// self.connection.encoder.encrypt(&mut packet[..HEADER_LEN]).unwrap();
-
 		// OriginatedEncryptedConnection::update_mac(&mut self.connection.egress_mac, &self.connection.mac_encoder_key, &packet[..HEADER_LEN]);
 		// self.connection.egress_mac.clone().finalize(&mut packet[HEADER_LEN..32]);
-		// &mut packet[32..32 + len].copy_from_slice(self.payload);
+		// &mut packet[32..32 + len].copy_from_slice(payload);
 		// self.connection.encoder.encrypt(&mut packet[32..32 + len]).unwrap();
 		// if padding != 0 {
 		// 	self.connection.encoder.encrypt(&mut packet[(32 + len)..(32 + len + padding)]).unwrap();
@@ -69,10 +66,10 @@ impl <'a> Serializable<Hello<'a>> for Hello<'a>{
 		// OriginatedEncryptedConnection::update_mac(&mut self.connection.egress_mac, &self.connection.mac_encoder_key, &[0u8; 0]);
 		// self.connection.egress_mac.clone().finalize(&mut packet[(32 + len + padding)..]);
 
-		//self.stream.write_bytes(packet.as_ref());
-        self.connection.write_packet(self.payload.as_ref());
+        
+        self.connection.write_packet(payload.as_ref());
+        //writer.write_all(payload.as_ref())
         Ok(())
-        //writer.write_all(self.payload.as_ref())
     }
 
 }
