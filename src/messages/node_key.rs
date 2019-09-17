@@ -25,7 +25,7 @@ impl Serializable<NodeKey> for NodeKey {
 impl fmt::Debug for NodeKey {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("NodeKey")
-            .field("version", &self.version)
+            .field("version", &"fake")
             .finish()
     }
 }
