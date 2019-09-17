@@ -32,7 +32,7 @@ impl Serializable<TxOut> for TxOut {
         Ok(TxOut { amount, pk_script })
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
         writer.write_i64::<LittleEndian>(self.amount.0)?;
         var_int::write(self.pk_script.0.len() as u64, writer)?;
         writer.write(&self.pk_script.0)?;

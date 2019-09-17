@@ -24,7 +24,7 @@ impl Serializable<Ping> for Ping {
         Ok(Ping { nonce })
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
         writer.write_u64::<LittleEndian>(self.nonce)
     }
 }

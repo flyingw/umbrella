@@ -123,7 +123,7 @@ impl OriginatedEncryptedConnection {
 	}
 
   /// Update MAC after reading or writing any data.
-	fn update_mac(mac: &mut Keccak, mac_encoder_key: &Secret, seed: &[u8]) -> () {
+	pub fn update_mac(mac: &mut Keccak, mac_encoder_key: &Secret, seed: &[u8]) -> () {
 		let mut prev = Hash128::default();
 		mac.clone().finalize(prev.as_bytes_mut());
 		let mut enc = Hash128::default();

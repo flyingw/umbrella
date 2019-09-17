@@ -23,7 +23,7 @@ impl Serializable<FeeFilter> for FeeFilter {
         Ok(FeeFilter { minfee })
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
         writer.write_u64::<LittleEndian>(self.minfee)
     }
 }
@@ -50,7 +50,7 @@ mod tests {
     #[test]
     fn write_read() {
         let mut v = Vec::new();
-        let f = FeeFilter { minfee: 1234 };
+        let mut f = FeeFilter { minfee: 1234 };
         f.write(&mut v).unwrap();
         assert!(v.len() == f.size());
         assert!(FeeFilter::read(&mut Cursor::new(&v)).unwrap() == f);

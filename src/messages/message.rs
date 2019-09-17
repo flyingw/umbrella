@@ -20,6 +20,31 @@ pub const NO_CHECKSUM: [u8; 4] = [0x5d, 0xf6, 0xe0, 0xe2];
 /// Max message payload size (32MB)
 pub const MAX_PAYLOAD_SIZE: u32 = 0x02000000;
 
+pub type ProtocolId = [u8; 3];
+
+pub struct CapabilityInfo {
+    pub protocol: ProtocolId,
+    pub version: u8,
+    pub packet_count: u8,
+}
+
+use rlp::{RlpStream, Encodable};
+
+impl Encodable for CapabilityInfo {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        s.begin_list(2);
+        s.append(&&self.protocol[..]);
+        s.append(&self.version);
+    }
+}
+pub const ETH_PROTOCOL: ProtocolId = *b"eth";
+pub const ETH_PROTOCOL_VERSION_63: (u8, u8) = (63, 0x11);
+pub const ETH_63_CAPABILITY: CapabilityInfo = CapabilityInfo { 
+    protocol: ETH_PROTOCOL,
+    version: ETH_PROTOCOL_VERSION_63.0,
+    packet_count: ETH_PROTOCOL_VERSION_63.1
+};
+
 /// Message commands for the header
 pub mod commands {
     /// [Ping command](https://en.bitcoin.it/wiki/Protocol_documentation#ping)
@@ -50,7 +75,7 @@ pub mod commands {
 }
 
 /// Bitcoin peer-to-peer message with its payload
-#[derive(PartialEq, Eq, Hash, Clone)]
+//#[derive(PartialEq, Eq, Hash, Clone)]
 pub enum Message<'a> {
     FeeFilter(FeeFilter),
     Other(String),
@@ -161,7 +186,7 @@ impl Message<'_> {
     }
 
     /// Writes a Bitcoin P2P message with its payload to bytes
-    pub fn write(&self, writer: &mut dyn Write, magic: [u8; 4]) -> io::Result<()> {
+    pub fn write(&mut self, writer: &mut dyn Write, magic: [u8; 4]) -> io::Result<()> {
         use self::commands::*;
         match self {
             Message::Other(s) => Err(io::Error::new(io::ErrorKind::InvalidData, s.as_ref())),
@@ -207,7 +232,7 @@ fn write_without_payload(
     command: [u8; 12],
     magic: [u8; 4],
 ) -> io::Result<()> {
-    let header = MessageHeader {
+    let mut header = MessageHeader {
         magic,
         command,
         payload_size: 0,
@@ -219,7 +244,7 @@ fn write_without_payload(
 fn write_with_payload<T: Serializable<T>>(
     writer: &mut dyn Write,
     command: [u8; 12],
-    payload: &dyn Payload<T>,
+    payload: &mut dyn Payload<T>,
     magic: [u8; 4],
 ) -> io::Result<()> {
     let mut bytes = Vec::with_capacity(payload.size());
@@ -229,7 +254,7 @@ fn write_with_payload<T: Serializable<T>>(
     let h = &hash.as_ref();
     let checksum = [h[0], h[1], h[2], h[3]];
 
-    let header = MessageHeader {
+    let mut header = MessageHeader {
         magic,
         command,
         payload_size: payload.size() as u32,

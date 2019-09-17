@@ -40,7 +40,7 @@ impl Serializable<TxIn> for TxIn {
         })
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
         self.prev_output.write(writer)?;
         var_int::write(self.sig_script.0.len() as u64, writer)?;
         writer.write(&self.sig_script.0)?;

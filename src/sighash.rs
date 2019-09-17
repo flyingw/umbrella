@@ -48,7 +48,7 @@ impl SigHashCache {
 /// This is to be used for all tranasctions after the August 2017 fork.
 /// It fixing quadratic hashing and includes the amount spent in the hash.
 pub fn bip143_sighash(
-    tx: &Tx,
+    tx: &mut Tx,
     n_input: usize,
     script_code: &[u8],
     amount: Amount,
@@ -70,7 +70,7 @@ pub fn bip143_sighash(
     if !anyone_can_pay {
         if cache.hash_prevouts.is_none() {
             let mut prev_outputs = Vec::with_capacity(OutPoint::SIZE * tx.inputs.len());
-            for input in tx.inputs.iter() {
+            for input in tx.inputs.iter_mut() {
                 input.prev_output.write(&mut prev_outputs)?;
             }
             cache.hash_prevouts = Some(sha256d(&prev_outputs));
@@ -115,7 +115,7 @@ pub fn bip143_sighash(
                 size += tx_out.size();
             }
             let mut outputs = Vec::with_capacity(size);
-            for tx_out in tx.outputs.iter() {
+            for tx_out in tx.outputs.iter_mut() {
                 tx_out.write(&mut outputs)?;
             }
             cache.hash_outputs = Some(sha256d(&outputs));

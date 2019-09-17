@@ -76,7 +76,7 @@ impl Serializable<Hash256> for Hash256 {
         Ok(Hash256(bytes))
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
         match writer.write(&self.0) {
             Ok(_size) => Ok(()),
             Err(e) => Err(e),

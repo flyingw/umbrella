@@ -119,7 +119,7 @@ fn create_transaction(opt: &Opt) -> Tx {
     trace!("public: {:?} ", hex::encode(&pub_key.serialize().as_ref()));
 
     let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
-    let sighash = bip143_sighash(&tx, 0, &pub_script.0, Amount::from(opt.sender().in_amount(), Units::Bch), sighash_type, &mut cache).unwrap();
+    let sighash = bip143_sighash(&mut tx, 0, &pub_script.0, Amount::from(opt.sender().in_amount(), Units::Bch), sighash_type, &mut cache).unwrap();
     let signature = generate_signature(&privk, &sighash, sighash_type).unwrap();
     let sig_script = sig_script(&signature, &pub_key.serialize());
 
@@ -167,7 +167,7 @@ pub fn main1() {
     let mut partial: Option<MessageHeader> = None;
     let mut is = stream.try_clone().unwrap();
     
-    let tx = Message::Tx(create_transaction(&opt));
+    let mut tx = Message::Tx(create_transaction(&opt));
 
     let version = Version {
         version: PROTOCOL_VERSION,
@@ -177,7 +177,7 @@ pub fn main1() {
         ..Default::default()
     };
 
-    let our_version = Message::Version(version);
+    let mut our_version = Message::Version(version);
     debug!("Write {:#?}", our_version);
     
     our_version.write(&mut stream, magic).unwrap();
@@ -260,7 +260,7 @@ use std::thread;
 use ethstore::Crypto;
 use ethkey::Password;
 
-use connection::{OriginatedEncryptedConnection, RLPX_TRANSPORT_PROTOCOL_VERSION};
+use connection::{OriginatedEncryptedConnection};
 
 /// 
 fn main() {
@@ -346,12 +346,12 @@ fn main() {
     use std::net::TcpStream;
 
     let mut stream = TcpStream::connect_timeout(&seed, Duration::from_secs(1)).unwrap();
-    let mut is = stream.try_clone().unwrap();
+    let is = stream.try_clone().unwrap();
     let magic = [0; 4];
     let version = NodeKey {
         version: message
     };
-    let our_version = Message::NodeKey(version);
+    let mut our_version = Message::NodeKey(version);
     debug!("Write {:#?}", our_version);
     our_version.write(&mut stream, magic).unwrap();
 
@@ -363,7 +363,7 @@ fn main() {
     let ack_cipher: Vec<u8> = data.clone().to_vec();
     let mut connection: OriginatedEncryptedConnection = ecies::decrypt(&secret, &[], &data).map(|ack| {
         use crate::hash512::Hash512;
-        use parity_crypto::aes::{AesCtr256, AesEcb256};
+        use parity_crypto::aes::{AesCtr256};
         use crate::connection::NULL_IV;
 
         let mut remote_ephemeral: Public = Public::default();
@@ -417,22 +417,7 @@ fn main() {
     }).unwrap();
 
 	//let mut protocol: EthProtocol = EthProtocol::new(connection);
-    use rlp::{RlpStream, Rlp, Encodable};
-
-    pub type ProtocolId = [u8; 3];
-    pub struct CapabilityInfo {
-	    pub protocol: ProtocolId,
-	    pub version: u8,
-	    pub packet_count: u8,
-    }
-
-    impl Encodable for CapabilityInfo {
-	    fn rlp_append(&self, s: &mut RlpStream) {
-		    s.begin_list(2);
-		    s.append(&&self.protocol[..]);
-		    s.append(&self.version);
-	    }
-    }
+    use rlp::{RlpStream, Rlp};
 
     const PACKET_HELLO: u8 = 0x80; // actually 0x00 rlp doc "The integer 0 = [ 0x80 ]"
     const PACKET_PING: u8 = 0x02;
@@ -441,34 +426,19 @@ fn main() {
     const PACKET_STATUS: u8 = 0x00 + PACKET_USER;
     const PACKET_TRANSACTIONS: u8 = 0x02 + PACKET_USER;
     const PACKET_NEW_BLOCK: u8 = 0x07 + PACKET_USER;
-    const CLIENT_NAME: &str = "umbrella";
-    const LOCAL_PORT: u16 = 1234;
-    const ETH_PROTOCOL: ProtocolId = *b"eth";
-    const ETH_PROTOCOL_VERSION_63: (u8, u8) = (63, 0x11);
-    const ETH_63_CAPABILITY: CapabilityInfo = CapabilityInfo { 
-	    protocol: ETH_PROTOCOL,
-	    version: ETH_PROTOCOL_VERSION_63.0,
-	    packet_count: ETH_PROTOCOL_VERSION_63.1
-    };
+    
 
     //fn write_hello()
-    let mut rlp = RlpStream::new();
-    let u_public_key = &public_to_slice(&connection.public_key)[..];
-    rlp.append_raw(&[PACKET_HELLO], 0)
-        .begin_list(5)
-        .append(&RLPX_TRANSPORT_PROTOCOL_VERSION)
-        .append(&CLIENT_NAME)
-        .append_list(&vec!(ETH_63_CAPABILITY))
-        .append(&LOCAL_PORT)
-        .append(&u_public_key);
-
-    let our_hello = Hello {
-        payload: &rlp.out(),
+    let mut our_hello = Hello {
+        payload: &mut vec![],
+        connection: &mut connection,
     };
-    //our_hello.write(&mut stream).unwrap();
-    connection.write_packet(our_hello.payload);
+    trace!("write out hello");
+    our_hello.write(&mut stream).unwrap();
+    //our_hello.connection.write_packet(our_hello.payload);
 
     //fn read_hello()
+    trace!("Read hello from remote");
 	connection.read_packet().map(|packet| {
         match packet.first() {
             Some(&PACKET_HELLO) => {
@@ -490,6 +460,7 @@ fn main() {
     }).unwrap();
 
 	//protocol.read_packet();
+    trace!("Read some packet");
     let res: Option<Vec<u8>> = connection.read_packet();
     let data: &[u8] = match res {
         Some(ref data) if data.len() > 1 => data,

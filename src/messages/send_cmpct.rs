@@ -31,7 +31,7 @@ impl Serializable<SendCmpct> for SendCmpct {
         Ok(SendCmpct { enable, version })
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
         writer.write_u8(self.enable)?;
         writer.write_u64::<LittleEndian>(self.version)
     }
