@@ -1,13 +1,11 @@
 use std::io::{Write, Read};
-use crate::hash128::{Hash128};
-use crate::hash256::{Hash256};
-use crate::hash512::{Hash512};
-use ethereum_types::{H256};
-use ethkey::{Secret, Public};
-use ethkey::crypto::{ecdh};
+use crate::hash128::Hash128;
+use crate::hash256::Hash256;
+use ethereum_types::H256;
+use ethkey::Secret;
 use parity_crypto::aes::{AesCtr256, AesEcb256};
 use rlp::{RlpStream, Rlp};
-use secp256k1::key::{SecretKey, PublicKey};
+use secp256k1::key::PublicKey;
 use std::net::TcpStream;
 use tiny_keccak::Keccak;
 
@@ -16,72 +14,21 @@ pub const RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4: usize = 210;
 pub const ENCRYPTED_HEADER_LEN: usize = 32;
 pub const MAX_PAYLOAD_SIZE: usize = (1 << 24) - 1;
 
-const NULL_IV: [u8; 16] = [0;16];
+pub const NULL_IV: [u8; 16] = [0;16];
 
 pub struct OriginatedEncryptedConnection {
-	stream: TcpReader,
+	pub stream: TcpReader,
 	pub public_key: PublicKey,
-	encoder: AesCtr256,
-	decoder: AesCtr256,
-	mac_encoder_key: Secret,
-	egress_mac: Keccak,
-	ingress_mac: Keccak,
+	pub encoder: AesCtr256,
+	pub decoder: AesCtr256,
+	pub mac_encoder_key: Secret,
+	pub egress_mac: Keccak,
+	pub ingress_mac: Keccak,
 }
 
 impl OriginatedEncryptedConnection {
-	pub fn new(stream: TcpReader,
-        public_key: PublicKey,
-        nonce: Hash256,
-        remote_nonce: Hash256,
-        ecdhe_secret_key: SecretKey,
-        auth_cipher: Vec<u8>,
-        ack_cipher: Vec<u8>,
-        remote_ephemeral: Public) -> OriginatedEncryptedConnection {
-		let ecdhe_secret = Secret::from_slice(&ecdhe_secret_key[0..32]).unwrap();
-		let shared = ecdh::agree(&ecdhe_secret, &remote_ephemeral).unwrap();
-		let mut nonce_material = Hash512::default();
-		(&mut nonce_material[0..32]).copy_from_slice(remote_nonce.as_bytes());
-		(&mut nonce_material[32..64]).copy_from_slice(nonce.as_bytes());
-		let mut key_material = Hash512::default();
-		(&mut key_material[0..32]).copy_from_slice(shared.as_bytes());
-		Keccak::keccak256(nonce_material.as_bytes_mut(), &mut key_material[32..64]);
-		let key_material_keccak = OriginatedEncryptedConnection::keccak(key_material.as_bytes());
-		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
-		let key_material_keccak = OriginatedEncryptedConnection::keccak(key_material.as_bytes());
-		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
 
-		// Using a 0 IV with CTR is fine as long as the same IV is never reused with the same key.
-		// This is the case here: ecdh creates a new secret which will be the symmetric key used
-		// only for this session the 0 IV is only use once with this secret, so we are in the case
-		// of same IV use for different key.
-		let encoder = AesCtr256::new(&key_material[32..64], &NULL_IV).unwrap();
-		let decoder = AesCtr256::new(&key_material[32..64], &NULL_IV).unwrap();
-		let key_material_keccak = OriginatedEncryptedConnection::keccak(key_material.as_bytes());
-		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
-		let mac_encoder_key: Secret = Secret::from_slice(&key_material[32..64]).unwrap();
-
-		let mut egress_mac = Keccak::new_keccak256();
-		let mut mac_material = Hash256::from_slice(&key_material[32..64]) ^ remote_nonce;
-		egress_mac.update(mac_material.as_bytes());
-		egress_mac.update(&auth_cipher);
-
-		let mut ingress_mac = Keccak::new_keccak256();
-		mac_material = Hash256::from_slice(&key_material[32..64]) ^ nonce;
-		ingress_mac.update(mac_material.as_bytes());
-		ingress_mac.update(&ack_cipher);
-
-		return OriginatedEncryptedConnection {
-			stream: stream,
-			encoder: encoder,
-			decoder: decoder,
-			mac_encoder_key: mac_encoder_key,
-			egress_mac: egress_mac,
-			ingress_mac: ingress_mac,
-			public_key: public_key,
-		};
-	}
-
-	fn keccak(x: &[u8]) -> Hash256 {
+	pub fn keccak(x: &[u8]) -> Hash256 {
 		let mut res = Hash256::default();
 		Keccak::keccak256(x, res.as_bytes_mut());
 		res
