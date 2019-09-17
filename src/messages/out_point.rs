@@ -36,7 +36,7 @@ impl Serializable<OutPoint> for OutPoint {
         Ok(OutPoint { hash, index })
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
         self.hash.write(writer)?;
         writer.write_u32::<LittleEndian>(self.index)?;
         Ok(())

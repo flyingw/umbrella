@@ -15,7 +15,7 @@ impl Serializable<NodeKey> for NodeKey {
         Ok(NodeKey {version:vec![]})
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
         // Endiannes?
         println!("WRITE THIS NODE KEY {:?}", self);
         writer.write(self.version.as_ref()).map(|_size| ())

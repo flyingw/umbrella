@@ -83,7 +83,7 @@ impl Serializable<Reject> for Reject {
         })
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
         var_int::write(self.message.as_bytes().len() as u64, writer)?;
         writer.write(&self.message.as_bytes())?;
         writer.write_u8(self.code as u8)?;

@@ -49,7 +49,7 @@ impl Serializable<NodeAddr> for NodeAddr {
         Ok(NodeAddr { services, ip, port })
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
         writer.write_u64::<LittleEndian>(self.services)?;
         writer.write(&self.ip.octets())?;
         writer.write_u16::<BigEndian>(self.port)?;

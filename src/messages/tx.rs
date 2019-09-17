@@ -26,7 +26,7 @@ pub struct Tx {
 
 impl Tx {
     /// Calculates the hash of the transaction also known as the txid
-    pub fn hash(&self) -> Hash256 {
+    pub fn hash(&mut self) -> Hash256 {
         let mut b = Vec::with_capacity(self.size());
         self.write(&mut b).unwrap();
         sha256d(&b)
@@ -63,14 +63,14 @@ impl Serializable<Tx> for Tx {
         })
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
         writer.write_u32::<LittleEndian>(self.version)?;
         var_int::write(self.inputs.len() as u64, writer)?;
-        for tx_in in self.inputs.iter() {
+        for tx_in in self.inputs.iter_mut() {
             tx_in.write(writer)?;
         }
         var_int::write(self.outputs.len() as u64, writer)?;
-        for tx_out in self.outputs.iter() {
+        for tx_out in self.outputs.iter_mut() {
             tx_out.write(writer)?;
         }
         writer.write_u32::<LittleEndian>(self.lock_time)?;

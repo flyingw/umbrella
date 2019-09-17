@@ -10,7 +10,7 @@ pub trait Serializable<T> {
         Self: Sized;
 
     /// Writes the object to serialized form
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()>;
+    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()>;
 }
 
 impl Serializable<[u8; 16]> for [u8; 16] {
@@ -20,7 +20,7 @@ impl Serializable<[u8; 16]> for [u8; 16] {
         Ok(d)
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
         writer.write(self)?;
         Ok(())
     }
@@ -33,7 +33,7 @@ impl Serializable<[u8; 32]> for [u8; 32] {
         Ok(d)
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
         writer.write(self)?;
         Ok(())
     }

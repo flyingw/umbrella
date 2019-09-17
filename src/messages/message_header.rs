@@ -80,7 +80,7 @@ impl Serializable<MessageHeader> for MessageHeader {
         Ok(ret)
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
         writer.write(&self.magic)?;
         writer.write(&self.command)?;
         writer.write_u32::<LittleEndian>(self.payload_size)?;
