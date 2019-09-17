@@ -6,6 +6,7 @@ use super::fee_filter::FeeFilter;
 use super::tx::Tx;
 use super::version::Version;
 use super::node_key::NodeKey;
+use super::hello::Hello;
 use ring::digest;
 use std::fmt;
 use std::io;
@@ -62,6 +63,7 @@ pub enum Message {
     Verack,
     Version(Version),
     NodeKey(NodeKey),
+    Hello(Hello),
 }
 
 impl Message {
@@ -175,9 +177,8 @@ impl Message {
             Message::Tx(p) => write_with_payload(writer, TX, p, magic),
             Message::Verack => write_without_payload(writer, VERACK, magic),
             Message::Version(v) => write_with_payload(writer, VERSION, v, magic),
-            Message::NodeKey(v) => {
-                v.write(writer)
-            },
+            Message::NodeKey(v) => v.write(writer),
+            Message::Hello(v) => v.write(writer),
         }
     }
 }
@@ -196,6 +197,7 @@ impl fmt::Debug for Message {
             Message::Verack => f.write_str("Verack"),
             Message::Version(p) => f.write_str(&format!("{:#?}", p)),
             Message::NodeKey(v) => f.write_str(&format!("{:#?}", v)),
+            Message::Hello(v) => f.write_str(&format!("{:#?}", v)),
         }
     }
 }

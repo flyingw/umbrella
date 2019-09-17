@@ -38,7 +38,7 @@ use conf::Opt;
 use structopt::StructOpt;
 
 use network::Network;
-use messages::{Version, NODE_NONE, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut, NodeKey};
+use messages::{Version, NODE_NONE, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut, NodeKey, Hello};
 use messages::{Message,MessageHeader};
 use util::secs_since;
 use std::time::{UNIX_EPOCH, Duration};
@@ -297,7 +297,6 @@ fn main() {
     trace!("pubkey: {:?}", pub_key);
     trace!("seed node: {:?}", seed);
 
-    use rand::rngs::OsRng;
     use tiny_keccak::Keccak;
     use ethkey::crypto::{ecdh, ecies};
     use crate::keys::public_to_slice;
@@ -306,7 +305,6 @@ fn main() {
 
     let nonce: Hash256 = Hash256::random();
     let secp = Secp256k1::new();
-    let mut rng = OsRng::new().unwrap();
     
     //handshake write
     let (secret_key, public_key) = secp.generate_keypair(&mut rng);
@@ -413,6 +411,7 @@ fn main() {
         .append_list(&vec!(ETH_63_CAPABILITY))
         .append(&LOCAL_PORT)
         .append(&u_public_key);
+
     connection.write_packet(&rlp.out());
 
     //fn read_hello()

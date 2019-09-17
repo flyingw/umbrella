@@ -12,6 +12,7 @@ mod tx;
 mod message;
 mod node_addr;
 mod node_key;
+mod hello;
 pub mod fee_filter;
 
 pub use version::{Version,NODE_NONE,PROTOCOL_VERSION};
@@ -23,3 +24,4 @@ pub use message::{Message, Payload};
 pub use message_header::MessageHeader;
 pub use ping::Ping;
 pub use node_key::NodeKey;
+pub use hello::Hello;
