@@ -39,7 +39,6 @@ impl <'a> Serializable<Hello<'a>> for Hello<'a>{
         
         let payload: &[u8] = &rlp.out();
 
-        println!("----------------------------------------------------");
         const HEADER_LEN: usize = 16;
 		let mut header = RlpStream::new();
 		let len = payload.len();
@@ -69,8 +68,7 @@ impl <'a> Serializable<Hello<'a>> for Hello<'a>{
 
         
         // self.connection.write_packet(payload.as_ref());
-        writer.write_all(packet.as_ref());
-        Ok(())
+        writer.write_all(packet.as_ref())
     }
 
 }
