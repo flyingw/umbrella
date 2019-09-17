@@ -430,13 +430,10 @@ fn main() {
 
     //fn write_hello()
     let mut our_hello = Hello {
-        payload: &mut vec![],
         connection: &mut connection,
     };
     trace!("write out hello");
     our_hello.write(&mut stream).unwrap();
-    //our_hello.connection.write_packet(our_hello.payload);
-
     //fn read_hello()
     trace!("Read hello from remote");
 	connection.read_packet().map(|packet| {
