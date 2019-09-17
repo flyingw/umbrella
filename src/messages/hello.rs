@@ -37,38 +37,39 @@ impl <'a> Serializable<Hello<'a>> for Hello<'a>{
             .append(&LOCAL_PORT)
             .append(&u_public_key);
         
-        let payload = &rlp.out();
+        let payload: &[u8] = &rlp.out();
 
-        // const HEADER_LEN: usize = 16;
-		// let mut header = RlpStream::new();
-		// let len = payload.len();
-		// if len > MAX_PAYLOAD_SIZE {
-		// 	panic!("OversizedPacket {}", len);
-		// }
+        println!("----------------------------------------------------");
+        const HEADER_LEN: usize = 16;
+		let mut header = RlpStream::new();
+		let len = payload.len();
+		if len > MAX_PAYLOAD_SIZE {
+			panic!("OversizedPacket {}", len);
+		}
 
-		// header.append_raw(&[(len >> 16) as u8, (len >> 8) as u8, len as u8], 1);
-		// header.append_raw(&[0xc2u8, 0x80u8, 0x80u8], 1);
-		// let padding = (16 - (len % 16)) % 16;
+		header.append_raw(&[(len >> 16) as u8, (len >> 8) as u8, len as u8], 1);
+		header.append_raw(&[0xc2u8, 0x80u8, 0x80u8], 1);
+		let padding = (16 - (len % 16)) % 16;
 
-		// let mut packet: Vec<u8> = vec![0u8; 16 + 16 + len + padding + 16];
-		// let mut header = header.out();
-		// header.resize(HEADER_LEN, 0u8);
-		// &mut packet[..HEADER_LEN].copy_from_slice(&mut header);
-		// self.connection.encoder.encrypt(&mut packet[..HEADER_LEN]).unwrap();
-		// OriginatedEncryptedConnection::update_mac(&mut self.connection.egress_mac, &self.connection.mac_encoder_key, &packet[..HEADER_LEN]);
-		// self.connection.egress_mac.clone().finalize(&mut packet[HEADER_LEN..32]);
-		// &mut packet[32..32 + len].copy_from_slice(payload);
-		// self.connection.encoder.encrypt(&mut packet[32..32 + len]).unwrap();
-		// if padding != 0 {
-		// 	self.connection.encoder.encrypt(&mut packet[(32 + len)..(32 + len + padding)]).unwrap();
-		// }
-		// self.connection.egress_mac.update(&packet[32..(32 + len + padding)]);
-		// OriginatedEncryptedConnection::update_mac(&mut self.connection.egress_mac, &self.connection.mac_encoder_key, &[0u8; 0]);
-		// self.connection.egress_mac.clone().finalize(&mut packet[(32 + len + padding)..]);
+		let mut packet: Vec<u8> = vec![0u8; 16 + 16 + len + padding + 16];
+		let mut header = header.out();
+		header.resize(HEADER_LEN, 0u8);
+		&mut packet[..HEADER_LEN].copy_from_slice(&mut header);
+		self.connection.encoder.encrypt(&mut packet[..HEADER_LEN]).unwrap();
+		OriginatedEncryptedConnection::update_mac(&mut self.connection.egress_mac, &self.connection.mac_encoder_key, &packet[..HEADER_LEN]);
+		self.connection.egress_mac.clone().finalize(&mut packet[HEADER_LEN..32]);
+		&mut packet[32..32 + len].copy_from_slice(payload);
+		self.connection.encoder.encrypt(&mut packet[32..32 + len]).unwrap();
+		if padding != 0 {
+			self.connection.encoder.encrypt(&mut packet[(32 + len)..(32 + len + padding)]).unwrap();
+		}
+		self.connection.egress_mac.update(&packet[32..(32 + len + padding)]);
+		OriginatedEncryptedConnection::update_mac(&mut self.connection.egress_mac, &self.connection.mac_encoder_key, &[0u8; 0]);
+		self.connection.egress_mac.clone().finalize(&mut packet[(32 + len + padding)..]);
 
         
-        self.connection.write_packet(payload.as_ref());
-        //writer.write_all(payload.as_ref())
+        // self.connection.write_packet(payload.as_ref());
+        writer.write_all(packet.as_ref());
         Ok(())
     }
 
