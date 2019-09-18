@@ -6,6 +6,11 @@ use crate::serdes::Serializable;
 use crate::keys::public_to_slice;
 use super::message::Payload;
 use crate::connection::{MAX_PAYLOAD_SIZE, OriginatedEncryptedConnection, RLPX_TRANSPORT_PROTOCOL_VERSION};
+use rlp::RlpStream;
+use crate::hash128::Hash128;
+use parity_crypto::aes::AesEcb256;
+use super::message::ETH_63_CAPABILITY;
+
 //use ethkey::Secret; - this fucking import leads to SegFail
 
 const PACKET_HELLO: u8 = 0x80; // actually 0x00 rlp doc "The integer 0 = [ 0x80 ]"
@@ -23,11 +28,7 @@ impl <'a> Serializable<Hello<'a>> for Hello<'a>{
 
     fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
         println!("write hello");
-
-        use rlp::RlpStream;
-        use crate::hash128::Hash128;
-        use parity_crypto::aes::AesEcb256;
-        use super::message::ETH_63_CAPABILITY;
+        //let mut payload:Vec<u8> = vec![];
 
         let mut rlp = RlpStream::new();
         let u_public_key = &public_to_slice(&self.connection.public_key)[..];
@@ -45,14 +46,13 @@ impl <'a> Serializable<Hello<'a>> for Hello<'a>{
 			panic!("OversizedPacket {}", len);
 		}
 
-        //
         const HEADER_LEN: usize = 16;
         let mut header = [0u8;HEADER_LEN];
-        let (sz, rest) = header.split_at_mut(3);
-        sz.copy_from_slice(&[(len >> 16) as u8, (len >> 8) as u8, len as u8]);
+        let (pl_sz, rest) = header.split_at_mut(3);
         let (magic, _) = rest.split_at_mut(3);
-        magic.copy_from_slice(&[0xc2u8, 0x80u8, 0x80u8]);
-        
+        pl_sz.copy_from_slice(&[(len >> 16) as u8, (len >> 8) as u8, len as u8]);
+        magic.copy_from_slice(&[0xc2u8, 0x80u8, 0x80u8]); // magic
+
         self.connection.encoder.encrypt(&mut header).unwrap();
 
         writer.write_all(&header)?;
@@ -138,4 +138,73 @@ impl fmt::Debug for Hello<'_> {
             //.field("version", &self)
             .finish()
     }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn rlp_out(){
+        use super::*;
+        println!("rpl>");
+
+        // c0 = 0
+        // c1 = 1
+        // ca = 2
+        // d1 = 3 
+        // d4 = 4
+        // d5 = 5
+        // d6 = 6
+        // d7 = 7
+        // d8 = 8
+        // d9 = 9
+        // da = 10
+        let mut key = vec![0u8;64];
+
+        let mut rlp = RlpStream::new();
+        rlp.append_raw(&[PACKET_HELLO], 0)
+            .begin_list(5)
+            .append(&RLPX_TRANSPORT_PROTOCOL_VERSION)
+            .append(&CLIENT_NAME)
+            .append_list(&vec!(ETH_63_CAPABILITY))
+            .append(&LOCAL_PORT)
+            .append(&key);
+        let out = rlp.out();
+
+        println!("out {:?}", &out);
+        println!("out {:x?}", &out);
+        let mut payload:Vec<u8> = vec![];
+        payload.push(PACKET_HELLO);
+        //payload.push(0xd5);
+        payload.push(0xf8); // f8 56 comes with long key
+        payload.push(0x56); // instead of d5 as 5 element in list
+        payload.push( ((RLPX_TRANSPORT_PROTOCOL_VERSION)&0xff) as u8);
+        payload.append(&mut vec![0x88, b'u',b'm',b'b',b'r',b'e',b'l',b'l',b'a']);
+        // magic numbers c6 and c5 below
+        payload.push(0xc6); // append list of 1 element
+        payload.push(0xc5); // with list of 2 element
+        payload.push(0x83); // lenght 3
+        payload.append(&mut ETH_63_CAPABILITY.protocol.to_vec());
+        payload.push(ETH_63_CAPABILITY.version);
+        payload.push(0x82); // 2 bytes
+        payload.push(((LOCAL_PORT >> 8) & 0xff) as u8);
+        payload.push((LOCAL_PORT & 0xff) as u8);
+        payload.push(0xb8); // list
+        payload.push(0x40); // 64 elements
+        payload.append(&mut key);
+
+        //let cmp = vec![0x80, 
+        //    0xd5, 
+        //        0xf8, 0x56, was 0xd5
+        //        0x88, 0x75, 0x6d, 0x62, 0x72, 0x65, 0x6c, 0x6c, 0x61, 
+        //        0xc6, 
+        //          0xc5, 
+        //              0x83, 0x65, 0x74, 0x68, 
+        //              0x3f, 
+        //        0x82,
+        //            0x4, 0xd2, 
+        //        0xb8, 
+        //            0x40, 0....];
+        
+        assert_eq!(out, payload);
+    } 
 }
