@@ -6,7 +6,7 @@ use crate::serdes::Serializable;
 use crate::keys::public_to_slice;
 use super::message::Payload;
 use crate::connection::{MAX_PAYLOAD_SIZE, OriginatedEncryptedConnection, RLPX_TRANSPORT_PROTOCOL_VERSION};
-use rlp::RlpStream;
+
 use crate::hash128::Hash128;
 use parity_crypto::aes::AesEcb256;
 use super::message::ETH_63_CAPABILITY;
@@ -28,19 +28,27 @@ impl <'a> Serializable<Hello<'a>> for Hello<'a>{
 
     fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
         println!("write hello");
-        //let mut payload:Vec<u8> = vec![];
-
-        let mut rlp = RlpStream::new();
         let u_public_key = &public_to_slice(&self.connection.public_key)[..];
-        rlp.append_raw(&[PACKET_HELLO], 0)
-            .begin_list(5)
-            .append(&RLPX_TRANSPORT_PROTOCOL_VERSION)
-            .append(&CLIENT_NAME)
-            .append_list(&vec!(ETH_63_CAPABILITY))
-            .append(&LOCAL_PORT)
-            .append(&u_public_key);
         
-        let payload: &[u8] = &rlp.out();
+        // check some comments in module tests below
+        let mut payload:Vec<u8> = vec![];
+        payload.push(PACKET_HELLO);
+        payload.push(0xf8);
+        payload.push(0x56);
+        payload.push( ((RLPX_TRANSPORT_PROTOCOL_VERSION)&0xff) as u8);
+        payload.append(&mut vec![0x88, b'u',b'm',b'b',b'r',b'e',b'l',b'l',b'a']);
+        payload.push(0xc6);
+        payload.push(0xc5);
+        payload.push(0x83);
+        payload.append(&mut ETH_63_CAPABILITY.protocol.to_vec());
+        payload.push(ETH_63_CAPABILITY.version);
+        payload.push(0x82);
+        payload.push(((LOCAL_PORT >> 8) & 0xff) as u8);
+        payload.push((LOCAL_PORT & 0xff) as u8);
+        payload.push(0xb8);
+        payload.push(0x40);
+        payload.append(&mut u_public_key.to_vec());
+
         let len = payload.len();
         if len > MAX_PAYLOAD_SIZE {
 			panic!("OversizedPacket {}", len);
@@ -83,7 +91,7 @@ impl <'a> Serializable<Hello<'a>> for Hello<'a>{
 		self.connection.egress_mac.clone().finalize(&mut packet[HEADER_LEN..32]);
 
         // add fucking payload and encrypt it
-		&mut packet[32..32 + len].copy_from_slice(payload);
+		&mut packet[32..32 + len].copy_from_slice(&payload);
 		self.connection.encoder.encrypt(&mut packet[32..32 + len]).unwrap();
 
         // padding + encrypted padding
@@ -145,8 +153,7 @@ mod tests {
     #[test]
     fn rlp_out(){
         use super::*;
-        println!("rpl>");
-
+        use rlp::RlpStream;
         // c0 = 0
         // c1 = 1
         // ca = 2
@@ -174,14 +181,12 @@ mod tests {
         println!("out {:x?}", &out);
         let mut payload:Vec<u8> = vec![];
         payload.push(PACKET_HELLO);
-        //payload.push(0xd5);
         payload.push(0xf8); // f8 56 comes with long key
-        payload.push(0x56); // instead of d5 as 5 element in list
+        payload.push(0x56); // instead of 0xd5 as 5 element in list
         payload.push( ((RLPX_TRANSPORT_PROTOCOL_VERSION)&0xff) as u8);
         payload.append(&mut vec![0x88, b'u',b'm',b'b',b'r',b'e',b'l',b'l',b'a']);
-        // magic numbers c6 and c5 below
-        payload.push(0xc6); // append list of 1 element
-        payload.push(0xc5); // with list of 2 element
+        payload.push(0xc6); // magic numbers c6 append list of 1 element
+        payload.push(0xc5); // c5 below with list of 2 element
         payload.push(0x83); // lenght 3
         payload.append(&mut ETH_63_CAPABILITY.protocol.to_vec());
         payload.push(ETH_63_CAPABILITY.version);
