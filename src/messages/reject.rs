@@ -7,7 +7,7 @@ use crate::var_int;
 use crate::hash256::Hash256;
 use crate::result::{Error, Result};
 use crate::serdes::Serializable;
-
+use crate::ctx::Ctx;
 
 /// Message rejection error codes
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
@@ -83,7 +83,7 @@ impl Serializable<Reject> for Reject {
         })
     }
 
-    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
         var_int::write(self.message.as_bytes().len() as u64, writer)?;
         writer.write(&self.message.as_bytes())?;
         writer.write_u8(self.code as u8)?;

@@ -1,5 +1,6 @@
 use std::io;
 use std::io::{Read, Write};
+use super::ctx::Ctx;
 use super::result::Result;
 
 /// An object that may be serialized and deserialized
@@ -10,7 +11,7 @@ pub trait Serializable<T> {
         Self: Sized;
 
     /// Writes the object to serialized form
-    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()>;
+    fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()>;
 }
 
 impl Serializable<[u8; 16]> for [u8; 16] {
@@ -20,7 +21,7 @@ impl Serializable<[u8; 16]> for [u8; 16] {
         Ok(d)
     }
 
-    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
         writer.write(self)?;
         Ok(())
     }
@@ -33,7 +34,7 @@ impl Serializable<[u8; 32]> for [u8; 32] {
         Ok(d)
     }
 
-    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
         writer.write(self)?;
         Ok(())
     }

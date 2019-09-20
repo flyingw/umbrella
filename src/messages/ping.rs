@@ -4,6 +4,7 @@ use std::io;
 use std::io::{Read, Write};
 use crate::result::Result;
 use crate::serdes::Serializable;
+use crate::ctx::Ctx;
 
 
 /// Ping or pong payload
@@ -24,7 +25,7 @@ impl Serializable<Ping> for Ping {
         Ok(Ping { nonce })
     }
 
-    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
         writer.write_u64::<LittleEndian>(self.nonce)
     }
 }

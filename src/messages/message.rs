@@ -1,4 +1,4 @@
-use super::message_header::MessageHeader;
+use super::message_header::{MessageHeader,ShortHeader};
 use super::ping::Ping;
 use super::reject::Reject;
 use super::send_cmpct::SendCmpct;
@@ -13,6 +13,7 @@ use std::io;
 use std::io::{Cursor, Read, Write};
 use crate::result::{Error, Result};
 use crate::serdes::Serializable;
+use crate::ctx::Ctx;
 
 /// Checksum to use when there is an empty payload
 pub const NO_CHECKSUM: [u8; 4] = [0x5d, 0xf6, 0xe0, 0xe2];
@@ -71,12 +72,14 @@ pub mod commands {
     // [Fee filter command](https://en.bitcoin.it/wiki/Protocol_documentation#feefilter)
     pub const FEEFILTER: [u8; 12] = *b"feefilter\0\0\0";
 
+    // [no such command]
+    pub const HELLO: [u8; 12] = *b"hello\0\0\0\0\0\0\0";
     
 }
 
 /// Bitcoin peer-to-peer message with its payload
 //#[derive(PartialEq, Eq, Hash, Clone)]
-pub enum Message<'a> {
+pub enum Message {
     FeeFilter(FeeFilter),
     Other(String),
     Partial(MessageHeader),
@@ -88,10 +91,10 @@ pub enum Message<'a> {
     Verack,
     Version(Version),
     NodeKey(NodeKey),
-    Hello(Hello<'a>),
+    Hello(Hello),
 }
 
-impl Message<'_> {
+impl Message {
     /// Reads a Bitcoin P2P message with its payload from bytes
     ///
     /// It's possible for a message's header to be read but not its payload. In this case, the
@@ -186,8 +189,9 @@ impl Message<'_> {
     }
 
     /// Writes a Bitcoin P2P message with its payload to bytes
-    pub fn write(&mut self, writer: &mut dyn Write, magic: [u8; 4]) -> io::Result<()> {
+    pub fn write(&self, writer: &mut dyn Write, magic: [u8; 4], ctx: &mut dyn Ctx) -> io::Result<()> {
         use self::commands::*;
+        use std::convert::TryInto;
         match self {
             Message::Other(s) => Err(io::Error::new(io::ErrorKind::InvalidData, s.as_ref())),
             Message::Partial(_) => Err(io::Error::new(
@@ -202,13 +206,13 @@ impl Message<'_> {
             Message::Tx(p) => write_with_payload(writer, TX, p, magic),
             Message::Verack => write_without_payload(writer, VERACK, magic),
             Message::Version(v) => write_with_payload(writer, VERSION, v, magic),
-            Message::NodeKey(v) => v.write(writer),
-            Message::Hello(h) => h.write(writer),
+            Message::NodeKey(v) => v.write(writer, &mut ()),
+            Message::Hello(h) => write_with_payload2(writer, HELLO, h, magic[..3].try_into().expect("shortened magic"), ctx),
         }
     }
 }
 
-impl <'a> fmt::Debug for Message<'a> {
+impl fmt::Debug for Message {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Message::Other(p) => f.write_str(&format!("{:#?}", p)),
@@ -227,42 +231,73 @@ impl <'a> fmt::Debug for Message<'a> {
     }
 }
 
+
+
 fn write_without_payload(
     writer: &mut dyn Write,
     command: [u8; 12],
     magic: [u8; 4],
 ) -> io::Result<()> {
-    let mut header = MessageHeader {
+    let header = MessageHeader {
         magic,
         command,
         payload_size: 0,
         checksum: NO_CHECKSUM,
     };
-    header.write(writer)
+    header.write(writer, &mut ())
+}
+
+fn write_with_payload2<T:Serializable<T>>(
+    writer: &mut dyn Write,
+    command: [u8; 12],
+    payload: &dyn Payload<T>,
+    magic: [u8; 3],
+    ctx: &mut dyn Ctx,
+) -> io::Result<()>{
+    debug!("  cmd: {:?}", command);
+    debug!("magic: {:?}", magic);
+    debug!(" size: {:?}", payload.size());
+
+    //let mut bytes = Vec::with_capacity(payload.size());
+    //payload.write(&mut bytes)?;
+    //debug!("payload in bytes: {:?}", &bytes);
+    // payload probably used to have some 
+
+    let header = ShortHeader{
+        magic,
+        command, 
+        payload_size: payload.size() as u32,
+    };
+
+    debug!("header {:?}", &header);
+    header.write(writer, ctx)?;
+    // write header in bytes, update context 
+    //
+    payload.write(writer, ctx)
 }
 
 fn write_with_payload<T: Serializable<T>>(
     writer: &mut dyn Write,
     command: [u8; 12],
-    payload: &mut dyn Payload<T>,
+    payload: &dyn Payload<T>,
     magic: [u8; 4],
 ) -> io::Result<()> {
     let mut bytes = Vec::with_capacity(payload.size());
-    payload.write(&mut bytes)?;
+    payload.write(&mut bytes, &mut ())?;
     let hash = digest::digest(&digest::SHA256, bytes.as_ref());
     let hash = digest::digest(&digest::SHA256, &hash.as_ref());
     let h = &hash.as_ref();
     let checksum = [h[0], h[1], h[2], h[3]];
 
-    let mut header = MessageHeader {
+    let header = MessageHeader {
         magic,
         command,
         payload_size: payload.size() as u32,
         checksum: checksum,
     };
 
-    header.write(writer)?;
-    payload.write(writer)
+    header.write(writer, &mut ())?;
+    payload.write(writer, &mut ())
 }
 
 /// Message payload that is writable to bytes

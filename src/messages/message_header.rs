@@ -5,6 +5,7 @@ use std::io;
 use std::io::{Cursor, Read, Write};
 use std::str;
 use crate::result::{Error, Result};
+use crate::ctx::Ctx;
 use crate::serdes::Serializable;
 
 /// Header that begins all messages
@@ -18,6 +19,16 @@ pub struct MessageHeader {
     pub payload_size: u32,
     /// First 4 bytes of SHA256(SHA256(payload))
     pub checksum: [u8; 4],
+}
+
+#[derive(Default, PartialEq, Eq, Hash, Clone)]
+pub struct ShortHeader {
+    /// Magic bytes indicating the network type
+    pub magic: [u8; 3],
+    /// Command name
+    pub command: [u8; 12],
+    /// Payload size
+    pub payload_size: u32,
 }
 
 impl MessageHeader {
@@ -61,6 +72,14 @@ impl MessageHeader {
     }
 }
 
+impl ShortHeader {
+    pub const HEADER_LEN: usize = 16;
+
+    fn size() -> usize {
+        ShortHeader::HEADER_LEN
+    }
+}
+
 impl Serializable<MessageHeader> for MessageHeader {
     fn read(reader: &mut dyn Read) -> Result<MessageHeader> {
         // Read all the bytes at once so that the stream doesn't get in a partially-read state
@@ -80,11 +99,37 @@ impl Serializable<MessageHeader> for MessageHeader {
         Ok(ret)
     }
 
-    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
         writer.write(&self.magic)?;
         writer.write(&self.command)?;
         writer.write_u32::<LittleEndian>(self.payload_size)?;
         writer.write(&self.checksum)?;
+        Ok(())
+    }
+}
+
+impl Serializable<ShortHeader> for ShortHeader {
+    fn read(_reader: &mut dyn Read) -> Result<ShortHeader> {
+        panic!("can't read yet")
+    }
+
+    fn write(&self, _writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
+        debug!("=>write short header");
+        
+        // something unclear with context here
+
+        // use std::convert::TryInto;
+        // use crate::hash128::Hash128;
+        // let len: usize = self.payload_size.try_into().unwrap();
+        // let mut header = [0u8; ShortHeader::HEADER_LEN];
+        // let (pl_sz, rest) = header.split_at_mut(3);
+        // let (magic, _) = rest.split_at_mut(3);
+        // pl_sz.copy_from_slice(&[(len >> 16) as u8, (len >> 8) as u8, len as u8]);
+        // magic.copy_from_slice(&self.magic);
+
+        // let enc = Ctx::encoder(ctx);
+        // enc.encrypt(&mut header).unwrap();
+        //writer.write_all(&header)
         Ok(())
     }
 }
@@ -100,6 +145,20 @@ impl fmt::Debug for MessageHeader {
             f,
             "Header {{ magic: {:?}, command: {:?}, payload_size: {}, checksum: {:?} }}",
             self.magic, command, self.payload_size, self.checksum
+        )
+    }
+}
+
+impl fmt::Debug for ShortHeader {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let command = match str::from_utf8(&self.command) {
+            Ok(s) => s.to_string(),
+            Err(_) => format!("Not Ascii ({:?})", self.command),
+        };
+        write!(
+            f,
+            "Header {{ magic: {:?}, command: {:?}, payload_size: {},}}",
+            self.magic, command, self.payload_size
         )
     }
 }

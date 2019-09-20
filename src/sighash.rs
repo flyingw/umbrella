@@ -71,7 +71,7 @@ pub fn bip143_sighash(
         if cache.hash_prevouts.is_none() {
             let mut prev_outputs = Vec::with_capacity(OutPoint::SIZE * tx.inputs.len());
             for input in tx.inputs.iter_mut() {
-                input.prev_output.write(&mut prev_outputs)?;
+                input.prev_output.write(&mut prev_outputs, &mut ())?;
             }
             cache.hash_prevouts = Some(sha256d(&prev_outputs));
         }
@@ -95,7 +95,7 @@ pub fn bip143_sighash(
     }
 
     // 4. Serialize prev output
-    tx.inputs[n_input].prev_output.write(&mut s)?;
+    tx.inputs[n_input].prev_output.write(&mut s, &mut ())?;
 
     // 5. Serialize input script
     var_int::write(script_code.len() as u64, &mut s)?;
@@ -116,14 +116,14 @@ pub fn bip143_sighash(
             }
             let mut outputs = Vec::with_capacity(size);
             for tx_out in tx.outputs.iter_mut() {
-                tx_out.write(&mut outputs)?;
+                tx_out.write(&mut outputs, &mut ())?;
             }
             cache.hash_outputs = Some(sha256d(&outputs));
         }
         s.write(&cache.hash_outputs.unwrap().0)?;
     } else if base_type == SIGHASH_SINGLE && n_input < tx.outputs.len() {
         let mut outputs = Vec::with_capacity(tx.outputs[n_input].size());
-        tx.outputs[n_input].write(&mut outputs)?;
+        tx.outputs[n_input].write(&mut outputs, &mut ())?;
         s.write(&sha256d(&outputs).0)?;
     } else {
         s.write(&[0; 32])?;

@@ -2,6 +2,7 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::io;
 use std::io::{Read, Write};
 use super::message::Payload;
+use crate::ctx::Ctx;
 use crate::result::Result;
 use crate::serdes::Serializable;
 
@@ -23,7 +24,7 @@ impl Serializable<FeeFilter> for FeeFilter {
         Ok(FeeFilter { minfee })
     }
 
-    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
         writer.write_u64::<LittleEndian>(self.minfee)
     }
 }
@@ -51,7 +52,7 @@ mod tests {
     fn write_read() {
         let mut v = Vec::new();
         let mut f = FeeFilter { minfee: 1234 };
-        f.write(&mut v).unwrap();
+        f.write(&mut v, &mut ()).unwrap();
         assert!(v.len() == f.size());
         assert!(FeeFilter::read(&mut Cursor::new(&v)).unwrap() == f);
     }
