@@ -2,12 +2,13 @@ use std::io::{Write, Read};
 use crate::hash128::Hash128;
 use crate::hash256::Hash256;
 use ethereum_types::H256;
-use ethkey::Secret;
-use parity_crypto::aes::{AesCtr256, AesEcb256};
+use parity_crypto::aes::{AesCtr256};
 use rlp::{RlpStream, Rlp};
-use secp256k1::key::PublicKey;
+use secp256k1::key::{PublicKey, SecretKey};
 use std::net::TcpStream;
 use tiny_keccak::Keccak;
+use aes::Aes256;
+use block_modes::{BlockMode, Ecb, block_padding::ZeroPadding};
 
 pub const RLPX_TRANSPORT_PROTOCOL_VERSION: u32 = 5;
 pub const RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4: usize = 210;
@@ -21,7 +22,7 @@ pub struct OriginatedEncryptedConnection {
 	pub public_key: PublicKey,
 	pub encoder: AesCtr256,
 	pub decoder: AesCtr256,
-	pub mac_encoder_key: Secret,
+	pub mac_encoder_key: SecretKey,
 	pub egress_mac: Keccak,
 	pub ingress_mac: Keccak,
 }
@@ -123,13 +124,15 @@ impl OriginatedEncryptedConnection {
 	}
 
   /// Update MAC after reading or writing any data.
-	pub fn update_mac(mac: &mut Keccak, mac_encoder_key: &Secret, seed: &[u8]) -> () {
+	pub fn update_mac(mac: &mut Keccak, mac_encoder_key: &SecretKey, seed: &[u8]) -> () {
 		let mut prev = Hash128::default();
 		mac.clone().finalize(prev.as_bytes_mut());
 		let mut enc = Hash128::default();
 		&mut enc[..].copy_from_slice(prev.as_bytes());
-		let mac_encoder = AesEcb256::new(mac_encoder_key.as_bytes()).unwrap();
-		mac_encoder.encrypt(enc.as_bytes_mut()).unwrap();
+		
+        let mac_encoder: Ecb<Aes256, ZeroPadding> = Ecb::new_var(&mac_encoder_key[..], &[]).unwrap();
+		let enc_mut = enc.as_bytes_mut();
+		mac_encoder.encrypt(enc_mut, enc_mut.len()).unwrap();
 
 		enc = enc ^ if seed.is_empty() { prev } else { Hash128::from_slice(seed) };
 		mac.update(enc.as_bytes());
