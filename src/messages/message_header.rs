@@ -22,16 +22,16 @@ pub struct MessageHeader {
     pub checksum: [u8; 4],
 }
 
-//#[derive(Default, PartialEq, Eq, Hash, Clone)]
-pub struct ShortHeader {
+/// Encrypted header for all messages with encryption
+pub struct SecHeader {
     /// Magic bytes indicating the network type
     pub magic: [u8; 3],
     /// Command name
     pub command: [u8; 12],
     /// Payload size
     pub payload_size: u32,
-    /// Secret key
-    pub mac_encoder_key: SecretKey,
+    /// Secret key, x in ECDSA signature
+    pub secret: SecretKey,
 }
 
 impl MessageHeader {
@@ -75,11 +75,11 @@ impl MessageHeader {
     }
 }
 
-impl ShortHeader {
+impl SecHeader {
     pub const HEADER_LEN: usize = 16;
 
     pub fn size() -> usize {
-        ShortHeader::HEADER_LEN
+        SecHeader::HEADER_LEN
     }
 }
 
@@ -111,8 +111,8 @@ impl Serializable<MessageHeader> for MessageHeader {
     }
 }
 
-impl Serializable<ShortHeader> for ShortHeader {
-    fn read(_reader: &mut dyn Read) -> Result<ShortHeader> {
+impl Serializable<SecHeader> for SecHeader {
+    fn read(_reader: &mut dyn Read) -> Result<SecHeader> {
         panic!("can't read yet")
     }
 
@@ -121,12 +121,10 @@ impl Serializable<ShortHeader> for ShortHeader {
         use crate::hash128::Hash128;
         use block_modes::{BlockMode, Ecb, block_padding::{ZeroPadding}};
         use aes::Aes256;
-        
-        // something unclear with context here
 
         use std::convert::TryInto;
         let len: usize = self.payload_size.try_into().unwrap();
-        let mut header = [0u8; ShortHeader::HEADER_LEN];
+        let mut header = [0u8; SecHeader::HEADER_LEN];
         let (pl_sz, rest) = header.split_at_mut(3);
         let (magic, _) = rest.split_at_mut(3);
         pl_sz.copy_from_slice(&[(len >> 16) as u8, (len >> 8) as u8, len as u8]);
@@ -141,7 +139,7 @@ impl Serializable<ShortHeader> for ShortHeader {
 		let mut enc = Hash128::default();
 		&mut enc[..].copy_from_slice(prev.as_bytes());
 
-        let mac_encoder: Ecb<Aes256, ZeroPadding> = Ecb::new_var(&self.mac_encoder_key[..], &[]).expect("failed to aes ecb 1");
+        let mac_encoder: Ecb<Aes256, ZeroPadding> = Ecb::new_var(&self.secret[..], &[]).expect("failed to aes ecb 1");
 	    let enc_mut = enc.as_bytes_mut();
 		mac_encoder.encrypt(enc_mut, enc_mut.len()).unwrap();
 
@@ -169,7 +167,7 @@ impl fmt::Debug for MessageHeader {
     }
 }
 
-impl fmt::Debug for ShortHeader {
+impl fmt::Debug for SecHeader {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let command = match str::from_utf8(&self.command) {
             Ok(s) => s.to_string(),
