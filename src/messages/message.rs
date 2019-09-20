@@ -14,6 +14,7 @@ use std::io::{Cursor, Read, Write};
 use crate::result::{Error, Result};
 use crate::serdes::Serializable;
 use crate::ctx::Ctx;
+use secp256k1::key::SecretKey;
 
 /// Checksum to use when there is an empty payload
 pub const NO_CHECKSUM: [u8; 4] = [0x5d, 0xf6, 0xe0, 0xe2];
@@ -207,7 +208,7 @@ impl Message {
             Message::Verack => write_without_payload(writer, VERACK, magic),
             Message::Version(v) => write_with_payload(writer, VERSION, v, magic),
             Message::NodeKey(v) => v.write(writer, &mut ()),
-            Message::Hello(h) => write_with_payload2(writer, HELLO, h, magic[..3].try_into().expect("shortened magic"), ctx),
+            Message::Hello(h) => write_with_payload2(writer, HELLO, h, magic[..3].try_into().expect("shortened magic"), ctx, h.mac_encoder_key),
         }
     }
 }
@@ -253,26 +254,22 @@ fn write_with_payload2<T:Serializable<T>>(
     payload: &dyn Payload<T>,
     magic: [u8; 3],
     ctx: &mut dyn Ctx,
+    mac_encoder_key: SecretKey,
 ) -> io::Result<()>{
     debug!("  cmd: {:?}", command);
     debug!("magic: {:?}", magic);
     debug!(" size: {:?}", payload.size());
 
-    //let mut bytes = Vec::with_capacity(payload.size());
-    //payload.write(&mut bytes)?;
-    //debug!("payload in bytes: {:?}", &bytes);
-    // payload probably used to have some 
-
     let header = ShortHeader{
         magic,
         command, 
         payload_size: payload.size() as u32,
+        mac_encoder_key: mac_encoder_key,
     };
 
     debug!("header {:?}", &header);
     header.write(writer, ctx)?;
-    // write header in bytes, update context 
-    //
+
     payload.write(writer, ctx)
 }
 

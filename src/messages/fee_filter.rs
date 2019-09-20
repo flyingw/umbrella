@@ -51,7 +51,7 @@ mod tests {
     #[test]
     fn write_read() {
         let mut v = Vec::new();
-        let mut f = FeeFilter { minfee: 1234 };
+        let f = FeeFilter { minfee: 1234 };
         f.write(&mut v, &mut ()).unwrap();
         assert!(v.len() == f.size());
         assert!(FeeFilter::read(&mut Cursor::new(&v)).unwrap() == f);
