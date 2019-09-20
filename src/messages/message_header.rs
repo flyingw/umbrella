@@ -7,6 +7,7 @@ use std::str;
 use crate::result::{Error, Result};
 use crate::ctx::Ctx;
 use crate::serdes::Serializable;
+use secp256k1::key::SecretKey;
 
 /// Header that begins all messages
 #[derive(Default, PartialEq, Eq, Hash, Clone)]
@@ -21,7 +22,7 @@ pub struct MessageHeader {
     pub checksum: [u8; 4],
 }
 
-#[derive(Default, PartialEq, Eq, Hash, Clone)]
+//#[derive(Default, PartialEq, Eq, Hash, Clone)]
 pub struct ShortHeader {
     /// Magic bytes indicating the network type
     pub magic: [u8; 3],
@@ -29,6 +30,8 @@ pub struct ShortHeader {
     pub command: [u8; 12],
     /// Payload size
     pub payload_size: u32,
+    /// Secret key
+    pub mac_encoder_key: SecretKey,
 }
 
 impl MessageHeader {
@@ -75,7 +78,7 @@ impl MessageHeader {
 impl ShortHeader {
     pub const HEADER_LEN: usize = 16;
 
-    fn size() -> usize {
+    pub fn size() -> usize {
         ShortHeader::HEADER_LEN
     }
 }
@@ -113,24 +116,41 @@ impl Serializable<ShortHeader> for ShortHeader {
         panic!("can't read yet")
     }
 
-    fn write(&self, _writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
+    fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
         debug!("=>write short header");
+        use crate::hash128::Hash128;
+        use block_modes::{BlockMode, Ecb, block_padding::{ZeroPadding}};
+        use aes::Aes256;
         
         // something unclear with context here
 
-        // use std::convert::TryInto;
-        // use crate::hash128::Hash128;
-        // let len: usize = self.payload_size.try_into().unwrap();
-        // let mut header = [0u8; ShortHeader::HEADER_LEN];
-        // let (pl_sz, rest) = header.split_at_mut(3);
-        // let (magic, _) = rest.split_at_mut(3);
-        // pl_sz.copy_from_slice(&[(len >> 16) as u8, (len >> 8) as u8, len as u8]);
-        // magic.copy_from_slice(&self.magic);
+        use std::convert::TryInto;
+        let len: usize = self.payload_size.try_into().unwrap();
+        let mut header = [0u8; ShortHeader::HEADER_LEN];
+        let (pl_sz, rest) = header.split_at_mut(3);
+        let (magic, _) = rest.split_at_mut(3);
+        pl_sz.copy_from_slice(&[(len >> 16) as u8, (len >> 8) as u8, len as u8]);
+        magic.copy_from_slice(&self.magic);
 
-        // let enc = Ctx::encoder(ctx);
-        // enc.encrypt(&mut header).unwrap();
-        //writer.write_all(&header)
-        Ok(())
+        Ctx::encoder(ctx).encrypt(&mut header).unwrap();
+        writer.write_all(&header)?;
+
+		let mut prev = Hash128::default();
+        Ctx::get_remote_mac(ctx, prev.as_bytes_mut());
+        
+		let mut enc = Hash128::default();
+		&mut enc[..].copy_from_slice(prev.as_bytes());
+
+        let mac_encoder: Ecb<Aes256, ZeroPadding> = Ecb::new_var(&self.mac_encoder_key[..], &[]).expect("failed to aes ecb 1");
+	    let enc_mut = enc.as_bytes_mut();
+		mac_encoder.encrypt(enc_mut, enc_mut.len()).unwrap();
+
+		enc = enc ^ Hash128::from_slice(&header);
+        Ctx::update_remote_mac(ctx, enc.as_bytes());
+
+        let mut mac = [0;16];
+        Ctx::get_remote_mac(ctx, &mut mac);
+        writer.write_all(&mac)
     }
 }
 

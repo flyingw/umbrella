@@ -56,36 +56,8 @@ impl Serializable<Hello> for Hello{
 			panic!("OversizedPacket {}", len);
 		}
 
-        const HEADER_LEN: usize = 16;
-        let mut header = [0u8;HEADER_LEN];
-        let (pl_sz, rest) = header.split_at_mut(3);
-        let (magic, _) = rest.split_at_mut(3);
-        pl_sz.copy_from_slice(&[(len >> 16) as u8, (len >> 8) as u8, len as u8]);
-        magic.copy_from_slice(&[0xc2u8, 0x80u8, 0x80u8]); // magic
-
-        Ctx::encoder(ctx).encrypt(&mut header).unwrap();
-        writer.write_all(&header)?;
-    //->
         let padding = (16 - (len % 16)) % 16;
         let mut packet: Vec<u8> = vec![0u8; 16 + 16 + len + padding + 16];
-
-		let mut prev = Hash128::default();
-        debug!("default bytes? 1{:?}", prev.as_bytes());
-        Ctx::get_remote_mac(ctx, prev.as_bytes_mut());
-        debug!("default bytes? 2{:?}", prev.as_bytes());
-
-		let mut enc = Hash128::default();
-		&mut enc[..].copy_from_slice(prev.as_bytes());
-
-        let mac_encoder: Ecb<Aes256, ZeroPadding> = Ecb::new_var(&self.mac_encoder_key[..], &[]).expect("failed to aes ecb 1");
-	    let enc_mut = enc.as_bytes_mut();
-		mac_encoder.encrypt(enc_mut, enc_mut.len()).unwrap();
-
-		enc = enc ^ Hash128::from_slice(&header);
-
-        Ctx::update_remote_mac(ctx, enc.as_bytes());
-        Ctx::get_remote_mac(ctx, &mut packet[HEADER_LEN..32]);
-
         // add fucking payload and encrypt it
 		&mut packet[32..32 + len].copy_from_slice(&payload);
         Ctx::encoder(ctx).encrypt(&mut packet[32..32 + len]).unwrap();
@@ -94,9 +66,6 @@ impl Serializable<Hello> for Hello{
             Ctx::encoder(ctx).encrypt(&mut packet[(32 + len)..(32 + len + padding)]).unwrap();
 		}
 
-        // header +
-        writer.write_all(&packet[HEADER_LEN..32])?;
-        
         Ctx::update_remote_mac(ctx, &packet[32..(32 + len + padding)]);
 
         writer.write_all(&packet[32..(32 + len + padding)])?;
