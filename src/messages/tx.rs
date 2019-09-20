@@ -10,6 +10,7 @@ use crate::var_int;
 use crate::hash256::{sha256d, Hash256};
 use crate::result::Result;
 use crate::serdes::Serializable;
+use crate::ctx::Ctx;
 
 /// Bitcoin transaction
 #[derive(Default, PartialEq, Eq, Hash, Clone)]
@@ -28,7 +29,7 @@ impl Tx {
     /// Calculates the hash of the transaction also known as the txid
     pub fn hash(&mut self) -> Hash256 {
         let mut b = Vec::with_capacity(self.size());
-        self.write(&mut b).unwrap();
+        self.write(&mut b, &mut ()).unwrap();
         sha256d(&b)
     }
 
@@ -63,15 +64,15 @@ impl Serializable<Tx> for Tx {
         })
     }
 
-    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
         writer.write_u32::<LittleEndian>(self.version)?;
         var_int::write(self.inputs.len() as u64, writer)?;
-        for tx_in in self.inputs.iter_mut() {
-            tx_in.write(writer)?;
+        for tx_in in self.inputs.iter() {
+            tx_in.write(writer, ctx)?;
         }
         var_int::write(self.outputs.len() as u64, writer)?;
-        for tx_out in self.outputs.iter_mut() {
-            tx_out.write(writer)?;
+        for tx_out in self.outputs.iter() {
+            tx_out.write(writer, ctx)?;
         }
         writer.write_u32::<LittleEndian>(self.lock_time)?;
         Ok(())

@@ -29,8 +29,7 @@ pub mod op_codes;
 pub mod stack;
 pub mod interpreter;
 pub mod keys;
-pub mod ecies;
-pub mod ecdh;
+pub mod ctx;
 
 mod connection;
 
@@ -47,7 +46,6 @@ use messages::{Version, NODE_NONE, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut, 
 use messages::{Message,MessageHeader};
 use util::secs_since;
 use std::time::{UNIX_EPOCH, Duration};
-
 use script::Script;
 use secp256k1::{Secp256k1, SecretKey, PublicKey};
 use sighash::{bip143_sighash, SigHashCache, SIGHASH_FORKID, SIGHASH_ALL};
@@ -167,7 +165,7 @@ pub fn main1() {
     let mut partial: Option<MessageHeader> = None;
     let mut is = stream.try_clone().unwrap();
     
-    let mut tx = Message::Tx(create_transaction(&opt));
+    let tx = Message::Tx(create_transaction(&opt));
 
     let version = Version {
         version: PROTOCOL_VERSION,
@@ -177,10 +175,12 @@ pub fn main1() {
         ..Default::default()
     };
 
-    let mut our_version = Message::Version(version);
+    let our_version = Message::Version(version);
     debug!("Write {:#?}", our_version);
     
-    our_version.write(&mut stream, magic).unwrap();
+    //static ctx: &mut Ctx = &mut ();
+    
+    our_version.write(&mut stream, magic, &mut ()).unwrap();
 
     use std::io;
 
@@ -206,18 +206,18 @@ pub fn main1() {
                             }
                             Message::Verack => {
                                 debug!("Write {:#?}", Message::Verack);
-                                Message::Verack.write(&mut is, magic).unwrap();
+                                Message::Verack.write(&mut is, magic, &mut ()).unwrap();
                                 // debug!("Write ping");
                                 // Message::Ping(Ping {nonce: secs_since(UNIX_EPOCH) as u64,}).write(&mut is, magic).unwrap();
                             }
                             Message::Ping(ref ping) => {
                                 debug!("Write {:#?}", ping);
-                                Message::Pong(ping.clone()).write(&mut is, magic).unwrap();
+                                Message::Pong(ping.clone()).write(&mut is, magic, &mut ()).unwrap();
                             }
                             Message::FeeFilter(ref fee) => {
                                 debug!("min fee received {:?}", fee.minfee);
                                 debug!("Write {:#?}", &tx);
-                                tx.write(&mut is, magic).unwrap();
+                                tx.write(&mut is, magic, &mut ()).unwrap();
                                 return Ok(tx);
                             }
                             Message::Reject(ref reject) => {
@@ -347,13 +347,18 @@ fn main() {
 
     let mut stream = TcpStream::connect_timeout(&seed, Duration::from_secs(1)).unwrap();
     let is = stream.try_clone().unwrap();
-    let magic = [0; 4];
+    let magic = network.magic();
+
+    debug!("Network magic: {:?}", magic);
+
     let version = NodeKey {
         version: message
     };
-    let mut our_version = Message::NodeKey(version);
+    
+    let ctx = &mut ();
+    let our_version = Message::NodeKey(version);
     debug!("Write {:#?}", our_version);
-    our_version.write(&mut stream, magic).unwrap();
+    our_version.write(&mut stream, magic, ctx).unwrap();
 
     let mut reader: TcpReader = TcpReader(is);
     
@@ -361,7 +366,7 @@ fn main() {
     let data: Vec<u8> = reader.read_bytes(connection::RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4).unwrap();
 
     let ack_cipher: Vec<u8> = data.clone().to_vec();
-    let mut connection: OriginatedEncryptedConnection = ecies::decrypt(&secret, &[], &data).map(|ack| {
+    let (mut connection, mac_key_buf) = ecies::decrypt(&secret, &[], &data).map(|ack| {
         use crate::hash512::Hash512;
         use parity_crypto::aes::{AesCtr256};
         use crate::connection::NULL_IV;
@@ -393,6 +398,10 @@ fn main() {
 		let decoder = AesCtr256::new(&key_material[32..64], &NULL_IV).unwrap();
 		let key_material_keccak = OriginatedEncryptedConnection::keccak(key_material.as_bytes());
 		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
+        
+        let mut mac_key_buf = [0;32];
+        mac_key_buf.copy_from_slice(&key_material[32..64]);
+
 		let mac_encoder_key: Secret = Secret::from_slice(&key_material[32..64]).unwrap();
 
 		let mut egress_mac = Keccak::new_keccak256();
@@ -405,7 +414,7 @@ fn main() {
 		ingress_mac.update(mac_material.as_bytes());
 		ingress_mac.update(&ack_cipher);
 
-		OriginatedEncryptedConnection {
+		(OriginatedEncryptedConnection {
 			stream: reader,
 			encoder: encoder,
 			decoder: decoder,
@@ -413,7 +422,7 @@ fn main() {
 			egress_mac: egress_mac,
 			ingress_mac: ingress_mac,
 			public_key: public_key,
-		}
+		}, mac_key_buf)
     }).unwrap();
 
 	//let mut protocol: EthProtocol = EthProtocol::new(connection);
@@ -429,11 +438,16 @@ fn main() {
     
 
     //fn write_hello()
-    let mut our_hello = Hello {
-        connection: &mut connection,
+    let hello = Hello {
+        public_key: public_key,
+        mac_encoder_key: Secret::from_slice(&mac_key_buf).unwrap(),
     };
+
+    //let ctx = &mut connection;
     trace!("write out hello");
-    our_hello.write(&mut stream).unwrap();
+    let our_hello = Message::Hello(hello);
+    our_hello.write(&mut stream, magic, &mut connection).unwrap();
+
     //fn read_hello()
     trace!("Read hello from remote");
 	connection.read_packet().map(|packet| {

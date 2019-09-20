@@ -8,6 +8,7 @@ use crate::var_int;
 use crate::result::{Error, Result};
 use crate::serdes::Serializable;
 use crate::util::secs_since;
+use crate::ctx::Ctx;
 
 /// Protocol version supported by this library
 pub const PROTOCOL_VERSION: u32 = 70015;
@@ -77,12 +78,12 @@ impl Serializable<Version> for Version {
         Ok(ret)
     }
 
-    fn write(&mut self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&self, writer: &mut dyn Write,ctx: &mut dyn Ctx) -> io::Result<()> {
         writer.write_u32::<LittleEndian>(self.version)?;
         writer.write_u64::<LittleEndian>(self.services)?;
         writer.write_i64::<LittleEndian>(self.timestamp)?;
-        self.recv_addr.write(writer)?;
-        self.tx_addr.write(writer)?;
+        self.recv_addr.write(writer, ctx)?;
+        self.tx_addr.write(writer, ctx)?;
         writer.write_u64::<LittleEndian>(self.nonce)?;
         var_int::write(self.user_agent.as_bytes().len() as u64, writer)?;
         writer.write(&self.user_agent.as_bytes())?;
