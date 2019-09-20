@@ -12,7 +12,6 @@ use super::message::ETH_63_CAPABILITY;
 use secp256k1::key::{PublicKey, SecretKey};
 use aes::Aes256;
 use block_modes::{BlockMode, Ecb, block_padding::{ZeroPadding}};
-//use ethkey::Secret; - this fucking import leads to SegFail
 
 const PACKET_HELLO: u8 = 0x80; // actually 0x00 rlp doc "The integer 0 = [ 0x80 ]"
 const CLIENT_NAME: &str = "umbrella";
@@ -57,18 +56,18 @@ impl Serializable<Hello> for Hello{
 		}
 
         let padding = (16 - (len % 16)) % 16;
-        let mut packet: Vec<u8> = vec![0u8; 16 + 16 + len + padding + 16];
-        // add fucking payload and encrypt it
-		&mut packet[32..32 + len].copy_from_slice(&payload);
-        Ctx::encoder(ctx).encrypt(&mut packet[32..32 + len]).unwrap();
+        let mut packet: Vec<u8> = vec![0u8; len + padding + 16];
+        
+		&mut packet[..len].copy_from_slice(&payload);
+        Ctx::encoder(ctx).encrypt(&mut packet[..len]).unwrap();
 
 		if padding != 0 {
-            Ctx::encoder(ctx).encrypt(&mut packet[(32 + len)..(32 + len + padding)]).unwrap();
+            Ctx::encoder(ctx).encrypt(&mut packet[len..(len + padding)]).unwrap();
 		}
 
-        Ctx::update_remote_mac(ctx, &packet[32..(32 + len + padding)]);
+        Ctx::update_remote_mac(ctx, &packet[..(len + padding)]);
 
-        writer.write_all(&packet[32..(32 + len + padding)])?;
+        writer.write_all(&packet[..(len + padding)])?;
 
         let mut prev = Hash128::default();
         Ctx::get_remote_mac(ctx, prev.as_bytes_mut());

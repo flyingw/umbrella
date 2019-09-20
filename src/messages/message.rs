@@ -1,4 +1,4 @@
-use super::message_header::{MessageHeader,ShortHeader};
+use super::message_header::{MessageHeader,SecHeader};
 use super::ping::Ping;
 use super::reject::Reject;
 use super::send_cmpct::SendCmpct;
@@ -254,17 +254,17 @@ fn write_with_payload2<T:Serializable<T>>(
     payload: &dyn Payload<T>,
     magic: [u8; 3],
     ctx: &mut dyn Ctx,
-    mac_encoder_key: SecretKey,
+    secret: SecretKey,
 ) -> io::Result<()>{
     debug!("  cmd: {:?}", command);
     debug!("magic: {:?}", magic);
     debug!(" size: {:?}", payload.size());
 
-    let header = ShortHeader{
+    let header = SecHeader{
         magic,
         command, 
         payload_size: payload.size() as u32,
-        mac_encoder_key: mac_encoder_key,
+        secret: secret,
     };
 
     debug!("header {:?}", &header);
