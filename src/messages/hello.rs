@@ -5,14 +5,13 @@ use crate::result::Result;
 use crate::serdes::Serializable;
 use crate::keys::public_to_slice;
 use super::message::Payload;
-use crate::connection::{MAX_PAYLOAD_SIZE, OriginatedEncryptedConnection, RLPX_TRANSPORT_PROTOCOL_VERSION};
+use crate::connection::{MAX_PAYLOAD_SIZE, RLPX_TRANSPORT_PROTOCOL_VERSION};
 use crate::ctx::Ctx;
 use crate::hash128::Hash128;
-use parity_crypto::aes::AesEcb256;
 use super::message::ETH_63_CAPABILITY;
-use secp256k1::key::PublicKey;
-use ethkey::Secret;
-
+use secp256k1::key::{PublicKey, SecretKey};
+use aes::Aes256;
+use block_modes::{BlockMode, Ecb, block_padding::{ZeroPadding}};
 //use ethkey::Secret; - this fucking import leads to SegFail
 
 const PACKET_HELLO: u8 = 0x80; // actually 0x00 rlp doc "The integer 0 = [ 0x80 ]"
@@ -20,9 +19,8 @@ const CLIENT_NAME: &str = "umbrella";
 const LOCAL_PORT: u16 = 1234;
 
 pub struct Hello {
-    //pub connection: &'a mut OriginatedEncryptedConnection,
     pub public_key: PublicKey,
-    pub mac_encoder_key: Secret,
+    pub mac_encoder_key: SecretKey,
 }
 
 impl Serializable<Hello> for Hello{
@@ -79,8 +77,9 @@ impl Serializable<Hello> for Hello{
 		let mut enc = Hash128::default();
 		&mut enc[..].copy_from_slice(prev.as_bytes());
 
-		let mac_encoder = AesEcb256::new(&self.mac_encoder_key.as_bytes()).unwrap();
-		mac_encoder.encrypt(enc.as_bytes_mut()).unwrap();
+        let mac_encoder: Ecb<Aes256, ZeroPadding> = Ecb::new_var(&self.mac_encoder_key[..], &[]).expect("failed to aes ecb 1");
+	    let enc_mut = enc.as_bytes_mut();
+		mac_encoder.encrypt(enc_mut, enc_mut.len()).unwrap();
 
 		enc = enc ^ Hash128::from_slice(&header);
 
@@ -109,8 +108,10 @@ impl Serializable<Hello> for Hello{
 
 		let mut enc = Hash128::default();
 		&mut enc[..].copy_from_slice(prev.as_bytes());
-        let mac_encoder = AesEcb256::new(&self.mac_encoder_key.as_bytes()).unwrap();
-		mac_encoder.encrypt(enc.as_bytes_mut()).unwrap();
+
+        let mac_encoder: Ecb<Aes256, ZeroPadding> = Ecb::new_var(&self.mac_encoder_key[..], &[]).expect("failed to aes ecb 1");
+	    let enc_mut = enc.as_bytes_mut();
+		mac_encoder.encrypt(enc_mut, enc_mut.len()).unwrap();
 
         debug!("prev enc {:?}", enc.as_bytes());
         debug!("    prev {:?}", prev.as_bytes());

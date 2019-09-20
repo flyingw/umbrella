@@ -399,7 +399,7 @@ fn main() {
         let mut mac_key_buf = [0;32];
         mac_key_buf.copy_from_slice(&key_material[32..64]);
 
-		let mac_encoder_key: Secret = Secret::from_slice(&key_material[32..64]).unwrap();
+		let mac_encoder_key: SecretKey = SecretKey::from_slice(&key_material[32..64]).unwrap();
 
 		let mut egress_mac = Keccak::new_keccak256();
 		let mut mac_material = Hash256::from_slice(&key_material[32..64]) ^ remote_nonce;
@@ -437,7 +437,7 @@ fn main() {
     //fn write_hello()
     let hello = Hello {
         public_key: public_key,
-        mac_encoder_key: Secret::from_slice(&mac_key_buf).unwrap(),
+        mac_encoder_key: SecretKey::from_slice(&mac_key_buf).unwrap(),
     };
 
     //let ctx = &mut connection;
