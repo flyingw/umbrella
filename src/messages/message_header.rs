@@ -78,6 +78,7 @@ impl MessageHeader {
 
 impl SecHeader {
     pub const HEADER_LEN: usize = 16;
+    pub const ENCRYPTED_HEADER_LEN: usize = 32;
 }
 
 impl Serializable<MessageHeader> for MessageHeader {
@@ -110,6 +111,11 @@ impl Serializable<MessageHeader> for MessageHeader {
 
 impl Serializable<SecHeader> for SecHeader {
     fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<SecHeader> {
+
+        let mut buf: Vec<u8> = vec![0u8; SecHeader::ENCRYPTED_HEADER_LEN];
+        let buf_len: usize = _reader.read(buf.as_mut_slice()).unwrap();
+        if buf_len != SecHeader::ENCRYPTED_HEADER_LEN { return Err(Error::ScriptError(format!("read wrong length={}, expect={}", buf_len, SecHeader::ENCRYPTED_HEADER_LEN))) }
+
         panic!("can't read yet")
     }
 
