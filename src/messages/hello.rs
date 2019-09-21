@@ -25,6 +25,41 @@ pub struct Hello {
 
 impl Serializable<Hello> for Hello{
     fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<Hello> {
+        // let padding = (16 - (length % 16)) % 16;
+        // let full_length = length + padding + 16;
+        // let full_length = full_length as usize;
+        // //header parse done here, try read payload
+
+        // let mut payload = read_bytes(_reader, full_length)?;
+        // state.ingress_mac.update(&payload[0..payload.len() - 16]);
+        // OriginatedEncryptedConnection::update_mac(&mut state.ingress_mac, &state.mac_encoder_key, &[0u8; 0]);
+
+        // let mac = &payload[(payload.len() - 16)..];
+        // let mut expected = Hash128::default();
+        // state.ingress_mac.clone().finalize(expected.as_bytes_mut());
+        // if mac != &expected[..] {
+        //     panic!("auth error. mac is not valid");
+        // }
+
+        // state.decoder.try_apply_keystream(&mut payload[..length + padding]).expect("failed aes ctr 2");
+        // payload.truncate(length);
+
+        // let packet_id: u8 = payload[0];
+        // if (packet_id == PACKET_HELLO) {
+        //     // todo; parse hello here
+        //     // let data: Vec<u8> = &payload[1..];
+        //     println!("hello message");
+        // } else {
+        //     let data: Vec<u8> = parity_snappy::decompress(&payload[1..]).unwrap();
+        //     match packet_id {
+        //         PACKET_PING => println!("ping packet"),
+        //         PACKET_PONG => println!("pong packet"),
+        //         PACKET_STATUS => println!("status packet"),
+        //         PACKET_TRANSACTIONS => println!("transactions packet"),
+        //         PACKET_NEW_BLOCK => println!("new block packet"),
+        //         _ => println!("unknown packet={}", packet_id),
+        //     }
+        // }
         panic!("can't read yet");
     }
 

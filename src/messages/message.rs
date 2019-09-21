@@ -162,6 +162,13 @@ impl Message {
             version.validate()?;
             return Ok(Message::Version(version));
         }
+        
+        // Hello
+        // if header.command == commands::HELLO {
+        //     let payload = header.payload(reader, ctx)?;
+        //     let hello = Hello::read(&mut Cursor::new(payload), ctx)?;
+        //     return Ok(Message::Hello(hello));
+        // }
 
         // Verack
         if header.command == commands::VERACK {

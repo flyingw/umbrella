@@ -81,6 +81,33 @@ impl MessageHeader {
 impl SecHeader {
     pub const HEADER_LEN: usize = 16;
     pub const ENCRYPTED_HEADER_LEN: usize = 32;
+
+    /// Reads the payload and verifies its checksum
+    pub fn payload(&self, reader: &mut dyn Read, ctx: &mut dyn Ctx) -> Result<Vec<u8>> {
+        let payload_size = self.payload_size as usize;
+        let padding = (16 - (payload_size % 16)) % 16;
+        let full_length = payload_size + padding + 16;
+
+        let mut payload: Vec<u8> = vec![0u8; full_length];
+        reader.read_exact(payload.as_mut_slice())?;
+
+        ctx.update_local_mac(&payload[0..payload.len() - SecHeader::HEADER_LEN]);
+        let mut prev = Hash128::default();
+        ctx.get_local_mac(prev.as_bytes_mut());
+        let mut enc = Hash128::default();
+        &mut enc[..].copy_from_slice(prev.as_bytes());
+        let mac_encoder: Ecb<Aes256, ZeroPadding> = Ecb::new_var(&ctx.secret_key()[..], &[]).unwrap();
+        let enc_mut = enc.as_bytes_mut();
+        mac_encoder.encrypt(enc_mut, enc_mut.len()).unwrap();
+        enc = enc ^ prev;
+        ctx.update_local_mac(enc.as_bytes());
+	    let mac = &payload[(payload.len() - SecHeader::HEADER_LEN)..];
+		if mac != prev.as_bytes() { panic!("paylaod auth error. mac is not valid"); }
+		
+		ctx.decoder().try_apply_keystream(&mut payload[..payload_size + padding]).unwrap();
+		payload.truncate(payload_size);
+        return Ok(payload);
+    }
 }
 
 impl Serializable<MessageHeader> for MessageHeader {
@@ -114,26 +141,21 @@ impl Serializable<MessageHeader> for MessageHeader {
 impl Serializable<SecHeader> for SecHeader {
     fn read(reader: &mut dyn Read, ctx: &mut dyn Ctx) -> Result<SecHeader> {
         let mut header: Vec<u8> = vec![0u8; SecHeader::ENCRYPTED_HEADER_LEN];
-        let header_len: usize = reader.read(header.as_mut_slice()).unwrap();
-        if header_len != SecHeader::ENCRYPTED_HEADER_LEN { return Err(Error::ScriptError(format!("read wrong length={}, expect={}", header_len, SecHeader::ENCRYPTED_HEADER_LEN))) }
+        reader.read_exact(header.as_mut_slice())?;
 
         let mut prev = Hash128::default();
         ctx.get_local_mac(prev.as_bytes_mut());
-
         let mut enc = Hash128::default();
         &mut enc[..].copy_from_slice(prev.as_bytes());
-        
         let mac_encoder: Ecb<Aes256, ZeroPadding> = Ecb::new_var(&ctx.secret_key()[..], &[]).unwrap();
         let enc_mut = enc.as_bytes_mut();
         mac_encoder.encrypt(enc_mut, enc_mut.len()).unwrap();
-
         enc = enc ^ Hash128::from_slice(&header[..SecHeader::HEADER_LEN]);
         ctx.update_local_mac(enc.as_bytes());
-
         let mac = &header[SecHeader::HEADER_LEN..];
-        if mac != &prev[..SecHeader::HEADER_LEN] { panic!("auth error. mac is not valid"); }
-        ctx.decoder().try_apply_keystream(&mut header[..16]).expect("failed aes ctr 1");
+        if mac != prev.as_bytes() { panic!("header auth error. mac is not valid"); }
 
+        ctx.decoder().try_apply_keystream(&mut header[..SecHeader::HEADER_LEN]).expect("failed aes ctr 1");
         let length = ((((header[0] as u32) << 8) + (header[1] as u32)) << 8) + (header[2] as u32);
 
         // todo; protocol verification?
