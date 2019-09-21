@@ -14,7 +14,6 @@ use std::io::{Cursor, Read, Write};
 use crate::result::{Error, Result};
 use crate::serdes::Serializable;
 use crate::ctx::Ctx;
-use secp256k1::key::SecretKey;
 
 /// Checksum to use when there is an empty payload
 pub const NO_CHECKSUM: [u8; 4] = [0x5d, 0xf6, 0xe0, 0xe2];
@@ -199,7 +198,7 @@ impl Message {
             Message::Verack => write_without_payload(writer, VERACK, magic),
             Message::Version(v) => write_with_payload(writer, VERSION, v, magic),
             Message::NodeKey(v) => v.write(writer, &mut ()),
-            Message::Hello(h) => write_with_payload2(writer, HELLO, h, magic[..3].try_into().expect("shortened magic"), ctx, h.mac_encoder_key),
+            Message::Hello(h) => write_with_payload2(writer, HELLO, h, magic[..3].try_into().expect("shortened magic"), ctx),
         }
     }
 }
@@ -245,7 +244,6 @@ fn write_with_payload2<T:Serializable<T>>(
     payload: &dyn Payload<T>,
     magic: [u8; 3],
     ctx: &mut dyn Ctx,
-    secret: SecretKey,
 ) -> io::Result<()>{
     debug!("  cmd: {:?}", command);
     debug!("magic: {:?}", magic);
@@ -255,7 +253,6 @@ fn write_with_payload2<T:Serializable<T>>(
         magic,
         command, 
         payload_size: payload.size() as u32,
-        secret: secret,
     };
 
     debug!("header {:?}", &header);

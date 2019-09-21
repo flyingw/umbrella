@@ -7,8 +7,10 @@ use std::str;
 use crate::result::{Error, Result};
 use crate::ctx::Ctx;
 use crate::serdes::Serializable;
-use secp256k1::key::SecretKey;
 use aes_ctr::stream_cipher::SyncStreamCipher;
+use crate::hash128::Hash128;
+use block_modes::{BlockMode, Ecb, block_padding::{ZeroPadding}};
+use aes::Aes256;
 
 /// Header that begins all messages
 #[derive(Default, PartialEq, Eq, Hash, Clone)]
@@ -31,9 +33,9 @@ pub struct SecHeader {
     pub command: [u8; 12],
     /// Payload size
     pub payload_size: u32,
-    /// Secret key, x in ECDSA signature
-    pub secret: SecretKey,
 }
+    /// Secret key, x in ECDSA signature
+    // pub secret: SecretKey,
 
 impl MessageHeader {
     /// Size of the message header in bytes
@@ -110,21 +112,49 @@ impl Serializable<MessageHeader> for MessageHeader {
 }
 
 impl Serializable<SecHeader> for SecHeader {
-    fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<SecHeader> {
+    fn read(reader: &mut dyn Read, ctx: &mut dyn Ctx) -> Result<SecHeader> {
+        let mut header: Vec<u8> = vec![0u8; SecHeader::ENCRYPTED_HEADER_LEN];
+        let header_len: usize = reader.read(header.as_mut_slice()).unwrap();
+        if header_len != SecHeader::ENCRYPTED_HEADER_LEN { return Err(Error::ScriptError(format!("read wrong length={}, expect={}", header_len, SecHeader::ENCRYPTED_HEADER_LEN))) }
 
-        let mut buf: Vec<u8> = vec![0u8; SecHeader::ENCRYPTED_HEADER_LEN];
-        let buf_len: usize = _reader.read(buf.as_mut_slice()).unwrap();
-        if buf_len != SecHeader::ENCRYPTED_HEADER_LEN { return Err(Error::ScriptError(format!("read wrong length={}, expect={}", buf_len, SecHeader::ENCRYPTED_HEADER_LEN))) }
+        let mut prev = Hash128::default();
+        ctx.get_local_mac(prev.as_bytes_mut());
 
-        panic!("can't read yet")
+        let mut enc = Hash128::default();
+        &mut enc[..].copy_from_slice(prev.as_bytes());
+        
+        let mac_encoder: Ecb<Aes256, ZeroPadding> = Ecb::new_var(&ctx.secret_key()[..], &[]).unwrap();
+        let enc_mut = enc.as_bytes_mut();
+        mac_encoder.encrypt(enc_mut, enc_mut.len()).unwrap();
+
+        enc = enc ^ Hash128::from_slice(&header[..SecHeader::HEADER_LEN]);
+        ctx.update_local_mac(enc.as_bytes());
+
+        let mac = &header[SecHeader::HEADER_LEN..];
+        if mac != &prev[..SecHeader::HEADER_LEN] { panic!("auth error. mac is not valid"); }
+        ctx.decoder().try_apply_keystream(&mut header[..16]).expect("failed aes ctr 1");
+
+        let length = ((((header[0] as u32) << 8) + (header[1] as u32)) << 8) + (header[2] as u32);
+
+        // todo; protocol verification?
+        // use rlp::Rlp;
+        // let header_rlp = Rlp::new(&header[3..6]);
+        // let protocol_id = header_rlp.val_at::<u16>(0).unwrap();
+
+        // if protocol_id != RLPX_TRANSPORT_PROTOCOL_VERSION != 5 { 
+        //     panic!("wrong protocol {}", protocol_id) 
+        // };
+
+        Ok(SecHeader {
+            magic: Default::default(),
+            command: Default::default(),
+            payload_size: length,
+        })
     }
 
     fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
         debug!("=>write short header");
-        use crate::hash128::Hash128;
-        use block_modes::{BlockMode, Ecb, block_padding::{ZeroPadding}};
-        use aes::Aes256;
-
+        
         use std::convert::TryInto;
         let len: usize = self.payload_size.try_into().unwrap();
         let mut header = [0u8; SecHeader::HEADER_LEN];
@@ -142,7 +172,7 @@ impl Serializable<SecHeader> for SecHeader {
 		let mut enc = Hash128::default();
 		&mut enc[..].copy_from_slice(prev.as_bytes());
 
-        let mac_encoder: Ecb<Aes256, ZeroPadding> = Ecb::new_var(&self.secret[..], &[]).expect("failed to aes ecb 1");
+        let mac_encoder: Ecb<Aes256, ZeroPadding> = Ecb::new_var(&ctx.secret_key()[..], &[]).expect("failed to aes ecb 1");
 	    let enc_mut = enc.as_bytes_mut();
 		mac_encoder.encrypt(enc_mut, enc_mut.len()).unwrap();
 
