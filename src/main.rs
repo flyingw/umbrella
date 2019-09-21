@@ -440,34 +440,40 @@ fn main() {
     
     let hello = Hello {
         public_key: public_key,
-        mac_encoder_key: SecretKey::from_slice(&mac_key_buf).unwrap(),
     };
 
     trace!("write out hello");
     let our_hello = Message::Hello(hello);
     our_hello.write(&mut stream, magic, &mut connection).unwrap();
 
+    use messages::SecHeader;
+    use std::io::{Cursor, Read, Write};
+    let header = SecHeader::read(&mut stream, &mut connection).unwrap();
+    let payload = header.payload(&mut stream, &mut connection).unwrap();
+    let hello = Hello::read(&mut Cursor::new(payload), &mut connection);
+    println!("read hello={:?}", &hello);
+    
     //fn read_hello()
-    trace!("Read hello from remote");
-	connection.read_packet().map(|packet| {
-        match packet.first() {
-            Some(&PACKET_HELLO) => {
-                let rlp = Rlp::new(&packet[1..]);
-                let peer_caps: Rlp = rlp.at(2).unwrap();
+    // trace!("Read hello from remote");
+	// connection.read_packet().map(|packet| {
+    //     match packet.first() {
+    //         Some(&PACKET_HELLO) => {
+    //             let rlp = Rlp::new(&packet[1..]);
+    //             let peer_caps: Rlp = rlp.at(2).unwrap();
 
-                peer_caps.is_list();
-                peer_caps.item_count().unwrap();
+    //             peer_caps.is_list();
+    //             peer_caps.item_count().unwrap();
 
-                let peer_cap = peer_caps.at(0).unwrap();
+    //             let peer_cap = peer_caps.at(0).unwrap();
 
-                let p: u8 = peer_cap.val_at(1).unwrap();
+    //             let p: u8 = peer_cap.val_at(1).unwrap();
 
-                println!("hello from remote! peer_caps={:?}", p);
-            },
-            Some(msg) => panic!("not a hello message id={}, expect={}", msg, PACKET_HELLO),
-            None => panic!("empty hello message"),
-        }
-    }).unwrap();
+    //             println!("hello from remote! peer_caps={:?}", p);
+    //         },
+    //         Some(msg) => panic!("not a hello message id={}, expect={}", msg, PACKET_HELLO),
+    //         None => panic!("empty hello message"),
+    //     }
+    // }).unwrap();
 
 	//protocol.read_packet();
     trace!("Read some packet");
