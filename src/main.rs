@@ -181,18 +181,17 @@ pub fn main1() {
     let our_version = Message::Version(version);
     debug!("Write {:#?}", our_version);
     
-    //static ctx: &mut Ctx = &mut ();
-    
     our_version.write(&mut stream, magic, &mut ()).unwrap();
 
     use std::io;
+    let mut ct = ();
 
     let lis = thread::spawn(move || {
         debug!("Connected {:?}", &seed);
         loop {
             let message = match &partial {
-                Some(header) => Message::read_partial(&mut is, header),
-                None => Message::read(&mut is, network.magic()),
+                Some(header) => Message::read_partial(&mut is, header, &mut ct),
+                None => Message::read(&mut is, network.magic(), &mut ct),
             };
 
             match message {

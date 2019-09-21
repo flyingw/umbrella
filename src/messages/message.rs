@@ -101,10 +101,10 @@ impl Message {
     /// It's possible for a message's header to be read but not its payload. In this case, the
     /// return value is not an Error but a Partial message, and the complete message may be read
     /// later using read_partial.
-    pub fn read(reader: &mut dyn Read, magic: [u8; 4]) -> Result<Self> {
-        let header = MessageHeader::read(reader)?;
+    pub fn read(reader: &mut dyn Read, magic: [u8; 4], ctx: &mut dyn Ctx) -> Result<Self> {
+        let header = MessageHeader::read(reader, ctx)?;
         header.validate(magic, MAX_PAYLOAD_SIZE)?;
-        match Message::read_partial(reader, &header) {
+        match Message::read_partial(reader, &header, ctx) {
             Ok(msg) => Ok(msg),
             Err(e) => {
                 if let Error::IOError(ref e) = e {
@@ -122,53 +122,53 @@ impl Message {
     /// Reads the complete message given a message header
     ///
     /// It may be used after read() returns Message::Partial.
-    pub fn read_partial(reader: &mut dyn Read, header: &MessageHeader) -> Result<Self> {
+    pub fn read_partial(reader: &mut dyn Read, header: &MessageHeader, ctx: &mut dyn Ctx) -> Result<Self> {
         // Ping
         if header.command == commands::PING {
             let payload = header.payload(reader)?;
-            let ping = Ping::read(&mut Cursor::new(payload))?;
+            let ping = Ping::read(&mut Cursor::new(payload), ctx)?;
             return Ok(Message::Ping(ping));
         }
 
         // Pong
         if header.command == commands::PONG {
             let payload = header.payload(reader)?;
-            let pong = Ping::read(&mut Cursor::new(payload))?;
+            let pong = Ping::read(&mut Cursor::new(payload), ctx)?;
             return Ok(Message::Pong(pong));
         }
 
         // Reject
         if header.command == commands::REJECT {
             let payload = header.payload(reader)?;
-            let reject = Reject::read(&mut Cursor::new(payload))?;
+            let reject = Reject::read(&mut Cursor::new(payload), ctx)?;
             return Ok(Message::Reject(reject));
         }
 
         // Sendcmpct
         if header.command == commands::SENDCMPCT {
             let payload = header.payload(reader)?;
-            let sendcmpct = SendCmpct::read(&mut Cursor::new(payload))?;
+            let sendcmpct = SendCmpct::read(&mut Cursor::new(payload), ctx)?;
             return Ok(Message::SendCmpct(sendcmpct));
         }
 
         // Feefilter
         if header.command == commands::FEEFILTER {
             let payload = header.payload(reader)?;
-            let feefilter = FeeFilter::read(&mut Cursor::new(payload))?;
+            let feefilter = FeeFilter::read(&mut Cursor::new(payload), ctx)?;
             return Ok(Message::FeeFilter(feefilter));
         }
 
         // Tx
         if header.command == commands::TX {
             let payload = header.payload(reader)?;
-            let tx = Tx::read(&mut Cursor::new(payload))?;
+            let tx = Tx::read(&mut Cursor::new(payload), ctx)?;
             return Ok(Message::Tx(tx));
         }
 
         // Version
         if header.command == commands::VERSION {
             let payload = header.payload(reader)?;
-            let version = Version::read(&mut Cursor::new(payload))?;
+            let version = Version::read(&mut Cursor::new(payload), ctx)?;
             version.validate()?;
             return Ok(Message::Version(version));
         }

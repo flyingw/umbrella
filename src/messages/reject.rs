@@ -60,7 +60,7 @@ pub struct Reject {
 }
 
 impl Serializable<Reject> for Reject {
-    fn read(reader: &mut dyn Read) -> Result<Reject> {
+    fn read(reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<Reject> {
         let message_size = var_int::read(reader)? as usize;
         let mut message_bytes = vec![0; message_size];
         reader.read(&mut message_bytes)?;
@@ -110,7 +110,7 @@ impl fmt::Debug for Reject {
         let mut data_str = "".to_string();
         if self.message == "block".to_string() || self.message == "tx".to_string() {
             let mut data = Cursor::new(&self.data);
-            data_str = Hash256::read(&mut data).unwrap().encode();
+            data_str = Hash256::read(&mut data, &mut ()).unwrap().encode();
         }
         f.debug_struct("Reject")
             .field("message", &self.message)

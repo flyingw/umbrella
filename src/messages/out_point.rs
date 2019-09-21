@@ -31,8 +31,8 @@ impl OutPoint {
 }
 
 impl Serializable<OutPoint> for OutPoint {
-    fn read(reader: &mut dyn Read) -> Result<OutPoint> {
-        let hash = Hash256::read(reader)?;
+    fn read(reader: &mut dyn Read, ctx: &mut dyn Ctx) -> Result<OutPoint> {
+        let hash = Hash256::read(reader, ctx)?;
         let index = reader.read_u32::<LittleEndian>()?;
         Ok(OutPoint { hash, index })
     }

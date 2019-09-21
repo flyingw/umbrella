@@ -71,7 +71,7 @@ impl Hash256 {
 }
 
 impl Serializable<Hash256> for Hash256 {
-    fn read(reader: &mut dyn Read) -> Result<Hash256> {
+    fn read(reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<Hash256> {
         let mut bytes = [0; 32];
         reader.read(&mut bytes)?;
         Ok(Hash256(bytes))

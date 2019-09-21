@@ -41,7 +41,7 @@ impl NodeAddr {
 }
 
 impl Serializable<NodeAddr> for NodeAddr {
-    fn read(reader: &mut dyn Read) -> Result<NodeAddr> {
+    fn read(reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<NodeAddr> {
         let services = reader.read_u64::<LittleEndian>()?;
         let mut ip = [0; 16];
         reader.read(&mut ip)?;

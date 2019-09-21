@@ -19,7 +19,7 @@ impl FeeFilter {
 }
 
 impl Serializable<FeeFilter> for FeeFilter {
-    fn read(reader: &mut dyn Read) -> Result<FeeFilter> {
+    fn read(reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<FeeFilter> {
         let minfee = reader.read_u64::<LittleEndian>()?;
         Ok(FeeFilter { minfee })
     }
@@ -32,28 +32,5 @@ impl Serializable<FeeFilter> for FeeFilter {
 impl Payload<FeeFilter> for FeeFilter {
     fn size(&self) -> usize {
         FeeFilter::SIZE
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use hex;
-    use std::io::Cursor;
-
-    #[test]
-    fn read_bytes() {
-        let b = hex::decode("e803000000000000".as_bytes()).unwrap();
-        let f = FeeFilter::read(&mut Cursor::new(&b)).unwrap();
-        assert!(f.minfee == 1000);
-    }
-
-    #[test]
-    fn write_read() {
-        let mut v = Vec::new();
-        let f = FeeFilter { minfee: 1234 };
-        f.write(&mut v, &mut ()).unwrap();
-        assert!(v.len() == f.size());
-        assert!(FeeFilter::read(&mut Cursor::new(&v)).unwrap() == f);
     }
 }

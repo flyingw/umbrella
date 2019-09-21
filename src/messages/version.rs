@@ -59,15 +59,15 @@ impl Version {
 }
 
 impl Serializable<Version> for Version {
-    fn read(reader: &mut dyn Read) -> Result<Version> {
+    fn read(reader: &mut dyn Read, ctx: &mut dyn Ctx) -> Result<Version> {
         let mut ret = Version {
             ..Default::default()
         };
         ret.version = reader.read_u32::<LittleEndian>()?;
         ret.services = reader.read_u64::<LittleEndian>()?;
         ret.timestamp = reader.read_i64::<LittleEndian>()?;
-        ret.recv_addr = NodeAddr::read(reader)?;
-        ret.tx_addr = NodeAddr::read(reader)?;
+        ret.recv_addr = NodeAddr::read(reader, ctx)?;
+        ret.tx_addr = NodeAddr::read(reader, ctx)?;
         ret.nonce = reader.read_u64::<LittleEndian>()?;
         let user_agent_size = var_int::read(reader)? as usize;
         let mut user_agent_bytes = vec![0; user_agent_size];

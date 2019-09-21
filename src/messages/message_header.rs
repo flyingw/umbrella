@@ -81,7 +81,7 @@ impl SecHeader {
 }
 
 impl Serializable<MessageHeader> for MessageHeader {
-    fn read(reader: &mut dyn Read) -> Result<MessageHeader> {
+    fn read(reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<MessageHeader> {
         // Read all the bytes at once so that the stream doesn't get in a partially-read state
         let mut p = vec![0; MessageHeader::SIZE];
         reader.read_exact(p.as_mut())?;
@@ -109,7 +109,7 @@ impl Serializable<MessageHeader> for MessageHeader {
 }
 
 impl Serializable<SecHeader> for SecHeader {
-    fn read(_reader: &mut dyn Read) -> Result<SecHeader> {
+    fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<SecHeader> {
         panic!("can't read yet")
     }
 
