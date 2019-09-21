@@ -12,6 +12,7 @@ use super::message::ETH_63_CAPABILITY;
 use secp256k1::key::{PublicKey, SecretKey};
 use aes::Aes256;
 use block_modes::{BlockMode, Ecb, block_padding::{ZeroPadding}};
+use aes_ctr::stream_cipher::SyncStreamCipher;
 
 const PACKET_HELLO: u8 = 0x80; // actually 0x00 rlp doc "The integer 0 = [ 0x80 ]"
 const CLIENT_NAME: &str = "umbrella";
@@ -59,10 +60,10 @@ impl Serializable<Hello> for Hello{
         let mut packet: Vec<u8> = vec![0u8; len + padding + 16];
         
 		&mut packet[..len].copy_from_slice(&payload);
-        Ctx::encoder(ctx).encrypt(&mut packet[..len]).unwrap();
+        Ctx::encoder(ctx).try_apply_keystream(&mut packet[..len]).unwrap();
 
 		if padding != 0 {
-            Ctx::encoder(ctx).encrypt(&mut packet[len..(len + padding)]).unwrap();
+            Ctx::encoder(ctx).try_apply_keystream(&mut packet[len..(len + padding)]).unwrap();
 		}
 
         Ctx::update_remote_mac(ctx, &packet[..(len + padding)]);

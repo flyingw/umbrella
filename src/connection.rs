@@ -2,13 +2,14 @@ use std::io::{Write, Read};
 use crate::hash128::Hash128;
 use crate::hash256::Hash256;
 use ethereum_types::H256;
-use parity_crypto::aes::{AesCtr256};
 use rlp::{RlpStream, Rlp};
 use secp256k1::key::{PublicKey, SecretKey};
 use std::net::TcpStream;
 use tiny_keccak::Keccak;
 use aes::Aes256;
 use block_modes::{BlockMode, Ecb, block_padding::ZeroPadding};
+use aes_ctr::Aes256Ctr;
+use aes_ctr::stream_cipher::SyncStreamCipher;
 
 pub const RLPX_TRANSPORT_PROTOCOL_VERSION: u32 = 5;
 pub const RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4: usize = 210;
@@ -20,8 +21,8 @@ pub const NULL_IV: [u8; 16] = [0;16];
 pub struct OriginatedEncryptedConnection {
 	pub stream: TcpReader,
 	pub public_key: PublicKey,
-	pub encoder: AesCtr256,
-	pub decoder: AesCtr256,
+	pub encoder: Aes256Ctr,
+	pub decoder: Aes256Ctr,
 	pub mac_encoder_key: SecretKey,
 	pub egress_mac: Keccak,
 	pub ingress_mac: Keccak,
@@ -51,13 +52,13 @@ impl OriginatedEncryptedConnection {
 		let mut header = header.out();
 		header.resize(HEADER_LEN, 0u8);
 		&mut packet[..HEADER_LEN].copy_from_slice(&mut header);
-		self.encoder.encrypt(&mut packet[..HEADER_LEN]).unwrap();
+		self.encoder.try_apply_keystream(&mut packet[..HEADER_LEN]).unwrap();
 		OriginatedEncryptedConnection::update_mac(&mut self.egress_mac, &self.mac_encoder_key, &packet[..HEADER_LEN]);
 		self.egress_mac.clone().finalize(&mut packet[HEADER_LEN..32]);
 		&mut packet[32..32 + len].copy_from_slice(payload);
-		self.encoder.encrypt(&mut packet[32..32 + len]).unwrap();
+		self.encoder.try_apply_keystream(&mut packet[32..32 + len]).unwrap();
 		if padding != 0 {
-			self.encoder.encrypt(&mut packet[(32 + len)..(32 + len + padding)]).unwrap();
+			self.encoder.try_apply_keystream(&mut packet[(32 + len)..(32 + len + padding)]).unwrap();
 		}
 		self.egress_mac.update(&packet[32..(32 + len + padding)]);
 		OriginatedEncryptedConnection::update_mac(&mut self.egress_mac, &self.mac_encoder_key, &[0u8; 0]);
@@ -89,7 +90,7 @@ impl OriginatedEncryptedConnection {
 		if mac != &expected[0..16] {
 			panic!("auth error. mac is not valid");
 		}
-		self.decoder.decrypt(&mut header[..16]).unwrap();
+		self.decoder.try_apply_keystream(&mut header[..16]).unwrap();
 
 		let length = ((((header[0] as u32) << 8) + (header[1] as u32)) << 8) + (header[2] as u32);
 		let header_rlp = Rlp::new(&header[3..6]);
@@ -118,7 +119,7 @@ impl OriginatedEncryptedConnection {
 			panic!("auth error. mac is not valid");
 		}
 		let padding = (16 - (packet_header.payload_len % 16)) % 16;
-		self.decoder.decrypt(&mut payload[..packet_header.payload_len + padding]).unwrap();
+		self.decoder.try_apply_keystream(&mut payload[..packet_header.payload_len + padding]).unwrap();
 		payload.truncate(packet_header.payload_len);
     return payload;
 	}
