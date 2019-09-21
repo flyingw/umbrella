@@ -51,6 +51,9 @@ use secp256k1::{Secp256k1, SecretKey, PublicKey};
 use sighash::{bip143_sighash, SigHashCache, SIGHASH_FORKID, SIGHASH_ALL};
 use transaction::generate_signature;
 use rust_base58::base58::FromBase58;
+use aes_ctr::Aes256Ctr;
+use aes::block_cipher_trait::generic_array::GenericArray;
+use aes_ctr::stream_cipher::NewStreamCipher;
 
 // Creates public key hash script.
 fn pk_script(addr: &str) -> Script {
@@ -368,7 +371,6 @@ fn main() {
     let ack_cipher: Vec<u8> = data.clone().to_vec();
     let (mut connection, mac_key_buf) = ecies::decrypt(&secret, &[], &data).map(|ack| {
         use crate::hash512::Hash512;
-        use parity_crypto::aes::{AesCtr256};
         use crate::connection::NULL_IV;
 
         let mut remote_ephemeral: Public = Public::default();
@@ -394,8 +396,9 @@ fn main() {
 		// This is the case here: ecdh creates a new secret which will be the symmetric key used
 		// only for this session the 0 IV is only use once with this secret, so we are in the case
 		// of same IV use for different key.
-		let encoder = AesCtr256::new(&key_material[32..64], &NULL_IV).unwrap();
-		let decoder = AesCtr256::new(&key_material[32..64], &NULL_IV).unwrap();
+        let encoder = Aes256Ctr::new(GenericArray::from_slice(&key_material[32..64]), GenericArray::from_slice(&NULL_IV));
+		let decoder = Aes256Ctr::new(GenericArray::from_slice(&key_material[32..64]), GenericArray::from_slice(&NULL_IV));
+
 		let key_material_keccak = OriginatedEncryptedConnection::keccak(key_material.as_bytes());
 		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
         

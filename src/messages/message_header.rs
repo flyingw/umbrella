@@ -8,6 +8,7 @@ use crate::result::{Error, Result};
 use crate::ctx::Ctx;
 use crate::serdes::Serializable;
 use secp256k1::key::SecretKey;
+use aes_ctr::stream_cipher::SyncStreamCipher;
 
 /// Header that begins all messages
 #[derive(Default, PartialEq, Eq, Hash, Clone)]
@@ -77,10 +78,6 @@ impl MessageHeader {
 
 impl SecHeader {
     pub const HEADER_LEN: usize = 16;
-
-    pub fn size() -> usize {
-        SecHeader::HEADER_LEN
-    }
 }
 
 impl Serializable<MessageHeader> for MessageHeader {
@@ -130,7 +127,7 @@ impl Serializable<SecHeader> for SecHeader {
         pl_sz.copy_from_slice(&[(len >> 16) as u8, (len >> 8) as u8, len as u8]);
         magic.copy_from_slice(&self.magic);
 
-        Ctx::encoder(ctx).encrypt(&mut header).unwrap();
+        Ctx::encoder(ctx).try_apply_keystream(&mut header).unwrap();
         writer.write_all(&header)?;
 
 		let mut prev = Hash128::default();
