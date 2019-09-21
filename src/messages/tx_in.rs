@@ -6,6 +6,7 @@ use std::io::{Read, Write};
 use crate::var_int;
 use crate::result::Result;
 use crate::serdes::Serializable;
+use crate::ctx::Ctx;
 
 
 /// Transaction input
@@ -27,8 +28,8 @@ impl TxIn {
 }
 
 impl Serializable<TxIn> for TxIn {
-    fn read(reader: &mut dyn Read) -> Result<TxIn> {
-        let prev_output = OutPoint::read(reader)?;
+    fn read(reader: &mut dyn Read, ctx: &mut dyn Ctx) -> Result<TxIn> {
+        let prev_output = OutPoint::read(reader, ctx)?;
         let script_len = var_int::read(reader)?;
         let mut sig_script = Script(vec![0; script_len as usize]);
         reader.read(&mut sig_script.0)?;
@@ -40,8 +41,8 @@ impl Serializable<TxIn> for TxIn {
         })
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
-        self.prev_output.write(writer)?;
+    fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
+        self.prev_output.write(writer, ctx)?;
         var_int::write(self.sig_script.0.len() as u64, writer)?;
         writer.write(&self.sig_script.0)?;
         writer.write_u32::<LittleEndian>(self.sequence)?;

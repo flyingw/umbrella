@@ -4,6 +4,7 @@ use std::io::{Read, Write};
 use crate::hash256::Hash256;
 use crate::result::Result;
 use crate::serdes::Serializable;
+use crate::ctx::Ctx;
 
 /// The coinbase transaction input will have this hash
 pub const COINBASE_OUTPOINT_HASH: Hash256 = Hash256([0; 32]);
@@ -30,14 +31,14 @@ impl OutPoint {
 }
 
 impl Serializable<OutPoint> for OutPoint {
-    fn read(reader: &mut dyn Read) -> Result<OutPoint> {
-        let hash = Hash256::read(reader)?;
+    fn read(reader: &mut dyn Read, ctx: &mut dyn Ctx) -> Result<OutPoint> {
+        let hash = Hash256::read(reader, ctx)?;
         let index = reader.read_u32::<LittleEndian>()?;
         Ok(OutPoint { hash, index })
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
-        self.hash.write(writer)?;
+    fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
+        self.hash.write(writer, ctx)?;
         writer.write_u32::<LittleEndian>(self.index)?;
         Ok(())
     }

@@ -2,6 +2,7 @@ use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::io;
 use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv6Addr};
+use crate::ctx::Ctx;
 use crate::result::Result;
 use crate::serdes::Serializable;
 
@@ -40,7 +41,7 @@ impl NodeAddr {
 }
 
 impl Serializable<NodeAddr> for NodeAddr {
-    fn read(reader: &mut dyn Read) -> Result<NodeAddr> {
+    fn read(reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<NodeAddr> {
         let services = reader.read_u64::<LittleEndian>()?;
         let mut ip = [0; 16];
         reader.read(&mut ip)?;
@@ -49,7 +50,7 @@ impl Serializable<NodeAddr> for NodeAddr {
         Ok(NodeAddr { services, ip, port })
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
         writer.write_u64::<LittleEndian>(self.services)?;
         writer.write(&self.ip.octets())?;
         writer.write_u16::<BigEndian>(self.port)?;

@@ -29,11 +29,9 @@ pub mod op_codes;
 pub mod stack;
 pub mod interpreter;
 pub mod keys;
-pub mod ecies;
-pub mod ecdh;
+pub mod ctx;
 
 mod connection;
-mod eth_protocol;
 
 pub use serdes::Serializable;
 pub use result::{Error, Result};
@@ -44,16 +42,18 @@ use conf::Opt;
 use structopt::StructOpt;
 
 use network::Network;
-use messages::{Version, NODE_NONE, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut};
+use messages::{Version, NODE_NONE, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut, NodeKey, Hello};
 use messages::{Message,MessageHeader};
 use util::secs_since;
 use std::time::{UNIX_EPOCH, Duration};
-
 use script::Script;
 use secp256k1::{Secp256k1, SecretKey, PublicKey};
 use sighash::{bip143_sighash, SigHashCache, SIGHASH_FORKID, SIGHASH_ALL};
 use transaction::generate_signature;
 use rust_base58::base58::FromBase58;
+use aes_ctr::Aes256Ctr;
+use aes::block_cipher_trait::generic_array::GenericArray;
+use aes_ctr::stream_cipher::NewStreamCipher;
 
 // Creates public key hash script.
 fn pk_script(addr: &str) -> Script {
@@ -84,8 +84,8 @@ fn sig_script(sig: &[u8], public_key: &[u8; 33]) -> Script {
 }
 
 fn create_transaction(opt: &Opt) -> Tx {
-    let pub_script      = pk_script(&opt.sender().in_address);
-    let chng_pk_script  = pk_script(&opt.sender().out_address);
+    let pub_script      = pk_script(&opt.sender().in_address());
+    let chng_pk_script  = pk_script(&opt.sender().out_address());
     let dump_pk_script  = pk_script(&opt.data().dust_address);
 
     trace!("pk: {:?}", &pub_script);
@@ -96,13 +96,13 @@ fn create_transaction(opt: &Opt) -> Tx {
         version: 2,
         inputs: vec![TxIn{
             prev_output: OutPoint {
-                hash:  opt.sender().outpoint_hash,
-                index: opt.sender().outpoint_index,
+                hash:  opt.sender().outpoint_hash(),
+                index: opt.sender().outpoint_index(),
             },
             ..Default::default()
         }],
         outputs: vec![
-            TxOut{ amount: Amount::from(opt.sender().change, Units::Bch), pk_script: chng_pk_script,}, 
+            TxOut{ amount: Amount::from(opt.sender().change(), Units::Bch), pk_script: chng_pk_script,}, 
             TxOut{ amount: Amount::from(opt.data().dust_amount, Units::Bch), pk_script: dump_pk_script, }],
         lock_time:0
     };
@@ -111,7 +111,7 @@ fn create_transaction(opt: &Opt) -> Tx {
     let mut cache = SigHashCache::new();
     
     let mut privk = [0;32];
-    privk.copy_from_slice(&opt.sender().secret.from_base58().unwrap()[1..33]); 
+    privk.copy_from_slice(&opt.sender().secret().unwrap().from_base58().unwrap()[1..33]); 
 
     let secret_key = SecretKey::from_slice(&privk).expect("32 bytes, within curve order");
     let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
@@ -120,7 +120,7 @@ fn create_transaction(opt: &Opt) -> Tx {
     trace!("public: {:?} ", hex::encode(&pub_key.serialize().as_ref()));
 
     let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
-    let sighash = bip143_sighash(&tx, 0, &pub_script.0, Amount::from(opt.sender().in_amount, Units::Bch), sighash_type, &mut cache).unwrap();
+    let sighash = bip143_sighash(&mut tx, 0, &pub_script.0, Amount::from(opt.sender().in_amount(), Units::Bch), sighash_type, &mut cache).unwrap();
     let signature = generate_signature(&privk, &sighash, sighash_type).unwrap();
     let sig_script = sig_script(&signature, &pub_key.serialize());
 
@@ -133,7 +133,7 @@ fn create_transaction(opt: &Opt) -> Tx {
 ///
 /// Send transaction to selected network.
 /// 
-fn main() {
+pub fn main1() {
     let opt = Opt::from_args();
     
     stderrlog::new().module(module_path!())
@@ -181,16 +181,17 @@ fn main() {
     let our_version = Message::Version(version);
     debug!("Write {:#?}", our_version);
     
-    our_version.write(&mut stream, magic).unwrap();
+    our_version.write(&mut stream, magic, &mut ()).unwrap();
 
     use std::io;
+    let mut ct = ();
 
     let lis = thread::spawn(move || {
         debug!("Connected {:?}", &seed);
         loop {
             let message = match &partial {
-                Some(header) => Message::read_partial(&mut is, header),
-                None => Message::read(&mut is, network.magic()),
+                Some(header) => Message::read_partial(&mut is, header, &mut ct),
+                None => Message::read(&mut is, network.magic(), &mut ct),
             };
 
             match message {
@@ -207,18 +208,18 @@ fn main() {
                             }
                             Message::Verack => {
                                 debug!("Write {:#?}", Message::Verack);
-                                Message::Verack.write(&mut is, magic).unwrap();
+                                Message::Verack.write(&mut is, magic, &mut ()).unwrap();
                                 // debug!("Write ping");
                                 // Message::Ping(Ping {nonce: secs_since(UNIX_EPOCH) as u64,}).write(&mut is, magic).unwrap();
                             }
                             Message::Ping(ref ping) => {
                                 debug!("Write {:#?}", ping);
-                                Message::Pong(ping.clone()).write(&mut is, magic).unwrap();
+                                Message::Pong(ping.clone()).write(&mut is, magic, &mut ()).unwrap();
                             }
                             Message::FeeFilter(ref fee) => {
                                 debug!("min fee received {:?}", fee.minfee);
                                 debug!("Write {:#?}", &tx);
-                                tx.write(&mut is, magic).unwrap();
+                                tx.write(&mut is, magic, &mut ()).unwrap();
                                 return Ok(tx);
                             }
                             Message::Reject(ref reject) => {
@@ -246,9 +247,7 @@ fn main() {
 
     match lis.join() {
         Ok(v)  => debug!("{:?}", v),
-        Err(r) => {
-            debug!("{:?}", r);
-        }
+        Err(r) => debug!("{:?}", r),
     };
 
     use std::net::Shutdown;
@@ -257,87 +256,294 @@ fn main() {
 
 use common_types::transaction::{Transaction, Action};
 use ethereum_types::{U256};
-use ethkey::{Address, Secret};
+use ethkey::Address;
 use std::str::FromStr;
 use std::thread;
+use ethstore::Crypto;
+use ethkey::Password;
 
-use std::fs::File;
-use rust_scrypt::{scrypt, ScryptParams};
-use connection::{RemoteNode, OriginatedConnection, OriginatedEncryptedConnection};
-use eth_protocol::EthProtocol;
+use connection::{OriginatedEncryptedConnection};
 
-fn get_string(v: &serde_json::Value, path: &Vec<&str>) -> String {
-    let mut curr = v;
-    for p in path {
-        curr = curr.get(p).expect(&format!("missing {}", p));
+/// 
+fn main() {
+    let opt = Opt::from_args();
+
+    stderrlog::new().module(module_path!())
+        .quiet(opt.quiet)
+        .verbosity(4)
+        .modules(vec!("umbrella", "eth"))
+        .init().unwrap();
+
+    trace!("Options {:?}", opt);
+
+    use rand::seq::{SliceRandom, IteratorRandom};
+    let mut rng = rand::thread_rng();
+
+    let network = opt.network.network();
+    let seed = network.seeds();
+    let seed = seed.choose(&mut rng).unwrap();
+    let seed = [&seed, ":", &network.port().to_string()].concat();
+
+    let pub_key = opt.sender().pub_key();
+    use crate::keys::slice_to_public;
+    let pub_key:PublicKey = slice_to_public(&pub_key).unwrap();
+
+    use std::net::{SocketAddr, ToSocketAddrs};
+    let seed: SocketAddr = seed.to_socket_addrs().unwrap().choose(&mut rng).unwrap();
+
+    let secret: Secret = match opt.sender().crypto() {
+        Some(ref s) => {
+            let cry: Crypto = Crypto::from_str(s).unwrap();
+            let password = Password::from(opt.sender().password());
+            cry.secret(&password).unwrap()
+        }
+        None => Secret::from_str(&opt.sender().secret().unwrap()).unwrap(),
     };
-    curr.as_str().expect(&format!("{} not a string", path.join("."))).to_string()
-}
 
-fn get_u64(v: &serde_json::Value, path: &Vec<&str>) -> u64 {
-    let mut curr = v;
-    for p in path {
-        curr = curr.get(p).expect(&format!("missing {}", p));
+    trace!("secret: {:?}", secret);
+    trace!("pubkey: {:?}", pub_key);
+    trace!("seed node: {:?}", seed);
+
+    use tiny_keccak::Keccak;
+    use ethkey::crypto::{ecdh, ecies};
+    use crate::keys::public_to_slice;
+    use ethkey::{sign, Secret, Public};
+    use ethereum_types::H256;
+
+    let nonce: Hash256 = Hash256::random();
+    let secp = Secp256k1::new();
+    
+    //handshake write
+    let (secret_key, public_key) = secp.generate_keypair(&mut rng);
+    let public_key_slice = public_to_slice(&public_key);
+    let secret = Secret::from_slice(&secret_key[0..32]).unwrap();
+
+    let (ecdhe_secret_key, ecdhe_public_key) = secp.generate_keypair(&mut rng);
+    let ecdhe_public_key_slice = public_to_slice(&ecdhe_public_key);
+    let ecdhe_secret = Secret::from_slice(&ecdhe_secret_key[0..32]).unwrap();
+
+    let mut data = [0u8; /*Signature::SIZE*/ 65 + /*H256::SIZE*/ 32 + /*Public::SIZE*/ 64 + /*H256::SIZE*/ 32 + 1]; //TODO: use associated constants
+    let data_len = data.len();
+    
+    data[data_len - 1] = 0x0;
+    let (sig, rest) = data.split_at_mut(65);
+    let (hepubk, rest) = rest.split_at_mut(32);
+    let (pubk, rest) = rest.split_at_mut(64);
+    let (data_nonce, _) = rest.split_at_mut(32);
+
+    // E(remote-pubk, S(ecdhe-random, ecdh-shared-secret^nonce) || H(ecdhe-random-pubk) || pubk || nonce || 0x0)
+    let node_key = Public::from_slice(&public_to_slice(&pub_key));
+    let shared: H256 = *ecdh::agree(&secret, &node_key).unwrap();
+
+    let xor = Hash256::from_slice(shared.as_bytes()) ^ nonce;
+    sig.copy_from_slice(&*sign(&ecdhe_secret, &H256::from_slice(xor.as_bytes())).unwrap());
+    Keccak::keccak256(&ecdhe_public_key_slice, hepubk);
+    pubk.copy_from_slice(&public_key_slice);
+    data_nonce.copy_from_slice(nonce.as_bytes());
+    
+    let message: Vec<u8> = ecies::encrypt(&node_key, &[], &data).unwrap();
+    let auth_cipher: Vec<u8> = message.clone();
+    
+    use connection::TcpReader;
+    use std::net::TcpStream;
+
+    let mut stream = TcpStream::connect_timeout(&seed, Duration::from_secs(1)).unwrap();
+    let is = stream.try_clone().unwrap();
+    let magic = network.magic();
+
+    debug!("Network magic: {:?}", magic);
+
+    let version = NodeKey {
+        version: message
     };
-    curr.as_u64().expect(&format!("{} not a as_u64", path.join(".")))
-}
-
-pub fn eth_main() {
-    let key_path = "keystore/secret_key";
-    let password = "test";
-
-    let file = File::open(key_path).expect(&format!("missing secret key file={:?}", key_path));
-    let json: serde_json::Value = serde_json::from_reader(&file).expect(&format!("failed to parse secret key file={:?}", key_path));
     
-    let version = get_u64(&json, &vec!["version"]);
-    if version != 3 { panic!("unsupported secret key file version={}", version) };
-    let cipher = get_string(&json, &vec!["crypto", "cipher"]);
-    if cipher != "aes-128-ctr" { panic!("unsupported cipher={}", cipher) };
-    let iv_hex = get_string(&json, &vec!["crypto", "cipherparams", "iv"]);
-    let ciphertext_hex = get_string(&json, &vec!["crypto", "ciphertext"]);
-    let kdf = get_string(&json, &vec!["crypto", "kdf"]);
-    if kdf != "scrypt" { panic!("kdf={} is not supported", kdf) };
-    let dklen = get_u64(&json, &vec!["crypto", "kdfparams", "dklen"]);
-    let n = get_u64(&json, &vec!["crypto", "kdfparams", "n"]);
-    let p = get_u64(&json, &vec!["crypto", "kdfparams", "p"]);
-    let r = get_u64(&json, &vec!["crypto", "kdfparams", "r"]);
-    let salt_hex = get_string(&json, &vec!["crypto", "kdfparams", "salt"]);
+    let ctx = &mut ();
+    let our_version = Message::NodeKey(version);
+    debug!("Write {:#?}", our_version);
+    our_version.write(&mut stream, magic, ctx).unwrap();
 
-    let salt = RemoteNode::decode_hex(&salt_hex).unwrap();
-    let params = ScryptParams { n: n, r: r as u32, p: p as u32 };
-    let mut secret_part: Vec<u8> = vec![0;32];
-    scrypt(password.as_bytes(), &salt, &params, &mut secret_part);
-
-    let iv = RemoteNode::decode_hex(&iv_hex).unwrap();
-    let ciphertext = RemoteNode::decode_hex(&ciphertext_hex).unwrap();
-    let mut secret_key: Vec<u8> = vec![0;32];
-    parity_crypto::aes::decrypt_128_ctr(&secret_part[0..16], &iv, &ciphertext, &mut secret_key).unwrap();
+    let mut reader: TcpReader = TcpReader(is);
     
-    let secret = Secret::from_slice(&secret_key).unwrap();
-    let enode: &str = "enode://16cabdd5c1049a54255a52ed775ee5ed1b4f3fd52bf25b751470a59bda8f093df563dc5d385103e46314ff5dacb8f37fcd988b20efc63b9b5fa78f5417971b48@127.0.0.1:30301";
-	let node: RemoteNode = RemoteNode::parse(enode).unwrap();
-	let connection: OriginatedConnection = OriginatedConnection::new(node);
-	let connection: OriginatedEncryptedConnection = OriginatedEncryptedConnection::new(connection);
-	let mut protocol: EthProtocol = EthProtocol::new(connection);
-	protocol.write_hello();
-	protocol.read_hello();
-	protocol.read_packet();
+    //handshake read
+    let data: Vec<u8> = reader.read_bytes(connection::RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4).unwrap();
+
+    let ack_cipher: Vec<u8> = data.clone().to_vec();
+    let (mut connection, mac_key_buf) = ecies::decrypt(&secret, &[], &data).map(|ack| {
+        use crate::hash512::Hash512;
+        use crate::connection::NULL_IV;
+
+        let mut remote_ephemeral: Public = Public::default();
+        let mut remote_nonce: Hash256 = Hash256::default();
+
+        remote_ephemeral.assign_from_slice(&ack[0..64]);
+        remote_nonce.copy_from_slice(&ack[64..(64+32)]);		
+
+        let ecdhe_secret = Secret::from_slice(&ecdhe_secret_key[0..32]).unwrap();
+		let shared = ecdh::agree(&ecdhe_secret, &remote_ephemeral).unwrap();
+		let mut nonce_material = Hash512::default();
+		(&mut nonce_material[0..32]).copy_from_slice(remote_nonce.as_bytes());
+		(&mut nonce_material[32..64]).copy_from_slice(nonce.as_bytes());
+		let mut key_material = Hash512::default();
+		(&mut key_material[0..32]).copy_from_slice(shared.as_bytes());
+		Keccak::keccak256(nonce_material.as_bytes_mut(), &mut key_material[32..64]);
+		let key_material_keccak = OriginatedEncryptedConnection::keccak(key_material.as_bytes());
+		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
+		let key_material_keccak = OriginatedEncryptedConnection::keccak(key_material.as_bytes());
+		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
+
+		// Using a 0 IV with CTR is fine as long as the same IV is never reused with the same key.
+		// This is the case here: ecdh creates a new secret which will be the symmetric key used
+		// only for this session the 0 IV is only use once with this secret, so we are in the case
+		// of same IV use for different key.
+        let encoder = Aes256Ctr::new(GenericArray::from_slice(&key_material[32..64]), GenericArray::from_slice(&NULL_IV));
+		let decoder = Aes256Ctr::new(GenericArray::from_slice(&key_material[32..64]), GenericArray::from_slice(&NULL_IV));
+
+		let key_material_keccak = OriginatedEncryptedConnection::keccak(key_material.as_bytes());
+		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
+        
+        let mut mac_key_buf = [0;32];
+        mac_key_buf.copy_from_slice(&key_material[32..64]);
+
+		let mac_encoder_key: SecretKey = SecretKey::from_slice(&key_material[32..64]).unwrap();
+
+		let mut egress_mac = Keccak::new_keccak256();
+		let mut mac_material = Hash256::from_slice(&key_material[32..64]) ^ remote_nonce;
+		egress_mac.update(mac_material.as_bytes());
+		egress_mac.update(&auth_cipher);
+
+		let mut ingress_mac = Keccak::new_keccak256();
+		mac_material = Hash256::from_slice(&key_material[32..64]) ^ nonce;
+		ingress_mac.update(mac_material.as_bytes());
+		ingress_mac.update(&ack_cipher);
+
+		(OriginatedEncryptedConnection {
+			stream: reader,
+			encoder: encoder,
+			decoder: decoder,
+			mac_encoder_key: mac_encoder_key,
+			egress_mac: egress_mac,
+			ingress_mac: ingress_mac,
+			public_key: public_key,
+		}, mac_key_buf)
+    }).unwrap();
+
+	//let mut protocol: EthProtocol = EthProtocol::new(connection);
+    use rlp::{RlpStream, Rlp};
+
+    const PACKET_HELLO: u8 = 0x80; // actually 0x00 rlp doc "The integer 0 = [ 0x80 ]"
+    const PACKET_PING: u8 = 0x02;
+    const PACKET_PONG: u8 = 0x03;
+    const PACKET_USER: u8 = 0x10;
+    const PACKET_STATUS: u8 = 0x00 + PACKET_USER;
+    const PACKET_TRANSACTIONS: u8 = 0x02 + PACKET_USER;
+    const PACKET_NEW_BLOCK: u8 = 0x07 + PACKET_USER;
+    
+    let hello = Hello {
+        public_key: public_key,
+        mac_encoder_key: SecretKey::from_slice(&mac_key_buf).unwrap(),
+    };
+
+    trace!("write out hello");
+    let our_hello = Message::Hello(hello);
+    our_hello.write(&mut stream, magic, &mut connection).unwrap();
+
+    //fn read_hello()
+    trace!("Read hello from remote");
+	connection.read_packet().map(|packet| {
+        match packet.first() {
+            Some(&PACKET_HELLO) => {
+                let rlp = Rlp::new(&packet[1..]);
+                let peer_caps: Rlp = rlp.at(2).unwrap();
+
+                peer_caps.is_list();
+                peer_caps.item_count().unwrap();
+
+                let peer_cap = peer_caps.at(0).unwrap();
+
+                let p: u8 = peer_cap.val_at(1).unwrap();
+
+                println!("hello from remote! peer_caps={:?}", p);
+            },
+            Some(msg) => panic!("not a hello message id={}, expect={}", msg, PACKET_HELLO),
+            None => panic!("empty hello message"),
+        }
+    }).unwrap();
+
+	//protocol.read_packet();
+    trace!("Read some packet");
+    let res: Option<Vec<u8>> = connection.read_packet();
+    let data: &[u8] = match res {
+        Some(ref data) if data.len() > 1 => data,
+        Some(data) => panic!("broken packet={:?}", &data),
+        None => return,
+    };
+    let packet_id: u8 = data[0];
+    let compressed: &[u8] = &data[1..];
+    let packet: Vec<u8> = parity_snappy::decompress(compressed).unwrap();
+    let rlp: Rlp = Rlp::new(&packet);
+    match packet_id {
+        PACKET_PING => println!("ping packet"),
+        PACKET_PONG => println!("pong packet"),
+        PACKET_STATUS => {
+            let protocol_version: u8 = rlp.val_at(0).unwrap();
+            let network_id: u64 = rlp.val_at(1).unwrap();
+            let difficulty: U256 = rlp.val_at(2).unwrap();
+            let latest_hash: Vec<u8> = rlp.val_at(3).unwrap();
+            let genesis: Vec<u8> = rlp.val_at(4).unwrap();
+
+            println!("status packet. protocol_version={}, network_id={}, difficulty={:?}, latest_hash={:?}, genesis={:?}", protocol_version, network_id, difficulty.0, latest_hash, &genesis);
+
+            let mut rlp = RlpStream::new_list(5);
+            rlp.append(&protocol_version)
+                .append(&network_id)
+                .append(&difficulty)
+                .append(&latest_hash)
+                .append(&genesis);
+
+            //self.write_packet(PACKET_STATUS, &rlp.out());
+            let data = &rlp.out();
+            let mut rlp = RlpStream::new();
+		    rlp.append(&(u32::from(PACKET_STATUS)));
+		    let mut compressed = Vec::new();
+		    let len = parity_snappy::compress_into(data, &mut compressed);
+		    let payload = &compressed[0..len];
+		    rlp.append_raw(payload, 1);
+		    connection.write_packet(&rlp.out());
+
+        },
+        PACKET_TRANSACTIONS => println!("transactions packet"),
+        PACKET_NEW_BLOCK => println!("new block packet"),
+        _ => println!("unknown packet={}", packet_id),
+    }
+
+    //
 	let t = Transaction {
 		nonce: U256::from(2),
 		gas_price: U256::from(1_000_000_000u64),
 		gas: U256::from(21_000),
-		action: Action::Call(Address::from_str("448e67382b81db59f6cd35ccf4df7f774930a05a").unwrap()),
+		action: Action::Call(Address::from_str(&opt.sender().out_address()).unwrap()),
 		value: U256::from(10),
 		data: Vec::new(),
 	};
 	let singed_transaction = t.sign(&secret, Some(123));
-	protocol.write_transactions(&vec![&singed_transaction]);
-    println!("transaction hash={:?}", singed_transaction.hash());
-    loop {
-		protocol.read_packet();
-		thread::sleep(Duration::from_millis(3000));
-		protocol.write_ping();
+
+    //protocol.write_transactions(&vec![&singed_transaction]);
+    let transactions = &vec![&singed_transaction];
+    let mut rlp = RlpStream::new_list(transactions.len());
+	for t in transactions {
+		rlp.append(*t);
 	}
+    let data = &rlp.out();
+    let mut rlp = RlpStream::new();
+	rlp.append(&(u32::from(PACKET_TRANSACTIONS)));
+	let mut compressed = Vec::new();
+	let len = parity_snappy::compress_into(data, &mut compressed);
+	let payload = &compressed[0..len];
+	rlp.append_raw(payload, 1);
+	connection.write_packet(&rlp.out());
+
+    debug!("transaction : {:?}", singed_transaction);
+    debug!("        hash: {:?}", singed_transaction.hash());
 }
 
 #[cfg(test)]
@@ -370,7 +576,7 @@ mod tests {
 
         let secp = Secp256k1::new();
 
-        let secret_key = SecretKey::from_slice(&secp, &payload[..32]).expect("32 bytes, within curve order");
+        let secret_key = SecretKey::from_slice(&payload[..32]).expect("32 bytes, within curve order");
         let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
         println!("sec: {:?}", secret_key);
         println!("pub: {:?}", hex::encode(&pub_key.serialize().as_ref()));

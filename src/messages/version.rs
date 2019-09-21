@@ -8,6 +8,7 @@ use crate::var_int;
 use crate::result::{Error, Result};
 use crate::serdes::Serializable;
 use crate::util::secs_since;
+use crate::ctx::Ctx;
 
 /// Protocol version supported by this library
 pub const PROTOCOL_VERSION: u32 = 70015;
@@ -58,15 +59,15 @@ impl Version {
 }
 
 impl Serializable<Version> for Version {
-    fn read(reader: &mut dyn Read) -> Result<Version> {
+    fn read(reader: &mut dyn Read, ctx: &mut dyn Ctx) -> Result<Version> {
         let mut ret = Version {
             ..Default::default()
         };
         ret.version = reader.read_u32::<LittleEndian>()?;
         ret.services = reader.read_u64::<LittleEndian>()?;
         ret.timestamp = reader.read_i64::<LittleEndian>()?;
-        ret.recv_addr = NodeAddr::read(reader)?;
-        ret.tx_addr = NodeAddr::read(reader)?;
+        ret.recv_addr = NodeAddr::read(reader, ctx)?;
+        ret.tx_addr = NodeAddr::read(reader, ctx)?;
         ret.nonce = reader.read_u64::<LittleEndian>()?;
         let user_agent_size = var_int::read(reader)? as usize;
         let mut user_agent_bytes = vec![0; user_agent_size];
@@ -77,12 +78,12 @@ impl Serializable<Version> for Version {
         Ok(ret)
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&self, writer: &mut dyn Write,ctx: &mut dyn Ctx) -> io::Result<()> {
         writer.write_u32::<LittleEndian>(self.version)?;
         writer.write_u64::<LittleEndian>(self.services)?;
         writer.write_i64::<LittleEndian>(self.timestamp)?;
-        self.recv_addr.write(writer)?;
-        self.tx_addr.write(writer)?;
+        self.recv_addr.write(writer, ctx)?;
+        self.tx_addr.write(writer, ctx)?;
         writer.write_u64::<LittleEndian>(self.nonce)?;
         var_int::write(self.user_agent.as_bytes().len() as u64, writer)?;
         writer.write(&self.user_agent.as_bytes())?;

@@ -11,6 +11,7 @@ use rand::RngCore;
 use std::ops::{Index};
 use core::slice::SliceIndex;
 use core::ops::{BitXor, BitXorAssign};
+use super::ctx::Ctx;
 
 /// 256-bit hash for blocks and transactions
 ///
@@ -70,13 +71,13 @@ impl Hash256 {
 }
 
 impl Serializable<Hash256> for Hash256 {
-    fn read(reader: &mut dyn Read) -> Result<Hash256> {
+    fn read(reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<Hash256> {
         let mut bytes = [0; 32];
         reader.read(&mut bytes)?;
         Ok(Hash256(bytes))
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
         match writer.write(&self.0) {
             Ok(_size) => Ok(()),
             Err(e) => Err(e),

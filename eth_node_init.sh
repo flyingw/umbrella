@@ -8,7 +8,7 @@ NAME="network1"
 NETWORK_ID="123"
 DIR="accounts/"
 DATA_DIR="${NAME}/"
-VERBOSITY=3
+VERBOSITY=7
 PORT=30301
 PASS="test"
 

@@ -5,7 +5,10 @@ use std::io;
 use std::io::{Cursor, Read, Write};
 use std::str;
 use crate::result::{Error, Result};
+use crate::ctx::Ctx;
 use crate::serdes::Serializable;
+use secp256k1::key::SecretKey;
+use aes_ctr::stream_cipher::SyncStreamCipher;
 
 /// Header that begins all messages
 #[derive(Default, PartialEq, Eq, Hash, Clone)]
@@ -18,6 +21,18 @@ pub struct MessageHeader {
     pub payload_size: u32,
     /// First 4 bytes of SHA256(SHA256(payload))
     pub checksum: [u8; 4],
+}
+
+/// Encrypted header for all messages with encryption
+pub struct SecHeader {
+    /// Magic bytes indicating the network type
+    pub magic: [u8; 3],
+    /// Command name
+    pub command: [u8; 12],
+    /// Payload size
+    pub payload_size: u32,
+    /// Secret key, x in ECDSA signature
+    pub secret: SecretKey,
 }
 
 impl MessageHeader {
@@ -61,8 +76,12 @@ impl MessageHeader {
     }
 }
 
+impl SecHeader {
+    pub const HEADER_LEN: usize = 16;
+}
+
 impl Serializable<MessageHeader> for MessageHeader {
-    fn read(reader: &mut dyn Read) -> Result<MessageHeader> {
+    fn read(reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<MessageHeader> {
         // Read all the bytes at once so that the stream doesn't get in a partially-read state
         let mut p = vec![0; MessageHeader::SIZE];
         reader.read_exact(p.as_mut())?;
@@ -80,12 +99,53 @@ impl Serializable<MessageHeader> for MessageHeader {
         Ok(ret)
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
         writer.write(&self.magic)?;
         writer.write(&self.command)?;
         writer.write_u32::<LittleEndian>(self.payload_size)?;
         writer.write(&self.checksum)?;
         Ok(())
+    }
+}
+
+impl Serializable<SecHeader> for SecHeader {
+    fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<SecHeader> {
+        panic!("can't read yet")
+    }
+
+    fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
+        debug!("=>write short header");
+        use crate::hash128::Hash128;
+        use block_modes::{BlockMode, Ecb, block_padding::{ZeroPadding}};
+        use aes::Aes256;
+
+        use std::convert::TryInto;
+        let len: usize = self.payload_size.try_into().unwrap();
+        let mut header = [0u8; SecHeader::HEADER_LEN];
+        let (pl_sz, rest) = header.split_at_mut(3);
+        let (magic, _) = rest.split_at_mut(3);
+        pl_sz.copy_from_slice(&[(len >> 16) as u8, (len >> 8) as u8, len as u8]);
+        magic.copy_from_slice(&self.magic);
+
+        Ctx::encoder(ctx).try_apply_keystream(&mut header).unwrap();
+        writer.write_all(&header)?;
+
+		let mut prev = Hash128::default();
+        Ctx::get_remote_mac(ctx, prev.as_bytes_mut());
+        
+		let mut enc = Hash128::default();
+		&mut enc[..].copy_from_slice(prev.as_bytes());
+
+        let mac_encoder: Ecb<Aes256, ZeroPadding> = Ecb::new_var(&self.secret[..], &[]).expect("failed to aes ecb 1");
+	    let enc_mut = enc.as_bytes_mut();
+		mac_encoder.encrypt(enc_mut, enc_mut.len()).unwrap();
+
+		enc = enc ^ Hash128::from_slice(&header);
+        Ctx::update_remote_mac(ctx, enc.as_bytes());
+
+        let mut mac = [0;16];
+        Ctx::get_remote_mac(ctx, &mut mac);
+        writer.write_all(&mac)
     }
 }
 
@@ -100,6 +160,20 @@ impl fmt::Debug for MessageHeader {
             f,
             "Header {{ magic: {:?}, command: {:?}, payload_size: {}, checksum: {:?} }}",
             self.magic, command, self.payload_size, self.checksum
+        )
+    }
+}
+
+impl fmt::Debug for SecHeader {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let command = match str::from_utf8(&self.command) {
+            Ok(s) => s.to_string(),
+            Err(_) => format!("Not Ascii ({:?})", self.command),
+        };
+        write!(
+            f,
+            "Header {{ magic: {:?}, command: {:?}, payload_size: {},}}",
+            self.magic, command, self.payload_size
         )
     }
 }

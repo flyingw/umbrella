@@ -4,6 +4,7 @@ use std::io;
 use std::io::{Read, Write};
 use crate::result::Result;
 use crate::serdes::Serializable;
+use crate::ctx::Ctx;
 
 /// Specifies whether compact blocks are supported
 #[derive(Debug, Default, PartialEq, Eq, Hash, Clone)]
@@ -25,13 +26,13 @@ impl SendCmpct {
 }
 
 impl Serializable<SendCmpct> for SendCmpct {
-    fn read(reader: &mut dyn Read) -> Result<SendCmpct> {
+    fn read(reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<SendCmpct> {
         let enable = reader.read_u8()?;
         let version = reader.read_u64::<LittleEndian>()?;
         Ok(SendCmpct { enable, version })
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
         writer.write_u8(self.enable)?;
         writer.write_u64::<LittleEndian>(self.version)
     }

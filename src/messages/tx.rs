@@ -10,6 +10,7 @@ use crate::var_int;
 use crate::hash256::{sha256d, Hash256};
 use crate::result::Result;
 use crate::serdes::Serializable;
+use crate::ctx::Ctx;
 
 /// Bitcoin transaction
 #[derive(Default, PartialEq, Eq, Hash, Clone)]
@@ -26,9 +27,9 @@ pub struct Tx {
 
 impl Tx {
     /// Calculates the hash of the transaction also known as the txid
-    pub fn hash(&self) -> Hash256 {
+    pub fn hash(&mut self) -> Hash256 {
         let mut b = Vec::with_capacity(self.size());
-        self.write(&mut b).unwrap();
+        self.write(&mut b, &mut ()).unwrap();
         sha256d(&b)
     }
 
@@ -41,18 +42,18 @@ impl Tx {
 }
 
 impl Serializable<Tx> for Tx {
-    fn read(reader: &mut dyn Read) -> Result<Tx> {
+    fn read(reader: &mut dyn Read, ctx: &mut dyn Ctx) -> Result<Tx> {
         let version = reader.read_i32::<LittleEndian>()?;
         let version = version as u32;
         let n_inputs = var_int::read(reader)?;
         let mut inputs = Vec::with_capacity(n_inputs as usize);
         for _i in 0..n_inputs {
-            inputs.push(TxIn::read(reader)?);
+            inputs.push(TxIn::read(reader, ctx)?);
         }
         let n_outputs = var_int::read(reader)?;
         let mut outputs = Vec::with_capacity(n_outputs as usize);
         for _i in 0..n_outputs {
-            outputs.push(TxOut::read(reader)?);
+            outputs.push(TxOut::read(reader, ctx)?);
         }
         let lock_time = reader.read_u32::<LittleEndian>()?;
         Ok(Tx {
@@ -63,15 +64,15 @@ impl Serializable<Tx> for Tx {
         })
     }
 
-    fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
+    fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
         writer.write_u32::<LittleEndian>(self.version)?;
         var_int::write(self.inputs.len() as u64, writer)?;
         for tx_in in self.inputs.iter() {
-            tx_in.write(writer)?;
+            tx_in.write(writer, ctx)?;
         }
         var_int::write(self.outputs.len() as u64, writer)?;
         for tx_out in self.outputs.iter() {
-            tx_out.write(writer)?;
+            tx_out.write(writer, ctx)?;
         }
         writer.write_u32::<LittleEndian>(self.lock_time)?;
         Ok(())

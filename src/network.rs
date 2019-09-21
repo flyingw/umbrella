@@ -30,10 +30,10 @@ impl Network {
     /// Returns the default TCP port
     pub fn port(&self) -> u16 {
         match self {
-            Network::Mainnet => 8333,
-            Network::Testnet => 18333,
-            Network::Regtest => 18444,
-            Network::Ethereum => 30303,
+            Network::Mainnet    => 8333,
+            Network::Testnet    => 18333,
+            Network::Regtest    => 18444,
+            Network::Ethereum   => 30301,
             Network::BtcRegtest => 18444,
         }
     }
@@ -44,7 +44,7 @@ impl Network {
             Network::Mainnet => [0xe3, 0xe1, 0xf3, 0xe8],
             Network::Testnet => [0xf4, 0xe5, 0xf3, 0xf4],
             Network::Regtest => [0xda, 0xb5, 0xbf, 0xfa],
-            Network::Ethereum => [0x00, 0x00, 0x00, 0x00],
+            Network::Ethereum => [0xc2, 0x80, 0x80, 0x00],
             Network::BtcRegtest => [0xfa, 0xbf, 0xb5, 0xda],
         }
     }
@@ -129,9 +129,9 @@ impl Network {
             // seed nodes which actually can return the ips of real nodes.
             // but its not implemented yet, so just return name for localhost here
             // and add some parsing for enode:// format.
-            Network::Regtest => vec!["localhost".to_string()],
-            Network::Ethereum => vec!["localhost".to_string()],
-            Network::BtcRegtest => vec!["127.0.0.1".to_string()],
+            Network::Regtest    => vec!["localhost".to_string()],
+            Network::Ethereum   => vec!["localhost".to_string()],
+            Network::BtcRegtest => vec!["localhost".to_string()],
         }
     }
 }

@@ -1,16 +1,20 @@
-use super::message_header::MessageHeader;
+use super::message_header::{MessageHeader,SecHeader};
 use super::ping::Ping;
 use super::reject::Reject;
 use super::send_cmpct::SendCmpct;
 use super::fee_filter::FeeFilter;
 use super::tx::Tx;
 use super::version::Version;
+use super::node_key::NodeKey;
+use super::hello::Hello;
 use ring::digest;
 use std::fmt;
 use std::io;
 use std::io::{Cursor, Read, Write};
 use crate::result::{Error, Result};
 use crate::serdes::Serializable;
+use crate::ctx::Ctx;
+use secp256k1::key::SecretKey;
 
 /// Checksum to use when there is an empty payload
 pub const NO_CHECKSUM: [u8; 4] = [0x5d, 0xf6, 0xe0, 0xe2];
@@ -18,10 +22,24 @@ pub const NO_CHECKSUM: [u8; 4] = [0x5d, 0xf6, 0xe0, 0xe2];
 /// Max message payload size (32MB)
 pub const MAX_PAYLOAD_SIZE: u32 = 0x02000000;
 
+pub type ProtocolId = [u8; 3];
+
+pub struct CapabilityInfo {
+    pub protocol: ProtocolId,
+    pub version: u8,
+    pub packet_count: u8,
+}
+
+pub const ETH_PROTOCOL: ProtocolId = *b"eth";
+pub const ETH_PROTOCOL_VERSION_63: (u8, u8) = (63, 0x11);
+pub const ETH_63_CAPABILITY: CapabilityInfo = CapabilityInfo { 
+    protocol: ETH_PROTOCOL,
+    version: ETH_PROTOCOL_VERSION_63.0,
+    packet_count: ETH_PROTOCOL_VERSION_63.1
+};
+
 /// Message commands for the header
 pub mod commands {
-    use std::collections::HashSet;
-
     /// [Ping command](https://en.bitcoin.it/wiki/Protocol_documentation#ping)
     pub const PING: [u8; 12] = *b"ping\0\0\0\0\0\0\0\0";
 
@@ -46,24 +64,13 @@ pub mod commands {
     // [Fee filter command](https://en.bitcoin.it/wiki/Protocol_documentation#feefilter)
     pub const FEEFILTER: [u8; 12] = *b"feefilter\0\0\0";
 
-    lazy_static! {
-        /// Commands that this node is allowed to receive after handshake is complete.
-        /// Includes everything but version and verack.
-        pub static ref ALLOWED: HashSet<[u8; 12]> = {
-            let mut s = HashSet::new();
-            s.insert(PING);
-            s.insert(PONG);
-            s.insert(FEEFILTER);
-            s.insert(REJECT);
-            s.insert(SENDCMPCT);
-            s.insert(TX);
-            s
-        };
-    }
+    // [no such command]
+    pub const HELLO: [u8; 12] = *b"hello\0\0\0\0\0\0\0";
+    
 }
 
 /// Bitcoin peer-to-peer message with its payload
-#[derive(PartialEq, Eq, Hash, Clone)]
+//#[derive(PartialEq, Eq, Hash, Clone)]
 pub enum Message {
     FeeFilter(FeeFilter),
     Other(String),
@@ -75,6 +82,8 @@ pub enum Message {
     Tx(Tx),
     Verack,
     Version(Version),
+    NodeKey(NodeKey),
+    Hello(Hello),
 }
 
 impl Message {
@@ -83,10 +92,10 @@ impl Message {
     /// It's possible for a message's header to be read but not its payload. In this case, the
     /// return value is not an Error but a Partial message, and the complete message may be read
     /// later using read_partial.
-    pub fn read(reader: &mut dyn Read, magic: [u8; 4]) -> Result<Self> {
-        let header = MessageHeader::read(reader)?;
+    pub fn read(reader: &mut dyn Read, magic: [u8; 4], ctx: &mut dyn Ctx) -> Result<Self> {
+        let header = MessageHeader::read(reader, ctx)?;
         header.validate(magic, MAX_PAYLOAD_SIZE)?;
-        match Message::read_partial(reader, &header) {
+        match Message::read_partial(reader, &header, ctx) {
             Ok(msg) => Ok(msg),
             Err(e) => {
                 if let Error::IOError(ref e) = e {
@@ -104,53 +113,53 @@ impl Message {
     /// Reads the complete message given a message header
     ///
     /// It may be used after read() returns Message::Partial.
-    pub fn read_partial(reader: &mut dyn Read, header: &MessageHeader) -> Result<Self> {
+    pub fn read_partial(reader: &mut dyn Read, header: &MessageHeader, ctx: &mut dyn Ctx) -> Result<Self> {
         // Ping
         if header.command == commands::PING {
             let payload = header.payload(reader)?;
-            let ping = Ping::read(&mut Cursor::new(payload))?;
+            let ping = Ping::read(&mut Cursor::new(payload), ctx)?;
             return Ok(Message::Ping(ping));
         }
 
         // Pong
         if header.command == commands::PONG {
             let payload = header.payload(reader)?;
-            let pong = Ping::read(&mut Cursor::new(payload))?;
+            let pong = Ping::read(&mut Cursor::new(payload), ctx)?;
             return Ok(Message::Pong(pong));
         }
 
         // Reject
         if header.command == commands::REJECT {
             let payload = header.payload(reader)?;
-            let reject = Reject::read(&mut Cursor::new(payload))?;
+            let reject = Reject::read(&mut Cursor::new(payload), ctx)?;
             return Ok(Message::Reject(reject));
         }
 
         // Sendcmpct
         if header.command == commands::SENDCMPCT {
             let payload = header.payload(reader)?;
-            let sendcmpct = SendCmpct::read(&mut Cursor::new(payload))?;
+            let sendcmpct = SendCmpct::read(&mut Cursor::new(payload), ctx)?;
             return Ok(Message::SendCmpct(sendcmpct));
         }
 
         // Feefilter
         if header.command == commands::FEEFILTER {
             let payload = header.payload(reader)?;
-            let feefilter = FeeFilter::read(&mut Cursor::new(payload))?;
+            let feefilter = FeeFilter::read(&mut Cursor::new(payload), ctx)?;
             return Ok(Message::FeeFilter(feefilter));
         }
 
         // Tx
         if header.command == commands::TX {
             let payload = header.payload(reader)?;
-            let tx = Tx::read(&mut Cursor::new(payload))?;
+            let tx = Tx::read(&mut Cursor::new(payload), ctx)?;
             return Ok(Message::Tx(tx));
         }
 
         // Version
         if header.command == commands::VERSION {
             let payload = header.payload(reader)?;
-            let version = Version::read(&mut Cursor::new(payload))?;
+            let version = Version::read(&mut Cursor::new(payload), ctx)?;
             version.validate()?;
             return Ok(Message::Version(version));
         }
@@ -172,8 +181,9 @@ impl Message {
     }
 
     /// Writes a Bitcoin P2P message with its payload to bytes
-    pub fn write(&self, writer: &mut dyn Write, magic: [u8; 4]) -> io::Result<()> {
+    pub fn write(&self, writer: &mut dyn Write, magic: [u8; 4], ctx: &mut dyn Ctx) -> io::Result<()> {
         use self::commands::*;
+        use std::convert::TryInto;
         match self {
             Message::Other(s) => Err(io::Error::new(io::ErrorKind::InvalidData, s.as_ref())),
             Message::Partial(_) => Err(io::Error::new(
@@ -188,6 +198,8 @@ impl Message {
             Message::Tx(p) => write_with_payload(writer, TX, p, magic),
             Message::Verack => write_without_payload(writer, VERACK, magic),
             Message::Version(v) => write_with_payload(writer, VERSION, v, magic),
+            Message::NodeKey(v) => v.write(writer, &mut ()),
+            Message::Hello(h) => write_with_payload2(writer, HELLO, h, magic[..3].try_into().expect("shortened magic"), ctx, h.mac_encoder_key),
         }
     }
 }
@@ -205,9 +217,13 @@ impl fmt::Debug for Message {
             Message::Tx(p) => f.write_str(&format!("{:#?}", p)),
             Message::Verack => f.write_str("Verack"),
             Message::Version(p) => f.write_str(&format!("{:#?}", p)),
+            Message::NodeKey(v) => f.write_str(&format!("{:#?}", v)),
+            Message::Hello(h) => f.write_str(&format!("{:#?}", h)),
         }
     }
 }
+
+
 
 fn write_without_payload(
     writer: &mut dyn Write,
@@ -220,7 +236,32 @@ fn write_without_payload(
         payload_size: 0,
         checksum: NO_CHECKSUM,
     };
-    header.write(writer)
+    header.write(writer, &mut ())
+}
+
+fn write_with_payload2<T:Serializable<T>>(
+    writer: &mut dyn Write,
+    command: [u8; 12],
+    payload: &dyn Payload<T>,
+    magic: [u8; 3],
+    ctx: &mut dyn Ctx,
+    secret: SecretKey,
+) -> io::Result<()>{
+    debug!("  cmd: {:?}", command);
+    debug!("magic: {:?}", magic);
+    debug!(" size: {:?}", payload.size());
+
+    let header = SecHeader{
+        magic,
+        command, 
+        payload_size: payload.size() as u32,
+        secret: secret,
+    };
+
+    debug!("header {:?}", &header);
+    header.write(writer, ctx)?;
+
+    payload.write(writer, ctx)
 }
 
 fn write_with_payload<T: Serializable<T>>(
@@ -230,7 +271,7 @@ fn write_with_payload<T: Serializable<T>>(
     magic: [u8; 4],
 ) -> io::Result<()> {
     let mut bytes = Vec::with_capacity(payload.size());
-    payload.write(&mut bytes)?;
+    payload.write(&mut bytes, &mut ())?;
     let hash = digest::digest(&digest::SHA256, bytes.as_ref());
     let hash = digest::digest(&digest::SHA256, &hash.as_ref());
     let h = &hash.as_ref();
@@ -243,8 +284,8 @@ fn write_with_payload<T: Serializable<T>>(
         checksum: checksum,
     };
 
-    header.write(writer)?;
-    payload.write(writer)
+    header.write(writer, &mut ())?;
+    payload.write(writer, &mut ())
 }
 
 /// Message payload that is writable to bytes
