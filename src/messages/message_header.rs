@@ -102,7 +102,9 @@ impl SecHeader {
         enc = enc ^ prev;
         ctx.update_local_mac(enc.as_bytes());
 	    let mac = &payload[(payload.len() - SecHeader::HEADER_LEN)..];
-		if mac != prev.as_bytes() { panic!("paylaod auth error. mac is not valid"); }
+        let mut expect = Hash128::default();
+        ctx.get_local_mac(expect.as_bytes_mut());
+		if mac != expect.as_bytes() { panic!("paylaod auth error. mac is not valid"); }
 		
 		ctx.decoder().try_apply_keystream(&mut payload[..payload_size + padding]).unwrap();
 		payload.truncate(payload_size);
@@ -153,7 +155,9 @@ impl Serializable<SecHeader> for SecHeader {
         enc = enc ^ Hash128::from_slice(&header[..SecHeader::HEADER_LEN]);
         ctx.update_local_mac(enc.as_bytes());
         let mac = &header[SecHeader::HEADER_LEN..];
-        if mac != prev.as_bytes() { panic!("header auth error. mac is not valid"); }
+        let mut expect = Hash128::default();
+        ctx.get_local_mac(expect.as_bytes_mut());
+        if mac != expect.as_bytes() { panic!("header auth error. mac is not valid"); }
 
         ctx.decoder().try_apply_keystream(&mut header[..SecHeader::HEADER_LEN]).expect("failed aes ctr 1");
         let length = ((((header[0] as u32) << 8) + (header[1] as u32)) << 8) + (header[2] as u32);

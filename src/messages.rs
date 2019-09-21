@@ -21,7 +21,7 @@ pub use tx_in::TxIn;
 pub use tx_out::TxOut;
 pub use out_point::OutPoint;
 pub use message::{Message, Payload}; 
-pub use message_header::MessageHeader;
+pub use message_header::{MessageHeader, SecHeader};
 pub use ping::Ping;
 pub use node_key::NodeKey;
 pub use hello::Hello;
