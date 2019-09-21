@@ -30,15 +30,6 @@ pub struct CapabilityInfo {
     pub packet_count: u8,
 }
 
-use rlp::{RlpStream, Encodable};
-
-impl Encodable for CapabilityInfo {
-    fn rlp_append(&self, s: &mut RlpStream) {
-        s.begin_list(2);
-        s.append(&&self.protocol[..]);
-        s.append(&self.version);
-    }
-}
 pub const ETH_PROTOCOL: ProtocolId = *b"eth";
 pub const ETH_PROTOCOL_VERSION_63: (u8, u8) = (63, 0x11);
 pub const ETH_63_CAPABILITY: CapabilityInfo = CapabilityInfo { 

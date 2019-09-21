@@ -438,14 +438,11 @@ fn main() {
     const PACKET_TRANSACTIONS: u8 = 0x02 + PACKET_USER;
     const PACKET_NEW_BLOCK: u8 = 0x07 + PACKET_USER;
     
-
-    //fn write_hello()
     let hello = Hello {
         public_key: public_key,
         mac_encoder_key: SecretKey::from_slice(&mac_key_buf).unwrap(),
     };
 
-    //let ctx = &mut connection;
     trace!("write out hello");
     let our_hello = Message::Hello(hello);
     our_hello.write(&mut stream, magic, &mut connection).unwrap();
