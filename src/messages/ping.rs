@@ -20,7 +20,7 @@ impl Ping {
 }
 
 impl Serializable<Ping> for Ping {
-    fn read(reader: &mut dyn Read) -> Result<Ping> {
+    fn read(reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<Ping> {
         let nonce = reader.read_u64::<LittleEndian>()?;
         Ok(Ping { nonce })
     }

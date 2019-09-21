@@ -24,7 +24,7 @@ pub struct Hello {
 }
 
 impl Serializable<Hello> for Hello{
-    fn read(_reader: &mut dyn Read) -> Result<Hello> {
+    fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<Hello> {
         panic!("can't read yet");
     }
 

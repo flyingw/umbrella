@@ -26,7 +26,7 @@ impl SendCmpct {
 }
 
 impl Serializable<SendCmpct> for SendCmpct {
-    fn read(reader: &mut dyn Read) -> Result<SendCmpct> {
+    fn read(reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<SendCmpct> {
         let enable = reader.read_u8()?;
         let version = reader.read_u64::<LittleEndian>()?;
         Ok(SendCmpct { enable, version })

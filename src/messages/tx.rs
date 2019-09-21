@@ -42,18 +42,18 @@ impl Tx {
 }
 
 impl Serializable<Tx> for Tx {
-    fn read(reader: &mut dyn Read) -> Result<Tx> {
+    fn read(reader: &mut dyn Read, ctx: &mut dyn Ctx) -> Result<Tx> {
         let version = reader.read_i32::<LittleEndian>()?;
         let version = version as u32;
         let n_inputs = var_int::read(reader)?;
         let mut inputs = Vec::with_capacity(n_inputs as usize);
         for _i in 0..n_inputs {
-            inputs.push(TxIn::read(reader)?);
+            inputs.push(TxIn::read(reader, ctx)?);
         }
         let n_outputs = var_int::read(reader)?;
         let mut outputs = Vec::with_capacity(n_outputs as usize);
         for _i in 0..n_outputs {
-            outputs.push(TxOut::read(reader)?);
+            outputs.push(TxOut::read(reader, ctx)?);
         }
         let lock_time = reader.read_u32::<LittleEndian>()?;
         Ok(Tx {

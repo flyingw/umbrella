@@ -28,8 +28,8 @@ impl TxIn {
 }
 
 impl Serializable<TxIn> for TxIn {
-    fn read(reader: &mut dyn Read) -> Result<TxIn> {
-        let prev_output = OutPoint::read(reader)?;
+    fn read(reader: &mut dyn Read, ctx: &mut dyn Ctx) -> Result<TxIn> {
+        let prev_output = OutPoint::read(reader, ctx)?;
         let script_len = var_int::read(reader)?;
         let mut sig_script = Script(vec![0; script_len as usize]);
         reader.read(&mut sig_script.0)?;

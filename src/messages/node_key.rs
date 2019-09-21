@@ -12,7 +12,7 @@ pub struct NodeKey {
 }
 
 impl Serializable<NodeKey> for NodeKey {
-    fn read(_reader: &mut dyn Read) -> Result<NodeKey> {
+    fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<NodeKey> {
         Ok(NodeKey {version:vec![]})
     }
 
