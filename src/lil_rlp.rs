@@ -53,3 +53,44 @@ pub fn get_num(iter: &mut Iter<u8>) -> Option<u128> {
         panic!("not a num")
     }
 }
+
+pub fn put_num(buf: &mut Vec<u8>, n: u128) {
+    if n == 0 {
+        buf.push(0x80u8)
+    } else if n <= 0x7f {
+        buf.push(n as u8);
+    } else {
+        let bytes: Vec<u8> = n.to_be_bytes().iter().skip_while(|x| *x == &0x0u8).map(|x| *x).collect();
+        let size = 0x80u8 + (bytes.len() as u8);
+        buf.push(size);
+        buf.extend_from_slice(&bytes);
+    }
+}
+
+pub fn put_str(buf: &mut Vec<u8>, bytes: &Vec<u8>) {
+    if bytes.len() < 55 {
+        buf.push(0x80u8 + (bytes.len() as u8));
+        buf.extend_from_slice(&bytes);
+    } else {
+        let len_bytes: Vec<u8> = buf.len().to_be_bytes().iter().skip_while(|x| *x == &0x0u8).map(|x| *x).collect();
+        buf.push(0xb7u8 + (len_bytes.len() as u8));
+        buf.extend_from_slice(&len_bytes);
+        buf.extend_from_slice(&bytes);
+    }
+}
+
+pub fn as_list(bytes: &Vec<u8>) -> Vec<u8> {
+    if bytes.len() < 55 {
+        let mut buf = Vec::with_capacity(1 + bytes.len());
+        buf.push(0xc0u8 + (bytes.len() as u8));
+        buf.extend_from_slice(&bytes);
+        buf
+    } else {
+        let len_bytes: Vec<u8> = bytes.len().to_be_bytes().iter().skip_while(|x| *x == &0x0u8).map(|x| *x).collect();
+        let mut buf = Vec::with_capacity(1 + len_bytes.len() + bytes.len());
+        buf.push(0xf7u8 + (len_bytes.len() as u8));
+        buf.extend_from_slice(&len_bytes);
+        buf.extend_from_slice(&bytes);
+        buf
+    }
+}

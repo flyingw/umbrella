@@ -9,7 +9,7 @@ use crate::connection::{MAX_PAYLOAD_SIZE, RLPX_TRANSPORT_PROTOCOL_VERSION};
 use crate::ctx::Ctx;
 use crate::hash128::Hash128;
 use super::message::ETH_63_CAPABILITY;
-use secp256k1::key::{PublicKey, SecretKey};
+use secp256k1::key::{PublicKey};
 use aes::Aes256;
 use block_modes::{BlockMode, Ecb, block_padding::{ZeroPadding}};
 use aes_ctr::stream_cipher::SyncStreamCipher;
@@ -28,7 +28,7 @@ impl Serializable<Hello> for Hello{
         let mut packet_id_buf: Vec<u8> = vec![0u8; 1];
         reader.read_exact(packet_id_buf.as_mut())?;
         let packet_id: u8 = packet_id_buf[0];
-        if (packet_id == PACKET_HELLO) {
+        if packet_id == PACKET_HELLO {
             let mut payload = Vec::new();
             reader.read_to_end(&mut payload)?;
             let public_key = slice_to_public(&payload[payload.len() - 64..])?;

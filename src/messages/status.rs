@@ -5,9 +5,14 @@ use crate::lil_rlp;
 use std::io;
 use std::io::{Read, Write};
 use std::fmt;
+use crate::hash128::Hash128;
+use crate::connection::{MAX_PAYLOAD_SIZE};
+use aes::Aes256;
+use block_modes::{BlockMode, Ecb, block_padding::{ZeroPadding}};
+use aes_ctr::stream_cipher::SyncStreamCipher;
 
 const PACKET_USER: u8 = 0x10;
- const PACKET_STATUS: u8 = 0x00 + PACKET_USER;
+const PACKET_STATUS: u8 = 0x00 + PACKET_USER;
 
 pub struct Status {
     pub protocol_version: u128,
@@ -22,7 +27,7 @@ impl Serializable<Status> for Status{
         let mut packet_id_buf: Vec<u8> = vec![0u8; 1];
         reader.read_exact(packet_id_buf.as_mut())?;
         let packet_id: u8 = packet_id_buf[0];
-        if (packet_id == PACKET_STATUS) {
+        if packet_id == PACKET_STATUS {
             let mut payload = Vec::new();
             reader.read_to_end(&mut payload)?;
             let packet: Vec<u8> = parity_snappy::decompress(&payload).unwrap();
@@ -34,24 +39,6 @@ impl Serializable<Status> for Status{
             let difficulty: u128 = lil_rlp::get_num(&mut iter).unwrap();
             let latest_hash = lil_rlp::get_str(&mut iter).unwrap();
             let genesis = lil_rlp::get_str(&mut iter).unwrap();
-
-            // let latest_hash_size: usize = lil_rlp::list_size(&mut iter).unwrap();
-            // let latest_hash_size: Vec<u8> = iter.take(latest_hash_size).map(|x| *x).collect();
-            
-            // use rlp::Rlp;
-            // use ethereum_types::{U256};
-            // let rlp: Rlp = Rlp::new(&packet);
-            // let protocol_version: u8 = rlp.val_at(0).unwrap();
-            // let network_id: u64 = rlp.val_at(1).unwrap();
-            // let difficulty: U256 = rlp.val_at(2).unwrap();
-            // let latest_hash: Vec<u8> = rlp.val_at(3).unwrap();
-            // let genesis: Vec<u8> = rlp.val_at(4).unwrap();
-
-            // println!("1={}, {}", protocol_version, protocol_version_1);
-            // println!("2={}, {}", network_id, network_id_1);
-            // println!("3={}, {}", difficulty, difficulty_1);
-            // println!("4=\n{:?},\n{:?}", latest_hash, latest_hash_1);
-            // println!("5=\n{:?}\n{:?}", genesis, genesis_1);
 
             Ok(Status{
                 protocol_version: protocol_version,
@@ -66,7 +53,73 @@ impl Serializable<Status> for Status{
     }
 
     fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
-        panic!("Status write");
+        let mut buf: Vec<u8> = vec![];
+        lil_rlp::put_num(&mut buf, self.protocol_version);
+        lil_rlp::put_num(&mut buf, self.network_id);
+        lil_rlp::put_num(&mut buf, self.difficulty);
+        lil_rlp::put_str(&mut buf, &self.latest_hash);
+        lil_rlp::put_str(&mut buf, &self.genesis);
+        let data: Vec<u8> = lil_rlp::as_list(&buf);
+        let mut data_compressed = Vec::new();
+		let data_compressed_len = parity_snappy::compress_into(&data, &mut data_compressed);
+        let data_compressed = &data_compressed[..data_compressed_len];
+
+        let len = data_compressed.len() + 1;
+        if len > MAX_PAYLOAD_SIZE {
+			panic!("status max payload exceeded {}", len);
+		}
+
+        let padding = (16 - (len % 16)) % 16;
+        let mut packet: Vec<u8> = vec![0u8; len + padding + 16];
+        packet[0] = PACKET_STATUS;
+        packet[1..len].copy_from_slice(&data_compressed);
+
+        //
+        //
+        //
+        //
+        use super::message_header::{SecHeader};
+        let header = SecHeader {
+            magic: Default::default(),
+            command: Default::default(),
+            payload_size: len as u32,
+        };
+        header.write(writer, ctx)?;
+        //
+        //
+        //
+        //
+        
+        
+        Ctx::encoder(ctx).try_apply_keystream(&mut packet[..len]).unwrap();
+        if padding != 0 {
+            Ctx::encoder(ctx).try_apply_keystream(&mut packet[len..(len + padding)]).unwrap();
+		}
+        Ctx::update_remote_mac(ctx, &packet[..(len + padding)]);
+        writer.write_all(&packet[..(len + padding)])?;
+
+        let mut prev = Hash128::default();
+        Ctx::get_remote_mac(ctx, prev.as_bytes_mut());
+
+        debug!("prev bytes {:?}", prev.as_bytes());
+
+		let mut enc = Hash128::default();
+		&mut enc[..].copy_from_slice(prev.as_bytes());
+
+        let mac_encoder: Ecb<Aes256, ZeroPadding> = Ecb::new_var(&ctx.secret_key()[..], &[]).expect("failed to aes ecb 1");
+	    let enc_mut = enc.as_bytes_mut();
+		mac_encoder.encrypt(enc_mut, enc_mut.len()).unwrap();
+
+        debug!("prev enc {:?}", enc.as_bytes());
+        debug!("    prev {:?}", prev.as_bytes());
+        debug!("     xor {:?}", (enc ^ prev).as_bytes());
+		
+        Ctx::update_remote_mac(ctx, (enc ^ prev).as_bytes());
+
+        let mut b = [0;16];
+        Ctx::get_remote_mac(ctx, &mut b);
+        debug!("last 16 {:?}", b);
+        writer.write_all(&b)
     }
 }
 
