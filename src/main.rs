@@ -30,6 +30,7 @@ pub mod stack;
 pub mod interpreter;
 pub mod keys;
 pub mod ctx;
+pub mod lil_rlp;
 
 mod connection;
 
@@ -453,6 +454,12 @@ fn main() {
     let hello = Hello::read(&mut Cursor::new(payload), &mut connection);
     println!("read hello={:?}", &hello);
     
+    // use messages::Status;
+    // let header = SecHeader::read(&mut stream, &mut connection).unwrap();
+    // let payload = header.payload(&mut stream, &mut connection).unwrap();
+    // let status = Status::read(&mut Cursor::new(payload), &mut connection);
+    // println!("read status={:?}", &status);
+
     //fn read_hello()
     // trace!("Read hello from remote");
 	// connection.read_packet().map(|packet| {

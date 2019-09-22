@@ -162,15 +162,6 @@ impl Serializable<SecHeader> for SecHeader {
         ctx.decoder().try_apply_keystream(&mut header[..SecHeader::HEADER_LEN]).expect("failed aes ctr 1");
         let length = ((((header[0] as u32) << 8) + (header[1] as u32)) << 8) + (header[2] as u32);
 
-        // todo; protocol verification?
-        // use rlp::Rlp;
-        // let header_rlp = Rlp::new(&header[3..6]);
-        // let protocol_id = header_rlp.val_at::<u16>(0).unwrap();
-
-        // if protocol_id != RLPX_TRANSPORT_PROTOCOL_VERSION != 5 { 
-        //     panic!("wrong protocol {}", protocol_id) 
-        // };
-
         Ok(SecHeader {
             magic: Default::default(),
             command: Default::default(),

@@ -13,6 +13,7 @@ mod message;
 mod node_addr;
 mod node_key;
 mod hello;
+mod status;
 pub mod fee_filter;
 
 pub use version::{Version,NODE_NONE,PROTOCOL_VERSION};
@@ -25,3 +26,4 @@ pub use message_header::{MessageHeader, SecHeader};
 pub use ping::Ping;
 pub use node_key::NodeKey;
 pub use hello::Hello;
+pub use status::Status;
