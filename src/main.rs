@@ -345,7 +345,6 @@ fn main() {
     let message: Vec<u8> = ecies::encrypt(&node_key, &[], &data).unwrap();
     let auth_cipher: Vec<u8> = message.clone();
     
-    use connection::TcpReader;
     use std::net::TcpStream;
 
     let mut stream = TcpStream::connect_timeout(&seed, Duration::from_secs(1)).unwrap();
@@ -363,10 +362,10 @@ fn main() {
     debug!("Write {:#?}", our_version);
     our_version.write(&mut stream, magic, ctx).unwrap();
 
-    let mut reader: TcpReader = TcpReader(is);
-    
     //handshake read
-    let data: Vec<u8> = reader.read_bytes(connection::RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4).unwrap();
+    use std::io::Read;
+    let mut data: Vec<u8> = vec![0u8; connection::RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4];
+	stream.read_exact(data.as_mut_slice()).unwrap();
 
     let ack_cipher: Vec<u8> = data.clone().to_vec();
     let mut connection = ecies::decrypt(&secret, &[], &data).map(|ack| {
@@ -387,9 +386,15 @@ fn main() {
 		let mut key_material = Hash512::default();
 		(&mut key_material[0..32]).copy_from_slice(shared.as_bytes());
 		Keccak::keccak256(nonce_material.as_bytes_mut(), &mut key_material[32..64]);
-		let key_material_keccak = OriginatedEncryptedConnection::keccak(key_material.as_bytes());
+		
+        let mut key_material_keccak = Hash256::default();
+		Keccak::keccak256(key_material.as_bytes(), key_material_keccak.as_bytes_mut());
+
 		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
-		let key_material_keccak = OriginatedEncryptedConnection::keccak(key_material.as_bytes());
+		
+        let mut key_material_keccak = Hash256::default();
+		Keccak::keccak256(key_material.as_bytes(), key_material_keccak.as_bytes_mut());
+
 		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
 
 		// Using a 0 IV with CTR is fine as long as the same IV is never reused with the same key.
@@ -399,7 +404,9 @@ fn main() {
         let encoder = Aes256Ctr::new(GenericArray::from_slice(&key_material[32..64]), GenericArray::from_slice(&NULL_IV));
 		let decoder = Aes256Ctr::new(GenericArray::from_slice(&key_material[32..64]), GenericArray::from_slice(&NULL_IV));
 
-		let key_material_keccak = OriginatedEncryptedConnection::keccak(key_material.as_bytes());
+        let mut key_material_keccak = Hash256::default();
+		Keccak::keccak256(key_material.as_bytes(), key_material_keccak.as_bytes_mut());
+
 		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
 
 		let mac_encoder_key: SecretKey = SecretKey::from_slice(&key_material[32..64]).unwrap();
@@ -415,7 +422,7 @@ fn main() {
 		ingress_mac.update(&ack_cipher);
 
 		OriginatedEncryptedConnection {
-			stream: reader,
+			stream: is,
 			encoder: encoder,
 			decoder: decoder,
 			mac_encoder_key: mac_encoder_key,
@@ -478,7 +485,7 @@ fn main() {
 	let len = parity_snappy::compress_into(data, &mut compressed);
 	let payload = &compressed[0..len];
 	rlp.append_raw(payload, 1);
-	connection.write_packet(&rlp.out());
+	connection.write_packet(&rlp.out()).unwrap();
 
     debug!("transaction : {:?}", singed_transaction);
     debug!("        hash: {:?}", singed_transaction.hash());
