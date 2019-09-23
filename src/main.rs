@@ -369,7 +369,7 @@ fn main() {
     let data: Vec<u8> = reader.read_bytes(connection::RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4).unwrap();
 
     let ack_cipher: Vec<u8> = data.clone().to_vec();
-    let (mut connection, mac_key_buf) = ecies::decrypt(&secret, &[], &data).map(|ack| {
+    let mut connection = ecies::decrypt(&secret, &[], &data).map(|ack| {
         use crate::hash512::Hash512;
         use crate::connection::NULL_IV;
 
@@ -401,9 +401,6 @@ fn main() {
 
 		let key_material_keccak = OriginatedEncryptedConnection::keccak(key_material.as_bytes());
 		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
-        
-        let mut mac_key_buf = [0;32];
-        mac_key_buf.copy_from_slice(&key_material[32..64]);
 
 		let mac_encoder_key: SecretKey = SecretKey::from_slice(&key_material[32..64]).unwrap();
 
@@ -417,7 +414,7 @@ fn main() {
 		ingress_mac.update(mac_material.as_bytes());
 		ingress_mac.update(&ack_cipher);
 
-		(OriginatedEncryptedConnection {
+		OriginatedEncryptedConnection {
 			stream: reader,
 			encoder: encoder,
 			decoder: decoder,
@@ -425,19 +422,13 @@ fn main() {
 			egress_mac: egress_mac,
 			ingress_mac: ingress_mac,
 			public_key: public_key,
-		}, mac_key_buf)
+		}
     }).unwrap();
 
-	//let mut protocol: EthProtocol = EthProtocol::new(connection);
-    use rlp::{RlpStream, Rlp};
+    use rlp::RlpStream;
 
-    const PACKET_HELLO: u8 = 0x80; // actually 0x00 rlp doc "The integer 0 = [ 0x80 ]"
-    const PACKET_PING: u8 = 0x02;
-    const PACKET_PONG: u8 = 0x03;
     const PACKET_USER: u8 = 0x10;
-    const PACKET_STATUS: u8 = 0x00 + PACKET_USER;
     const PACKET_TRANSACTIONS: u8 = 0x02 + PACKET_USER;
-    const PACKET_NEW_BLOCK: u8 = 0x07 + PACKET_USER;
     
     let hello = Hello {
         public_key: public_key,
@@ -448,7 +439,7 @@ fn main() {
     our_hello.write(&mut stream, magic, &mut connection).unwrap();
 
     use messages::SecHeader;
-    use std::io::{Cursor, Read, Write};
+    use std::io::Cursor;
     let header = SecHeader::read(&mut stream, &mut connection).unwrap();
     let payload = header.payload(&mut stream, &mut connection).unwrap();
     let hello = Hello::read(&mut Cursor::new(payload), &mut connection).unwrap();
@@ -462,75 +453,6 @@ fn main() {
 
     status.write(&mut stream, &mut connection).unwrap();
     println!("write status={:?}", &status);
-
-    //fn read_hello()
-    // trace!("Read hello from remote");
-	// connection.read_packet().map(|packet| {
-    //     match packet.first() {
-    //         Some(&PACKET_HELLO) => {
-    //             let rlp = Rlp::new(&packet[1..]);
-    //             let peer_caps: Rlp = rlp.at(2).unwrap();
-
-    //             peer_caps.is_list();
-    //             peer_caps.item_count().unwrap();
-
-    //             let peer_cap = peer_caps.at(0).unwrap();
-
-    //             let p: u8 = peer_cap.val_at(1).unwrap();
-
-    //             println!("hello from remote! peer_caps={:?}", p);
-    //         },
-    //         Some(msg) => panic!("not a hello message id={}, expect={}", msg, PACKET_HELLO),
-    //         None => panic!("empty hello message"),
-    //     }
-    // }).unwrap();
-
-	//protocol.read_packet();
-    // trace!("Read some packet");
-    // let res: Option<Vec<u8>> = connection.read_packet();
-    // let data: &[u8] = match res {
-    //     Some(ref data) if data.len() > 1 => data,
-    //     Some(data) => panic!("broken packet={:?}", &data),
-    //     None => return,
-    // };
-    // let packet_id: u8 = data[0];
-    // let compressed: &[u8] = &data[1..];
-    // let packet: Vec<u8> = parity_snappy::decompress(compressed).unwrap();
-    // let rlp: Rlp = Rlp::new(&packet);
-    // match packet_id {
-    //     PACKET_PING => println!("ping packet"),
-    //     PACKET_PONG => println!("pong packet"),
-    //     PACKET_STATUS => {
-    //         let protocol_version: u8 = rlp.val_at(0).unwrap();
-    //         let network_id: u64 = rlp.val_at(1).unwrap();
-    //         let difficulty: U256 = rlp.val_at(2).unwrap();
-    //         let latest_hash: Vec<u8> = rlp.val_at(3).unwrap();
-    //         let genesis: Vec<u8> = rlp.val_at(4).unwrap();
-
-    //         println!("status packet. protocol_version={}, network_id={}, difficulty={:?}, latest_hash={:?}, genesis={:?}", protocol_version, network_id, difficulty.0, latest_hash, &genesis);
-
-    //         let mut rlp = RlpStream::new_list(5);
-    //         rlp.append(&protocol_version)
-    //             .append(&network_id)
-    //             .append(&difficulty)
-    //             .append(&latest_hash)
-    //             .append(&genesis);
-
-    //         //self.write_packet(PACKET_STATUS, &rlp.out());
-    //         let data = &rlp.out();
-    //         let mut rlp = RlpStream::new();
-	// 	    rlp.append(&(u32::from(PACKET_STATUS)));
-	// 	    let mut compressed = Vec::new();
-	// 	    let len = parity_snappy::compress_into(data, &mut compressed);
-	// 	    let payload = &compressed[0..len];
-	// 	    rlp.append_raw(payload, 1);
-	// 	    connection.write_packet(&rlp.out());
-
-    //     },
-    //     PACKET_TRANSACTIONS => println!("transactions packet"),
-    //     PACKET_NEW_BLOCK => println!("new block packet"),
-    //     _ => println!("unknown packet={}", packet_id),
-    // }
 
     //
 	let t = Transaction {
