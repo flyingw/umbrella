@@ -14,10 +14,12 @@ mod node_addr;
 mod node_key;
 mod hello;
 mod status;
+mod tx2;
 pub mod fee_filter;
 
 pub use version::{Version,NODE_NONE,PROTOCOL_VERSION};
 pub use tx::Tx;
+pub use tx2::Tx2;
 pub use tx_in::TxIn;
 pub use tx_out::TxOut;
 pub use out_point::OutPoint;

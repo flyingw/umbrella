@@ -4,6 +4,7 @@ use super::reject::Reject;
 use super::send_cmpct::SendCmpct;
 use super::fee_filter::FeeFilter;
 use super::tx::Tx;
+use super::tx2::Tx2;
 use super::version::Version;
 use super::node_key::NodeKey;
 use super::hello::Hello;
@@ -81,7 +82,7 @@ pub enum Message {
     Reject(Reject),
     SendCmpct(SendCmpct),
     Tx(Tx),
-    Tx2(common_types::transaction::SignedTransaction),
+    Tx2(Tx2),
     Verack,
     Version(Version),
     NodeKey(NodeKey),
@@ -235,8 +236,10 @@ impl Message {
             Message::FeeFilter(p) => write_with_payload(writer, FEEFILTER, p, magic),
             Message::SendCmpct(p) => write_with_payload(writer, SENDCMPCT, p, magic),
             Message::Tx(p) => write_with_payload(writer, TX, p, magic),
-            Message::Tx2(_p) => Ok(()),
-                // make one transaction
+            Message::Tx2(p) =>  {
+                debug!("write tx2 {:?}", p);
+                Ok(())
+            }
                 //write_with_payload(writer, TX, p, magic),
             Message::Verack => write_without_payload(writer, VERACK, magic),
             Message::Version(v) => write_with_payload(writer, VERSION, v, magic),

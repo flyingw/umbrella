@@ -43,7 +43,7 @@ use conf::Opt;
 use structopt::StructOpt;
 
 use network::Network;
-use messages::{Version, NODE_NONE, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut, NodeKey, Hello, Reject, RejectCode};
+use messages::{Version, NODE_NONE, PROTOCOL_VERSION, Tx, Tx2, TxIn, OutPoint, TxOut, NodeKey, Hello, Reject, RejectCode};
 use messages::{Message,MsgHeader};
 use util::secs_since;
 use std::time::{UNIX_EPOCH, Duration};
@@ -255,7 +255,6 @@ pub fn main1() {
     stream.shutdown(Shutdown::Both).unwrap();
 }
 
-use common_types::transaction::{Transaction, Action};
 use ethereum_types::{U256};
 use ethkey::Address;
 use std::str::FromStr;
@@ -482,22 +481,36 @@ fn main() {
                                 status.write(&mut os, &mut connection).unwrap();
 
                                 debug!("Write transaction after status");
-                                //
-                                let t = Transaction {
+
+                                let mut tx = Tx2 {
                                     nonce: U256::from(2),
                                     gas_price: U256::from(1_000_000_000u64),
                                     gas: U256::from(21_000),
-                                    action: Action::Call(Address::from_str(&opt.sender().out_address()).unwrap()),
+                                    call: Address::from_str(&opt.sender().out_address()).unwrap(),
                                     value: U256::from(10),
                                     data: Vec::new(),
+                                    hash: H256::zero(),
+                                    public: None, 
+                                    r: U256::zero(),
+                                    s: U256::zero(),
+                                    v: 0u64,
+                                    sender: Address::zero(),
                                 };
-                                let singed_transaction = t.sign(&secret, Some(123));
+                                tx = tx.sign(&secret, Some(123));
 
-                                //protocol.write_transactions(&vec![&singed_transaction]);
-                                let transactions = &vec![&singed_transaction];
+                                let transactions = &vec![&tx];
                                 let mut rlp = RlpStream::new_list(transactions.len());
                                 for t in transactions {
-                                    rlp.append(*t);
+                                    rlp.begin_list(9);
+		                            rlp.append(&t.nonce);
+		                            rlp.append(&t.gas_price);
+		                            rlp.append(&t.gas);
+		                            rlp.append(&t.call);
+		                            rlp.append(&t.value);
+		                            rlp.append(&t.data);
+		                            rlp.append(&t.v);
+		                            rlp.append(&t.r);
+		                            rlp.append(&t.s);
                                 }
                                 let data = &rlp.out();
                                 let mut rlp = RlpStream::new();
@@ -508,9 +521,9 @@ fn main() {
                                 rlp.append_raw(payload, 1);
                                 connection.write_packet(&rlp.out()).unwrap();
 
-                                debug!("transaction : {:?}", singed_transaction);
-                                debug!("        hash: {:?}", singed_transaction.hash());
-                                return Ok(Message::Tx2(singed_transaction));
+                                debug!("transaction : {:?}", &tx);
+                                debug!("        hash: {:?}", &tx.hash());
+                                return Ok(Message::Tx2(tx));
                             }
                             _ => {
                                 // no actual reject here, its used because commands are hardcoded
