@@ -421,7 +421,6 @@ fn main() {
 		mac_material = Hash256::from_slice(&key_material[32..64]) ^ nonce;
 		ingress_mac.update(mac_material.as_bytes());
 		ingress_mac.update(&ack_cipher);
-
         
 		OriginatedEncryptedConnection {
 			stream: is,
@@ -450,7 +449,6 @@ fn main() {
 
     let mut partial: Option<Box<dyn MsgHeader>> = None;
     use std::io;
-    //use std::io::Cursor;
     use std::convert::TryInto;
 
     let mut os = stream.try_clone().unwrap();
@@ -473,10 +471,10 @@ fn main() {
                         println!("message: {:?}", message);
                         match message {
                             Message::Hello(hello) => {
+                                // reading hello probably helpful for context
                                 debug!("HELLO {:?}", &hello);
+                                // pin expected status command with nail here
                                 connection.expected = commands::STATUS;
-                                //return Ok(Message::Hello(hello.clone()));
-                                //we should't return here but 
                             }
                             Message::Status(status) => {
                                 debug!("STATUS {:?}", &status);
@@ -515,7 +513,8 @@ fn main() {
                                 return Ok(Message::Tx2(singed_transaction));
                             }
                             _ => {
-                                debug!("Some other shit {:?}", message);
+                                // no actual reject here, its used because commands are hardcoded
+                                // read the command from stream and fail here!
                                 return Ok(Message::Reject(Reject{
                                     message: "String".to_string(),
                                     code: RejectCode::RejectMalformed,
@@ -545,23 +544,8 @@ fn main() {
         Ok(v)  => debug!("{:?}", v),
         Err(r) => debug!("{:?}", r),
     };
-
-    //use messages::SecHeader;
-    //let header = SecHeader::read(&mut stream, &mut connection).unwrap();
-    //let payload = header.payload(&mut stream, &mut connection).unwrap();
-    //let hello = Hello::read(&mut Cursor::new(payload), &mut connection).unwrap();
-    //println!("read hello={:?}", &hello);
-    
-    //panic!("enough");
-    //use messages::Status;
-    //let header = SecHeader::read(&mut stream, &mut connection).unwrap();
-    //let payload = header.payload(&mut stream, &mut connection).unwrap();
-    //let status = Status::read(&mut Cursor::new(payload), &mut connection).unwrap();
-    //println!("read status={:?}", &status);
-
-    //status.write(&mut stream, &mut connection).unwrap();
-    //println!("write status={:?}", &status);
-
+    use std::net::Shutdown;
+    stream.shutdown(Shutdown::Both).unwrap();
 }
 
 #[cfg(test)]
