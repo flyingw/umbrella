@@ -12,6 +12,24 @@ use crate::hash128::Hash128;
 use block_modes::{BlockMode, Ecb, block_padding::{ZeroPadding}};
 use aes::Aes256;
 
+pub trait MsgHeader: Send + Sync {
+    fn command(&self) -> [u8;12];
+    fn payload(&self, reader: &mut dyn Read, ctx: &mut dyn Ctx) -> Result<Vec<u8>>;
+    fn payload_size(&self) -> u32;
+}
+
+impl MsgHeader for MessageHeader {
+    fn command(&self) -> [u8;12] { self.command }
+    fn payload_size(&self) -> u32 {self.payload_size }
+    fn payload(&self, reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<Vec<u8>> { self.payload(reader) }    
+}
+
+impl MsgHeader for SecHeader {
+    fn command(&self) -> [u8;12] { self.command }
+    fn payload_size(&self) -> u32 {self.payload_size }
+    fn payload(&self, reader: &mut dyn Read, ctx: &mut dyn Ctx) -> Result<Vec<u8>> { self.payload(reader, ctx) }    
+}
+
 /// Header that begins all messages
 #[derive(Default, PartialEq, Eq, Hash, Clone)]
 pub struct MessageHeader {
@@ -26,6 +44,7 @@ pub struct MessageHeader {
 }
 
 /// Encrypted header for all messages with encryption
+#[derive(Clone)]
 pub struct SecHeader {
     /// Magic bytes indicating the network type
     pub magic: [u8; 3],

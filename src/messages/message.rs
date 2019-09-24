@@ -1,4 +1,4 @@
-use super::message_header::{MessageHeader,SecHeader};
+use super::message_header::{MessageHeader,SecHeader,MsgHeader};
 use super::ping::Ping;
 use super::reject::Reject;
 use super::send_cmpct::SendCmpct;
@@ -73,7 +73,7 @@ pub mod commands {
 pub enum Message {
     FeeFilter(FeeFilter),
     Other(String),
-    Partial(MessageHeader),
+    Partial(Box<dyn MsgHeader>),
     Ping(Ping),
     Pong(Ping),
     Reject(Reject),
@@ -101,7 +101,7 @@ impl Message {
                     // Depending on platform, either TimedOut or WouldBlock may be returned to indicate a non-error timeout
                     if e.kind() == io::ErrorKind::TimedOut || e.kind() == io::ErrorKind::WouldBlock
                     {
-                        return Ok(Message::Partial(header));
+                        return Ok(Message::Partial(Box::new(header)));
                     }
                 }
                 return Err(e);
@@ -112,52 +112,52 @@ impl Message {
     /// Reads the complete message given a message header
     ///
     /// It may be used after read() returns Message::Partial.
-    pub fn read_partial(reader: &mut dyn Read, header: &MessageHeader, ctx: &mut dyn Ctx) -> Result<Self> {
+    pub fn read_partial(reader: &mut dyn Read, header: &dyn MsgHeader, ctx: &mut dyn Ctx) -> Result<Self> {
         // Ping
-        if header.command == commands::PING {
-            let payload = header.payload(reader)?;
+        if header.command() == commands::PING {
+            let payload = header.payload(reader, ctx)?;
             let ping = Ping::read(&mut Cursor::new(payload), ctx)?;
             return Ok(Message::Ping(ping));
         }
 
         // Pong
-        if header.command == commands::PONG {
-            let payload = header.payload(reader)?;
+        if header.command() == commands::PONG {
+            let payload = header.payload(reader, ctx)?;
             let pong = Ping::read(&mut Cursor::new(payload), ctx)?;
             return Ok(Message::Pong(pong));
         }
 
         // Reject
-        if header.command == commands::REJECT {
-            let payload = header.payload(reader)?;
+        if header.command() == commands::REJECT {
+            let payload = header.payload(reader, ctx)?;
             let reject = Reject::read(&mut Cursor::new(payload), ctx)?;
             return Ok(Message::Reject(reject));
         }
 
         // Sendcmpct
-        if header.command == commands::SENDCMPCT {
-            let payload = header.payload(reader)?;
+        if header.command() == commands::SENDCMPCT {
+            let payload = header.payload(reader, ctx)?;
             let sendcmpct = SendCmpct::read(&mut Cursor::new(payload), ctx)?;
             return Ok(Message::SendCmpct(sendcmpct));
         }
 
         // Feefilter
-        if header.command == commands::FEEFILTER {
-            let payload = header.payload(reader)?;
+        if header.command() == commands::FEEFILTER {
+            let payload = header.payload(reader, ctx)?;
             let feefilter = FeeFilter::read(&mut Cursor::new(payload), ctx)?;
             return Ok(Message::FeeFilter(feefilter));
         }
 
         // Tx
-        if header.command == commands::TX {
-            let payload = header.payload(reader)?;
+        if header.command() == commands::TX {
+            let payload = header.payload(reader, ctx)?;
             let tx = Tx::read(&mut Cursor::new(payload), ctx)?;
             return Ok(Message::Tx(tx));
         }
 
         // Version
-        if header.command == commands::VERSION {
-            let payload = header.payload(reader)?;
+        if header.command() == commands::VERSION {
+            let payload = header.payload(reader, ctx)?;
             let version = Version::read(&mut Cursor::new(payload), ctx)?;
             version.validate()?;
             return Ok(Message::Version(version));
@@ -171,18 +171,18 @@ impl Message {
         // }
 
         // Verack
-        if header.command == commands::VERACK {
-            if header.payload_size != 0 {
+        if header.command() == commands::VERACK {
+            if header.payload_size() != 0 {
                 return Err(Error::BadData("Bad payload".to_string()));
             }
             return Ok(Message::Verack);
         }
 
         // Unknown message
-        if header.payload_size > 0 {
-            header.payload(reader)?;
+        if header.payload_size() > 0 {
+            header.payload(reader, ctx)?;
         }
-        let command = String::from_utf8(header.command.to_vec()).unwrap_or("Unknown".to_string());
+        let command = String::from_utf8(header.command().to_vec()).unwrap_or("Unknown".to_string());
         return Ok(Message::Other(command));
     }
 
@@ -207,6 +207,14 @@ impl Message {
             Message::NodeKey(v) => v.write(writer, &mut ()),
             Message::Hello(h) => write_with_payload2(writer, HELLO, h, magic[..3].try_into().expect("shortened magic"), ctx),
         }
+    }
+}
+
+impl fmt::Debug for dyn MsgHeader + 'static {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("MsgHdr")
+            .field("command", &self.command())
+            .finish()
     }
 }
 

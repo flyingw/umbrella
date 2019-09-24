@@ -44,7 +44,7 @@ use structopt::StructOpt;
 
 use network::Network;
 use messages::{Version, NODE_NONE, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut, NodeKey, Hello};
-use messages::{Message,MessageHeader};
+use messages::{Message,MsgHeader};
 use util::secs_since;
 use std::time::{UNIX_EPOCH, Duration};
 use script::Script;
@@ -166,7 +166,7 @@ pub fn main1() {
     stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
     
     let magic = network.magic();
-    let mut partial: Option<MessageHeader> = None;
+    let mut partial: Option<Box<dyn MsgHeader>> = None;
     let mut is = stream.try_clone().unwrap();
     
     let tx = Message::Tx(create_transaction(&opt));
@@ -191,13 +191,13 @@ pub fn main1() {
         debug!("Connected {:?}", &seed);
         loop {
             let message = match &partial {
-                Some(header) => Message::read_partial(&mut is, header, &mut ct),
+                Some(header) => Message::read_partial(&mut is, header.as_ref(), &mut ct),
                 None => Message::read(&mut is, network.magic(), &mut ct),
             };
 
             match message {
                 Ok(message) => {
-                    if let Message::Partial(header) = message {
+                    if let Message::Partial( header) = message {
                         partial = Some(header);
                     } else {
                         partial = None;
