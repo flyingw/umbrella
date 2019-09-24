@@ -23,6 +23,7 @@ pub struct OriginatedEncryptedConnection {
 	pub mac_encoder_key: SecretKey,
 	pub egress_mac: Keccak,
 	pub ingress_mac: Keccak,
+    pub expected:[u8; 12],
 }
 
 use std::io;

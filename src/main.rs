@@ -43,7 +43,7 @@ use conf::Opt;
 use structopt::StructOpt;
 
 use network::Network;
-use messages::{Version, NODE_NONE, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut, NodeKey, Hello};
+use messages::{Version, NODE_NONE, PROTOCOL_VERSION, Tx, TxIn, OutPoint, TxOut, NodeKey, Hello, Reject, RejectCode};
 use messages::{Message,MsgHeader};
 use util::secs_since;
 use std::time::{UNIX_EPOCH, Duration};
@@ -262,6 +262,7 @@ use std::str::FromStr;
 use std::thread;
 use ethstore::Crypto;
 use ethkey::Password;
+use crate::messages::commands;
 
 use connection::{OriginatedEncryptedConnection};
 
@@ -421,6 +422,7 @@ fn main() {
 		ingress_mac.update(mac_material.as_bytes());
 		ingress_mac.update(&ack_cipher);
 
+        
 		OriginatedEncryptedConnection {
 			stream: is,
 			encoder: encoder,
@@ -429,6 +431,7 @@ fn main() {
 			egress_mac: egress_mac,
 			ingress_mac: ingress_mac,
 			public_key: public_key,
+            expected: commands::HELLO,
 		}
     }).unwrap();
 
@@ -445,50 +448,120 @@ fn main() {
     let our_hello = Message::Hello(hello);
     our_hello.write(&mut stream, magic, &mut connection).unwrap();
 
-    use messages::SecHeader;
-    use std::io::Cursor;
-    let header = SecHeader::read(&mut stream, &mut connection).unwrap();
-    let payload = header.payload(&mut stream, &mut connection).unwrap();
-    let hello = Hello::read(&mut Cursor::new(payload), &mut connection).unwrap();
-    println!("read hello={:?}", &hello);
+    let mut partial: Option<Box<dyn MsgHeader>> = None;
+    use std::io;
+    //use std::io::Cursor;
+    use std::convert::TryInto;
+
+    let mut os = stream.try_clone().unwrap();
+
+    let lis = thread::spawn(move || {
+        debug!("Connected {:?}", &seed);
+            loop {
+            debug!("read partial shit ");
+            let message = match &partial {
+                Some(header) => Message::read_partial(&mut os, header.as_ref(), &mut connection),
+                None => Message::read2(&mut os, magic[..3].try_into().expect("shortened magic"), &mut connection),
+            };
+
+            match message {
+                Ok(message) => {
+                    if let Message::Partial( header) = message {
+                        partial = Some(header);
+                    } else {
+                        partial = None;
+                        println!("message: {:?}", message);
+                        match message {
+                            Message::Hello(hello) => {
+                                debug!("HELLO {:?}", &hello);
+                                connection.expected = commands::STATUS;
+                                //return Ok(Message::Hello(hello.clone()));
+                                //we should't return here but 
+                            }
+                            Message::Status(status) => {
+                                debug!("STATUS {:?}", &status);
+                                debug!("write that shit back");
+                                status.write(&mut os, &mut connection).unwrap();
+
+                                debug!("Write transaction after status");
+                                //
+                                let t = Transaction {
+                                    nonce: U256::from(2),
+                                    gas_price: U256::from(1_000_000_000u64),
+                                    gas: U256::from(21_000),
+                                    action: Action::Call(Address::from_str(&opt.sender().out_address()).unwrap()),
+                                    value: U256::from(10),
+                                    data: Vec::new(),
+                                };
+                                let singed_transaction = t.sign(&secret, Some(123));
+
+                                //protocol.write_transactions(&vec![&singed_transaction]);
+                                let transactions = &vec![&singed_transaction];
+                                let mut rlp = RlpStream::new_list(transactions.len());
+                                for t in transactions {
+                                    rlp.append(*t);
+                                }
+                                let data = &rlp.out();
+                                let mut rlp = RlpStream::new();
+                                rlp.append(&(u32::from(PACKET_TRANSACTIONS)));
+                                let mut compressed = Vec::new();
+                                let len = parity_snappy::compress_into(data, &mut compressed);
+                                let payload = &compressed[0..len];
+                                rlp.append_raw(payload, 1);
+                                connection.write_packet(&rlp.out()).unwrap();
+
+                                debug!("transaction : {:?}", singed_transaction);
+                                debug!("        hash: {:?}", singed_transaction.hash());
+                                return Ok(Message::Tx2(singed_transaction));
+                            }
+                            _ => {
+                                debug!("Some other shit {:?}", message);
+                                return Ok(Message::Reject(Reject{
+                                    message: "String".to_string(),
+                                    code: RejectCode::RejectMalformed,
+                                    reason: "String".to_string(),
+                                    data: vec![],
+                                    }
+                                ));
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    if let Error::IOError(ref e) = e {
+                            if e.kind() == io::ErrorKind::WouldBlock || 
+                                e.kind() == io::ErrorKind::TimedOut {
+                                debug!("continue");
+                                continue;
+                            }
+                    }
+                    return Err(e);
+                }
+            }
+        }
+    });
+
+    match lis.join() {
+        Ok(v)  => debug!("{:?}", v),
+        Err(r) => debug!("{:?}", r),
+    };
+
+    //use messages::SecHeader;
+    //let header = SecHeader::read(&mut stream, &mut connection).unwrap();
+    //let payload = header.payload(&mut stream, &mut connection).unwrap();
+    //let hello = Hello::read(&mut Cursor::new(payload), &mut connection).unwrap();
+    //println!("read hello={:?}", &hello);
     
-    use messages::Status;
-    let header = SecHeader::read(&mut stream, &mut connection).unwrap();
-    let payload = header.payload(&mut stream, &mut connection).unwrap();
-    let status = Status::read(&mut Cursor::new(payload), &mut connection).unwrap();
-    println!("read status={:?}", &status);
+    //panic!("enough");
+    //use messages::Status;
+    //let header = SecHeader::read(&mut stream, &mut connection).unwrap();
+    //let payload = header.payload(&mut stream, &mut connection).unwrap();
+    //let status = Status::read(&mut Cursor::new(payload), &mut connection).unwrap();
+    //println!("read status={:?}", &status);
 
-    status.write(&mut stream, &mut connection).unwrap();
-    println!("write status={:?}", &status);
+    //status.write(&mut stream, &mut connection).unwrap();
+    //println!("write status={:?}", &status);
 
-    //
-	let t = Transaction {
-		nonce: U256::from(2),
-		gas_price: U256::from(1_000_000_000u64),
-		gas: U256::from(21_000),
-		action: Action::Call(Address::from_str(&opt.sender().out_address()).unwrap()),
-		value: U256::from(10),
-		data: Vec::new(),
-	};
-	let singed_transaction = t.sign(&secret, Some(123));
-
-    //protocol.write_transactions(&vec![&singed_transaction]);
-    let transactions = &vec![&singed_transaction];
-    let mut rlp = RlpStream::new_list(transactions.len());
-	for t in transactions {
-		rlp.append(*t);
-	}
-    let data = &rlp.out();
-    let mut rlp = RlpStream::new();
-	rlp.append(&(u32::from(PACKET_TRANSACTIONS)));
-	let mut compressed = Vec::new();
-	let len = parity_snappy::compress_into(data, &mut compressed);
-	let payload = &compressed[0..len];
-	rlp.append_raw(payload, 1);
-	connection.write_packet(&rlp.out()).unwrap();
-
-    debug!("transaction : {:?}", singed_transaction);
-    debug!("        hash: {:?}", singed_transaction.hash());
 }
 
 #[cfg(test)]

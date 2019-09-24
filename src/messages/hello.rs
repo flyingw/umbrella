@@ -19,6 +19,7 @@ const PACKET_HELLO: u8 = 0x80; // actually 0x00 rlp doc "The integer 0 = [ 0x80 
 const CLIENT_NAME: &str = "umbrella";
 const LOCAL_PORT: u16 = 1234;
 
+#[derive(Clone)]
 pub struct Hello {
     pub public_key: PublicKey,
 }

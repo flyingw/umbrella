@@ -7,6 +7,7 @@ use super::tx::Tx;
 use super::version::Version;
 use super::node_key::NodeKey;
 use super::hello::Hello;
+use super::status::Status;
 use ring::digest;
 use std::fmt;
 use std::io;
@@ -65,6 +66,7 @@ pub mod commands {
 
     // [no such command]
     pub const HELLO: [u8; 12] = *b"hello\0\0\0\0\0\0\0";
+    pub const STATUS: [u8; 12] = *b"status\0\0\0\0\0\0";
     
 }
 
@@ -79,10 +81,12 @@ pub enum Message {
     Reject(Reject),
     SendCmpct(SendCmpct),
     Tx(Tx),
+    Tx2(common_types::transaction::SignedTransaction),
     Verack,
     Version(Version),
     NodeKey(NodeKey),
     Hello(Hello),
+    Status(Status),
 }
 
 impl Message {
@@ -94,6 +98,26 @@ impl Message {
     pub fn read(reader: &mut dyn Read, magic: [u8; 4], ctx: &mut dyn Ctx) -> Result<Self> {
         let header = MessageHeader::read(reader, ctx)?;
         header.validate(magic, MAX_PAYLOAD_SIZE)?;
+        match Message::read_partial(reader, &header, ctx) {
+            Ok(msg) => Ok(msg),
+            Err(e) => {
+                if let Error::IOError(ref e) = e {
+                    // Depending on platform, either TimedOut or WouldBlock may be returned to indicate a non-error timeout
+                    if e.kind() == io::ErrorKind::TimedOut || e.kind() == io::ErrorKind::WouldBlock
+                    {
+                        return Ok(Message::Partial(Box::new(header)));
+                    }
+                }
+                return Err(e);
+            }
+        }
+    }
+
+    pub fn read2(reader: &mut dyn Read, _magic: [u8; 3], ctx: &mut dyn Ctx) -> Result<Self> {
+        let mut header = SecHeader::read(reader, ctx)?;
+        //header.command = commands::HELLO;
+        header.command = ctx.expected();
+        //header.validate(magic, MAX_PAYLOAD_SIZE)?;
         match Message::read_partial(reader, &header, ctx) {
             Ok(msg) => Ok(msg),
             Err(e) => {
@@ -164,11 +188,20 @@ impl Message {
         }
         
         // Hello
-        // if header.command == commands::HELLO {
-        //     let payload = header.payload(reader, ctx)?;
-        //     let hello = Hello::read(&mut Cursor::new(payload), ctx)?;
-        //     return Ok(Message::Hello(hello));
-        // }
+        if header.command() == commands::HELLO {
+            debug!("Come to that shit- HELLO");
+            let payload = header.payload(reader, ctx)?;
+            let hello = Hello::read(&mut Cursor::new(payload), ctx)?;
+            return Ok(Message::Hello(hello));
+        }
+
+        // Hello
+        if header.command() == commands::STATUS {
+            debug!("GET STATUS ");
+            let payload = header.payload(reader, ctx)?;
+            let status = Status::read(&mut Cursor::new(payload), ctx)?;
+            return Ok(Message::Status(status));
+        }
 
         // Verack
         if header.command() == commands::VERACK {
@@ -202,10 +235,16 @@ impl Message {
             Message::FeeFilter(p) => write_with_payload(writer, FEEFILTER, p, magic),
             Message::SendCmpct(p) => write_with_payload(writer, SENDCMPCT, p, magic),
             Message::Tx(p) => write_with_payload(writer, TX, p, magic),
+            Message::Tx2(_p) => Ok(()),
+                // make one transaction
+                //write_with_payload(writer, TX, p, magic),
             Message::Verack => write_without_payload(writer, VERACK, magic),
             Message::Version(v) => write_with_payload(writer, VERSION, v, magic),
-            Message::NodeKey(v) => v.write(writer, &mut ()),
+            Message::NodeKey(v) => v.write(writer, ctx),
             Message::Hello(h) => write_with_payload2(writer, HELLO, h, magic[..3].try_into().expect("shortened magic"), ctx),
+            Message::Status(s) => s.write(writer, ctx)
+                // no payload for status 
+                //write_with_payload2(writer, STATUS, s, magic[..3].try_into().expect("shortened magic"), ctx),
         }
     }
 }
@@ -229,10 +268,12 @@ impl fmt::Debug for Message {
             Message::Reject(p) => f.write_str(&format!("{:#?}", p)),
             Message::SendCmpct(p) => f.write_str(&format!("{:#?}", p)),
             Message::Tx(p) => f.write_str(&format!("{:#?}", p)),
+            Message::Tx2(_p) => f.write_str(&format!("{:#?}", "merge txs!")),
             Message::Verack => f.write_str("Verack"),
             Message::Version(p) => f.write_str(&format!("{:#?}", p)),
             Message::NodeKey(v) => f.write_str(&format!("{:#?}", v)),
             Message::Hello(h) => f.write_str(&format!("{:#?}", h)),
+            Message::Status(s) => f.write_str(&format!("{:#?}", s)),
         }
     }
 }
