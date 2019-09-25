@@ -298,16 +298,13 @@ pub fn main1() {
                             Message::Verack => {
                                 debug!("Write {:#?}", Message::Verack);
                                 Message::Verack.write(&mut is, magic, &mut ()).unwrap();
-                                // debug!("Write ping");
-                                // Message::Ping(Ping {nonce: secs_since(UNIX_EPOCH) as u64,}).write(&mut is, magic).unwrap();
                             }
                             Message::Ping(ref ping) => {
                                 debug!("Write {:#?}", ping);
                                 Message::Pong(ping.clone()).write(&mut is, magic, &mut ()).unwrap();
                             }
                             Message::FeeFilter(ref fee) => {
-                                debug!("min fee received {:?}", fee.minfee);
-                                debug!("Write {:#?}", &tx);
+                                debug!("Min fee {:?} received, Write {:#?}", fee.minfee, &tx);
                                 tx.write(&mut is, magic, &mut ()).unwrap();
                                 return Ok(tx);
                             }
@@ -422,8 +419,6 @@ fn main() {
     let mut is = stream.try_clone().unwrap();
     let magic = network.magic();
 
-    debug!("Network magic: {:?}", magic);
-
     let version = NodeKey {
         version: message
     };
@@ -463,8 +458,7 @@ fn main() {
 
     let lis = thread::spawn(move || {
         debug!("Connected {:?}", &seed);
-            loop {
-            debug!("read partial shit ");
+        loop {
             let message = match &partial {
                 Some(header) => Message::read_partial(&mut is, header.as_ref(), &mut ctx),
                 None => Message::read2(&mut is, magic[..3].try_into().expect("shortened magic"), &mut ctx),
@@ -476,21 +470,10 @@ fn main() {
                         partial = Some(header);
                     } else {
                         partial = None;
-                        println!("message: {:?}", message);
                         match message {
-                            Message::Hello(hello) => {
-                                // reading hello probably helpful for context
-                                debug!("HELLO {:?}", &hello);
-                                // pin expected status command with nail here
-                                ctx.expect(commands::STATUS);
-                            }
+                            Message::Hello(_h) => ctx.expect(commands::STATUS),
                             Message::Status(status) => {
-                                debug!("STATUS {:?}", &status);
-                                debug!("write that shit back");
                                 status.write(&mut is, &mut ctx).unwrap();
-
-                                debug!("Write transaction after status");
-
                                 let mut tx = Tx2 {
                                     nonce: U256::from(2),
                                     gas_price: U256::from(1_000_000_000u64),
@@ -507,7 +490,6 @@ fn main() {
                                 };
                                 tx = tx.sign(&secret, Some(123));
 
-                                debug!("transaction : {:?}", &tx);
                                 debug!("        hash: {:?}", &tx.hash());
 
                                 let mx = Message::Tx2(tx);
@@ -533,7 +515,6 @@ fn main() {
                     if let Error::IOError(ref e) = e {
                             if e.kind() == io::ErrorKind::WouldBlock || 
                                 e.kind() == io::ErrorKind::TimedOut {
-                                debug!("continue");
                                 continue;
                             }
                     }
@@ -549,49 +530,6 @@ fn main() {
     };
     use std::net::Shutdown;
     stream.shutdown(Shutdown::Both).unwrap();
-}
-
-#[cfg(test)]
-mod tests {
-    // print some info with nocapture,
-    // > cargo test -- --nocapture
-    #[test] fn test_sail() {
-        use super::*;
-        //use sha256::sha256d;
-        use address::AddressType;
-        use cashaddr::cashaddr_encode;
-        use network::Network;
-        use rust_base58::base58::ToBase58;
-        use hash160;
-
-        let secret_wif: &str = &"cPSW2teJFwABTyvxrE39VuX3PGTUm1kkFhtzHXLqv6BzaUxT7PzF";
-        println!("wif: {:?}", secret_wif);
-        let b58 = secret_wif.from_base58().unwrap();        
-        let check_sum = &b58[34..];
-        let payload = &b58[1..33];
-        println!("b58: {:?}", b58);
-        println!("b58: {:?}", &b58.to_base58());
-        println!("1st: {:?}", &b58[0]);
-        println!(" 33: {:?}", &b58[1..34]);
-        println!("pld: {:?}", payload);
-        println!("cmp: {:?}", &b58[33]); // last byte is about compression and should be dropped
-        println!("chk: {:?}", check_sum);
-
-        assert_eq!(check_sum, &sha256d(&b58[..34]).0[..4]);
-
-        let secp = Secp256k1::new();
-
-        let secret_key = SecretKey::from_slice(&payload[..32]).expect("32 bytes, within curve order");
-        let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
-        println!("sec: {:?}", secret_key);
-        println!("pub: {:?}", hex::encode(&pub_key.serialize().as_ref()));
-        
-        // base32 over some bits
-        let add = cashaddr_encode(&hash160(&pub_key.serialize()).0,  AddressType::P2PKH, Network::Regtest).unwrap();
-        println!(" b32: {:?}", &add);
-
-        assert_eq!("bchreg:qz68qweq3q8mt8xjspdawm0pfcq2pnxnkyucwhephh", add);
-    }
 }
 
 fn hash(output: &mut [u8], x: &[u8], _y: &[u8]) -> i32 {

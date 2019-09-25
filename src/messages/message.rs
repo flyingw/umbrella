@@ -189,7 +189,6 @@ impl Message {
         
         // Hello
         if header.command() == commands::HELLO {
-            debug!("Come to that shit- HELLO");
             let payload = header.payload(reader, ctx)?;
             let hello = Hello::read(&mut Cursor::new(payload), ctx)?;
             return Ok(Message::Hello(hello));
@@ -197,7 +196,6 @@ impl Message {
 
         // Hello
         if header.command() == commands::STATUS {
-            debug!("GET STATUS ");
             let payload = header.payload(reader, ctx)?;
             let status = Status::read(&mut Cursor::new(payload), ctx)?;
             return Ok(Message::Status(status));

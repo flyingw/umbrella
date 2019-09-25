@@ -189,8 +189,6 @@ impl Serializable<SecHeader> for SecHeader {
     }
 
     fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
-        debug!("=>write short header");
-        
         use std::convert::TryInto;
         let len: usize = self.payload_size.try_into().unwrap();
         let mut header = [0u8; SecHeader::HEADER_LEN];

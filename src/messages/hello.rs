@@ -88,8 +88,6 @@ impl Serializable<Hello> for Hello{
         let mut prev = Hash128::default();
         Ctx::get_remote_mac(ctx, prev.as_bytes_mut());
 
-        debug!("prev bytes {:?}", prev.as_bytes());
-
 		let mut enc = Hash128::default();
 		&mut enc[..].copy_from_slice(prev.as_bytes());
 
@@ -97,15 +95,10 @@ impl Serializable<Hello> for Hello{
 	    let enc_mut = enc.as_bytes_mut();
 		mac_encoder.encrypt(enc_mut, enc_mut.len()).unwrap();
 
-        debug!("prev enc {:?}", enc.as_bytes());
-        debug!("    prev {:?}", prev.as_bytes());
-        debug!("     xor {:?}", (enc ^ prev).as_bytes());
-		
         Ctx::update_remote_mac(ctx, (enc ^ prev).as_bytes());
 
         let mut b = [0;16];
         Ctx::get_remote_mac(ctx, &mut b);
-        debug!("last 16 {:?}", b);
         writer.write_all(&b)
     }
 

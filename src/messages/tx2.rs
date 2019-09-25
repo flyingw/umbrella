@@ -157,8 +157,6 @@ impl Serializable<Tx2> for Tx2 {
         panic!("we've never read transactions");
     }
     fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
-        debug!("Write tx2:");
-
         let mut rlp = RlpStream::new_list(1);
         rlp.begin_list(9);
         rlp.append(&self.nonce);
@@ -205,8 +203,6 @@ impl Serializable<Tx2> for Tx2 {
         let mut prev = Hash128::default();
         Ctx::get_remote_mac(ctx, prev.as_bytes_mut());
 
-        debug!("prev bytes {:?}", prev.as_bytes());
-
 		let mut enc = Hash128::default();
 		&mut enc[..].copy_from_slice(prev.as_bytes());
 
@@ -214,15 +210,10 @@ impl Serializable<Tx2> for Tx2 {
 	    let enc_mut = enc.as_bytes_mut();
 		mac_encoder.encrypt(enc_mut, enc_mut.len()).unwrap();
 
-        debug!("prev enc {:?}", enc.as_bytes());
-        debug!("    prev {:?}", prev.as_bytes());
-        debug!("     xor {:?}", (enc ^ prev).as_bytes());
-		
         Ctx::update_remote_mac(ctx, (enc ^ prev).as_bytes());
 
         let mut b = [0;16];
         Ctx::get_remote_mac(ctx, &mut b);
-        debug!("last 16 {:?}", b);
         writer.write_all(&b)
     }
 
