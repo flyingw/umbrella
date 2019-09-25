@@ -1,17 +1,25 @@
 use parity_crypto::{aes, digest, hmac, is_equal};
 use ethereum_types::H128;
-use crate::ecdh;
-use ethkey::{Random, Generator, Public, Secret, Error};
+use rand;
+use secp256k1::{self, ecdh};
+use secp256k1::{Secp256k1, SecretKey, PublicKey};
+use crate::keys::{public_to_slice, slice_to_public};
+
+fn hash(output: &mut [u8], x: &[u8], _y: &[u8]) -> i32 {
+  kdf(&x, &[0u8; 0], output);
+  1
+}
 
 /// Encrypt a message with a public key, writing an HMAC covering both
 /// the plaintext and authenticated data.
 ///
 /// Authenticated data may be empty.
-pub fn encrypt(public: &Public, auth_data: &[u8], plain: &[u8]) -> Result<Vec<u8>, u8> {
-  let r = Random.generate().unwrap();
-  let z = ecdh::agree(r.secret(), public);
-  let mut key = [0u8; 32];
-  kdf(&z, &[0u8; 0], &mut key);
+pub fn encrypt(public_key: &PublicKey, auth_data: &[u8], plain: &[u8]) -> Result<Vec<u8>, u8> {
+  let mut rng = rand::thread_rng();
+  let secp = Secp256k1::new();
+  let (secret_key_rand, public_key_rand) = secp.generate_keypair(&mut rng);
+
+  let key = ecdh::SharedSecret::new_with_hash(&public_key, &secret_key_rand, &mut hash);
 
   let ekey = &key[0..16];
   let mkey = hmac::SigKey::sha256(&digest::sha256(&key[16..32]));
@@ -20,7 +28,7 @@ pub fn encrypt(public: &Public, auth_data: &[u8], plain: &[u8]) -> Result<Vec<u8
   msg[0] = 0x04u8;
   {
     let msgd = &mut msg[1..];
-    msgd[0..64].copy_from_slice(r.public().as_bytes());
+    msgd[0..64].copy_from_slice(&public_to_slice(&public_key_rand));
     let iv = H128::random();
     msgd[64..80].copy_from_slice(iv.as_bytes());
     {
@@ -41,18 +49,16 @@ pub fn encrypt(public: &Public, auth_data: &[u8], plain: &[u8]) -> Result<Vec<u8
 
 /// Decrypt a message with a secret key, checking HMAC for ciphertext
 /// and authenticated data validity.
-pub fn decrypt(secret: &Secret, auth_data: &[u8], encrypted: &[u8]) -> Result<Vec<u8>, u8> {
+pub fn decrypt(secret_key: &SecretKey, auth_data: &[u8], encrypted: &[u8]) -> Result<Vec<u8>, u8> {
   let meta_len = 1 + 64 + 16 + 32;
   if encrypted.len() < meta_len  || encrypted[0] < 2 || encrypted[0] > 4 {
-    panic!("decrypt error={}, invalid message: publickey", Error::InvalidMessage);
+    panic!("decrypt error=InvalidMessage, invalid message: publickey");
   }
 
   let e = &encrypted[1..];
-  let p = Public::from_slice(&e[0..64]);
-  let z = ecdh::agree(secret, &p);
-  let mut key = [0u8; 32];
-  kdf(&z, &[0u8; 0], &mut key);
-
+  let public_key = slice_to_public(&e[0..64]).unwrap();
+  let key = ecdh::SharedSecret::new_with_hash(&public_key, &secret_key, &mut hash);
+  
   let ekey = &key[0..16];
   let mkey = hmac::SigKey::sha256(&digest::sha256(&key[16..32]));
 
@@ -69,7 +75,7 @@ pub fn decrypt(secret: &Secret, auth_data: &[u8], encrypted: &[u8]) -> Result<Ve
   let mac = hmac.sign();
 
   if !is_equal(&mac.as_ref()[..], msg_mac) {
-    panic!("decrypt error={}, wrong mac", Error::InvalidMessage);
+    panic!("decrypt error=InvalidMessage, wrong mac");
   }
 
   let mut msg = vec![0u8; clen];
@@ -77,7 +83,7 @@ pub fn decrypt(secret: &Secret, auth_data: &[u8], encrypted: &[u8]) -> Result<Ve
   Ok(msg)
 }
 
-fn kdf(secret: &Secret, s1: &[u8], dest: &mut [u8]) {
+fn kdf(shared: &[u8], s1: &[u8], dest: &mut [u8]) {
   // SEC/ISO/Shoup specify counter size SHOULD be equivalent
   // to size of hash output, however, it also notes that
   // the 4 bytes is okay. NIST specifies 4 bytes.
@@ -87,7 +93,7 @@ fn kdf(secret: &Secret, s1: &[u8], dest: &mut [u8]) {
     let mut hasher = digest::Hasher::sha256();
     let ctrs = [(ctr >> 24) as u8, (ctr >> 16) as u8, (ctr >> 8) as u8, ctr as u8];
     hasher.update(&ctrs);
-    hasher.update(secret.as_bytes());
+    hasher.update(&shared[..]);
     hasher.update(s1);
     let d = hasher.finish();
     &mut dest[written..(written + 32)].copy_from_slice(&d);

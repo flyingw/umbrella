@@ -31,6 +31,7 @@ pub mod interpreter;
 pub mod keys;
 pub mod ctx;
 pub mod lil_rlp;
+pub mod ecies;
 
 pub use serdes::Serializable;
 pub use result::{Error, Result};
