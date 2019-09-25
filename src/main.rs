@@ -370,7 +370,7 @@ fn main() {
 	stream.read_exact(data.as_mut_slice()).unwrap();
 
     let ack_cipher: Vec<u8> = data.clone().to_vec();
-    let mut connection = ecies::decrypt(&secret, &[], &data).map(|ack| {
+    let mut ctx = ecies::decrypt(&secret, &[], &data).map(|ack| {
         use crate::hash512::Hash512;
 
         let mut remote_ephemeral: Public = Public::default();
@@ -439,7 +439,7 @@ fn main() {
 
     trace!("write out hello");
     let our_hello = Message::Hello(hello);
-    our_hello.write(&mut stream, magic, &mut connection).unwrap();
+    our_hello.write(&mut stream, magic, &mut ctx).unwrap();
 
     let mut partial: Option<Box<dyn MsgHeader>> = None;
     use std::io;
@@ -450,8 +450,8 @@ fn main() {
             loop {
             debug!("read partial shit ");
             let message = match &partial {
-                Some(header) => Message::read_partial(&mut is, header.as_ref(), &mut connection),
-                None => Message::read2(&mut is, magic[..3].try_into().expect("shortened magic"), &mut connection),
+                Some(header) => Message::read_partial(&mut is, header.as_ref(), &mut ctx),
+                None => Message::read2(&mut is, magic[..3].try_into().expect("shortened magic"), &mut ctx),
             };
 
             match message {
@@ -466,12 +466,12 @@ fn main() {
                                 // reading hello probably helpful for context
                                 debug!("HELLO {:?}", &hello);
                                 // pin expected status command with nail here
-                                connection.expected = commands::STATUS;
+                                ctx.expected = commands::STATUS;
                             }
                             Message::Status(status) => {
                                 debug!("STATUS {:?}", &status);
                                 debug!("write that shit back");
-                                status.write(&mut is, &mut connection).unwrap();
+                                status.write(&mut is, &mut ctx).unwrap();
 
                                 debug!("Write transaction after status");
 
@@ -495,7 +495,7 @@ fn main() {
                                 debug!("        hash: {:?}", &tx.hash());
 
                                 let mx = Message::Tx2(tx);
-                                mx.write(&mut is, magic, &mut connection).unwrap();
+                                mx.write(&mut is, magic, &mut ctx).unwrap();
 
                                 return Ok(mx);
                             }
