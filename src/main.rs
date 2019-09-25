@@ -32,8 +32,6 @@ pub mod keys;
 pub mod ctx;
 pub mod lil_rlp;
 
-mod connection;
-
 pub use serdes::Serializable;
 pub use result::{Error, Result};
 pub use amount::{Amount, Units};
@@ -55,6 +53,18 @@ use rust_base58::base58::FromBase58;
 use aes_ctr::Aes256Ctr;
 use aes::block_cipher_trait::generic_array::GenericArray;
 use aes_ctr::stream_cipher::NewStreamCipher;
+
+use ethereum_types::{U256};
+use ethkey::Address;
+use std::str::FromStr;
+use std::thread;
+use ethstore::Crypto;
+use ethkey::Password;
+use crate::messages::commands;
+use ctx::EncCtx;
+
+const NULL_IV: [u8; 16] = [0;16];
+const RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4: usize = 210;
 
 // Creates public key hash script.
 fn pk_script(addr: &str) -> Script {
@@ -255,18 +265,6 @@ pub fn main1() {
     stream.shutdown(Shutdown::Both).unwrap();
 }
 
-use ethereum_types::{U256};
-use ethkey::Address;
-use std::str::FromStr;
-use std::thread;
-use ethstore::Crypto;
-use ethkey::Password;
-use crate::messages::commands;
-
-use connection::{OriginatedEncryptedConnection};
-
-const NULL_IV: [u8; 16] = [0;16];
-const RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4: usize = 210;
 
 /// 
 fn main() {
@@ -424,7 +422,7 @@ fn main() {
 		ingress_mac.update(mac_material.as_bytes());
 		ingress_mac.update(&ack_cipher);
         
-		OriginatedEncryptedConnection {
+		EncCtx {
 			encoder: encoder,
 			decoder: decoder,
 			mac_encoder_key: mac_encoder_key,
