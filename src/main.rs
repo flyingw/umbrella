@@ -31,6 +31,7 @@ pub mod interpreter;
 pub mod keys;
 pub mod ctx;
 pub mod lil_rlp;
+pub mod ecies;
 
 pub use serdes::Serializable;
 pub use result::{Error, Result};
@@ -46,7 +47,7 @@ use messages::{Message,MsgHeader};
 use util::secs_since;
 use std::time::{UNIX_EPOCH, Duration};
 use script::Script;
-use secp256k1::{Secp256k1, SecretKey, PublicKey};
+use secp256k1::{ecdh, Secp256k1, SecretKey, PublicKey};
 use sighash::{bip143_sighash, SigHashCache, SIGHASH_FORKID, SIGHASH_ALL};
 use transaction::generate_signature;
 use rust_base58::base58::FromBase58;
@@ -63,7 +64,6 @@ use ethkey::Password;
 use crate::messages::commands;
 use ctx::{Ctx,EncCtx};
 use tiny_keccak::Keccak;
-use ethkey::crypto::{ecdh, ecies};
 use crate::keys::public_to_slice;
 use ethkey::{sign, Secret, Public};
 use ethereum_types::H256;
@@ -390,8 +390,7 @@ fn main() {
     //handshake write
     let (secret_key, public_key) = secp.generate_keypair(&mut rng);
     let public_key_slice = public_to_slice(&public_key);
-    let secret = Secret::from_slice(&secret_key[0..32]).unwrap();
-
+    
     let (ecdhe_secret_key, ecdhe_public_key) = secp.generate_keypair(&mut rng);
     let ecdhe_public_key_slice = public_to_slice(&ecdhe_public_key);
     let ecdhe_secret = Secret::from_slice(&ecdhe_secret_key[0..32]).unwrap();
@@ -406,16 +405,15 @@ fn main() {
     let (data_nonce, _) = rest.split_at_mut(32);
 
     // E(remote-pubk, S(ecdhe-random, ecdh-shared-secret^nonce) || H(ecdhe-random-pubk) || pubk || nonce || 0x0)
-    let node_key = Public::from_slice(&public_to_slice(&pub_key));
-    let shared: H256 = *ecdh::agree(&secret, &node_key).unwrap();
+    let shared = ecdh::SharedSecret::new_with_hash(&pub_key, &secret_key, &mut hash);
 
-    let xor = Hash256::from_slice(shared.as_bytes()) ^ nonce;
+    let xor = Hash256::from_slice(&shared[..]) ^ nonce;
     sig.copy_from_slice(&*sign(&ecdhe_secret, &H256::from_slice(xor.as_bytes())).unwrap());
     Keccak::keccak256(&ecdhe_public_key_slice, hepubk);
     pubk.copy_from_slice(&public_key_slice);
     data_nonce.copy_from_slice(nonce.as_bytes());
     
-    let message: Vec<u8> = ecies::encrypt(&node_key, &[], &data).unwrap();
+    let message: Vec<u8> = ecies::encrypt(&pub_key, &[], &data).unwrap();
     let auth_cipher: Vec<u8> = message.clone();
     
     use std::net::TcpStream;
@@ -594,4 +592,9 @@ mod tests {
 
         assert_eq!("bchreg:qz68qweq3q8mt8xjspdawm0pfcq2pnxnkyucwhephh", add);
     }
+}
+
+fn hash(output: &mut [u8], x: &[u8], _y: &[u8]) -> i32 {
+    output.copy_from_slice(x);
+    1
 }
