@@ -4,8 +4,17 @@ use keccak_hash::{write_keccak};
 use rlp::{RlpStream};
 use crate::result::Result;
 use std::fmt;
+use super::message::Payload;
+use crate::serdes::Serializable;
+use std::io;
+use std::io::{Read, Write};
+use crate::ctx::Ctx;
+use block_modes::{BlockMode, Ecb, block_padding::{ZeroPadding}};
+use aes_ctr::stream_cipher::SyncStreamCipher;
+use crate::hash128::Hash128;
+use aes::Aes256;
 
-type Bytes = Vec<u8>;
+const MAX_PAYLOAD_SIZE: usize = (1 << 24) - 1;
 
 #[derive(Default)]
 pub struct Tx2 {
@@ -20,7 +29,7 @@ pub struct Tx2 {
 	/// Transfered value.
 	pub value: U256,
 	/// Transaction data.
-	pub data: Bytes,
+	pub data: Vec<u8>,
 	/// The V field of the signature; the LS bit described which half of the curve our point falls
 	/// in. The MS bits describe which chain this transaction is for. If 27/28, its for all chains.
 	pub v: u64,
@@ -140,6 +149,114 @@ pub mod signature {
 	}
 }
 
+const PACKET_USER: u8 = 0x10;
+const PACKET_TRANSACTIONS: u8 = 0x02 + PACKET_USER;
+
+impl Serializable<Tx2> for Tx2 {
+    fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<Tx2> {
+        panic!("we've never read transactions");
+    }
+    fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
+        debug!("Write tx2:");
+
+        let mut rlp = RlpStream::new_list(1);
+        rlp.begin_list(9);
+        rlp.append(&self.nonce);
+        rlp.append(&self.gas_price);
+        rlp.append(&self.gas);
+        rlp.append(&self.call);
+        rlp.append(&self.value);
+        rlp.append(&self.data);
+        rlp.append(&self.v);
+        rlp.append(&self.r);
+        rlp.append(&self.s);
+                                
+        let data = &rlp.out();
+                                
+        let mut rlp = RlpStream::new();
+        rlp.append(&(u32::from(PACKET_TRANSACTIONS)));
+        let mut compressed = Vec::new();
+        let len = parity_snappy::compress_into(data, &mut compressed);
+        let payload = &compressed[0..len];
+        rlp.append_raw(payload, 1);
+
+        let payload = &rlp.out();
+        
+        // check some comments in module tests below
+        let len = payload.len();
+        if len > MAX_PAYLOAD_SIZE {
+			panic!("OversizedPacket {}", len);
+		}
+
+        let padding = (16 - (len % 16)) % 16;
+        let mut packet: Vec<u8> = vec![0u8; len + padding + 16];
+        
+		&mut packet[..len].copy_from_slice(&payload);
+        Ctx::encoder(ctx).try_apply_keystream(&mut packet[..len]).unwrap();
+
+		if padding != 0 {
+            Ctx::encoder(ctx).try_apply_keystream(&mut packet[len..(len + padding)]).unwrap();
+		}
+
+        Ctx::update_remote_mac(ctx, &packet[..(len + padding)]);
+
+        writer.write_all(&packet[..(len + padding)])?;
+
+        let mut prev = Hash128::default();
+        Ctx::get_remote_mac(ctx, prev.as_bytes_mut());
+
+        debug!("prev bytes {:?}", prev.as_bytes());
+
+		let mut enc = Hash128::default();
+		&mut enc[..].copy_from_slice(prev.as_bytes());
+
+        let mac_encoder: Ecb<Aes256, ZeroPadding> = Ecb::new_var(&ctx.secret_key()[..], &[]).expect("failed to aes ecb 1");
+	    let enc_mut = enc.as_bytes_mut();
+		mac_encoder.encrypt(enc_mut, enc_mut.len()).unwrap();
+
+        debug!("prev enc {:?}", enc.as_bytes());
+        debug!("    prev {:?}", prev.as_bytes());
+        debug!("     xor {:?}", (enc ^ prev).as_bytes());
+		
+        Ctx::update_remote_mac(ctx, (enc ^ prev).as_bytes());
+
+        let mut b = [0;16];
+        Ctx::get_remote_mac(ctx, &mut b);
+        debug!("last 16 {:?}", b);
+        writer.write_all(&b)
+    }
+
+}
+
+impl Payload<Tx2> for Tx2 {
+    fn size(&self) -> usize {
+        let mut rlp = RlpStream::new_list(1);
+        rlp.begin_list(9);
+        rlp.append(&self.nonce);
+        rlp.append(&self.gas_price);
+        rlp.append(&self.gas);
+        rlp.append(&self.call);
+        rlp.append(&self.value);
+        rlp.append(&self.data);
+        rlp.append(&self.v);
+        rlp.append(&self.r);
+        rlp.append(&self.s);
+                                
+        let data = &rlp.out();
+                                
+        let mut rlp = RlpStream::new();
+        rlp.append(&(u32::from(PACKET_TRANSACTIONS)));
+        let mut compressed = Vec::new();
+        let len = parity_snappy::compress_into(data, &mut compressed);
+        let payload = &compressed[0..len];
+        rlp.append_raw(payload, 1);
+
+        //
+        let payload = &rlp.out();
+        debug!("Payload size: {:?}", &payload.len());
+        payload.len()
+    }
+}
 
 impl fmt::Debug for Tx2 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

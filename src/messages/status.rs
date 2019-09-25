@@ -6,13 +6,13 @@ use std::io;
 use std::io::{Read, Write};
 use std::fmt;
 use crate::hash128::Hash128;
-use crate::connection::{MAX_PAYLOAD_SIZE};
 use aes::Aes256;
 use block_modes::{BlockMode, Ecb, block_padding::{ZeroPadding}};
 use aes_ctr::stream_cipher::SyncStreamCipher;
 
 const PACKET_USER: u8 = 0x10;
 const PACKET_STATUS: u8 = 0x00 + PACKET_USER;
+const MAX_PAYLOAD_SIZE: usize = (1 << 24) - 1;
 
 pub struct Status {
     pub protocol_version: u128,

@@ -22,7 +22,7 @@ pub const NO_CHECKSUM: [u8; 4] = [0x5d, 0xf6, 0xe0, 0xe2];
 
 /// Max message payload size (32MB)
 pub const MAX_PAYLOAD_SIZE: u32 = 0x02000000;
-
+//pub const MAX_PAYLOAD_SIZE: usize = (1 << 24) - 1;
 pub type ProtocolId = [u8; 3];
 
 pub struct CapabilityInfo {
@@ -67,8 +67,7 @@ pub mod commands {
 
     // [no such command]
     pub const HELLO: [u8; 12] = *b"hello\0\0\0\0\0\0\0";
-    pub const STATUS: [u8; 12] = *b"status\0\0\0\0\0\0";
-    
+    pub const STATUS: [u8; 12] = *b"status\0\0\0\0\0\0";    
 }
 
 /// Bitcoin peer-to-peer message with its payload
@@ -236,11 +235,7 @@ impl Message {
             Message::FeeFilter(p) => write_with_payload(writer, FEEFILTER, p, magic),
             Message::SendCmpct(p) => write_with_payload(writer, SENDCMPCT, p, magic),
             Message::Tx(p) => write_with_payload(writer, TX, p, magic),
-            Message::Tx2(p) =>  {
-                debug!("write tx2 {:?}", p);
-                Ok(())
-            }
-                //write_with_payload(writer, TX, p, magic),
+            Message::Tx2(p) => write_with_payload2(writer, TX, p, magic[..3].try_into().expect("shortened magic"), ctx),
             Message::Verack => write_without_payload(writer, VERACK, magic),
             Message::Version(v) => write_with_payload(writer, VERSION, v, magic),
             Message::NodeKey(v) => v.write(writer, ctx),

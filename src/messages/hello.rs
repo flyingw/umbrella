@@ -5,7 +5,6 @@ use crate::result::{Error, Result};
 use crate::serdes::Serializable;
 use crate::keys::public_to_slice;
 use super::message::Payload;
-use crate::connection::{MAX_PAYLOAD_SIZE, RLPX_TRANSPORT_PROTOCOL_VERSION};
 use crate::ctx::Ctx;
 use crate::hash128::Hash128;
 use super::message::ETH_63_CAPABILITY;
@@ -18,6 +17,9 @@ use crate::keys::{slice_to_public};
 const PACKET_HELLO: u8 = 0x80; // actually 0x00 rlp doc "The integer 0 = [ 0x80 ]"
 const CLIENT_NAME: &str = "umbrella";
 const LOCAL_PORT: u16 = 1234;
+
+const RLPX_TRANSPORT_PROTOCOL_VERSION: u32 = 5;
+const MAX_PAYLOAD_SIZE: usize = (1 << 24) - 1;
 
 #[derive(Clone)]
 pub struct Hello {

@@ -265,6 +265,9 @@ use crate::messages::commands;
 
 use connection::{OriginatedEncryptedConnection};
 
+const NULL_IV: [u8; 16] = [0;16];
+const RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4: usize = 210;
+
 /// 
 fn main() {
     let opt = Opt::from_args();
@@ -348,7 +351,7 @@ fn main() {
     use std::net::TcpStream;
 
     let mut stream = TcpStream::connect_timeout(&seed, Duration::from_secs(1)).unwrap();
-    let is = stream.try_clone().unwrap();
+    let mut is = stream.try_clone().unwrap();
     let magic = network.magic();
 
     debug!("Network magic: {:?}", magic);
@@ -364,13 +367,13 @@ fn main() {
 
     //handshake read
     use std::io::Read;
-    let mut data: Vec<u8> = vec![0u8; connection::RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4];
+    let mut data: Vec<u8> = vec![0u8; RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4];
+    // ath_ack message?
 	stream.read_exact(data.as_mut_slice()).unwrap();
 
     let ack_cipher: Vec<u8> = data.clone().to_vec();
     let mut connection = ecies::decrypt(&secret, &[], &data).map(|ack| {
         use crate::hash512::Hash512;
-        use crate::connection::NULL_IV;
 
         let mut remote_ephemeral: Public = Public::default();
         let mut remote_nonce: Hash256 = Hash256::default();
@@ -422,7 +425,6 @@ fn main() {
 		ingress_mac.update(&ack_cipher);
         
 		OriginatedEncryptedConnection {
-			stream: is,
 			encoder: encoder,
 			decoder: decoder,
 			mac_encoder_key: mac_encoder_key,
@@ -433,11 +435,6 @@ fn main() {
 		}
     }).unwrap();
 
-    use rlp::RlpStream;
-
-    const PACKET_USER: u8 = 0x10;
-    const PACKET_TRANSACTIONS: u8 = 0x02 + PACKET_USER;
-    
     let hello = Hello {
         public_key: public_key,
     };
@@ -450,15 +447,13 @@ fn main() {
     use std::io;
     use std::convert::TryInto;
 
-    let mut os = stream.try_clone().unwrap();
-
     let lis = thread::spawn(move || {
         debug!("Connected {:?}", &seed);
             loop {
             debug!("read partial shit ");
             let message = match &partial {
-                Some(header) => Message::read_partial(&mut os, header.as_ref(), &mut connection),
-                None => Message::read2(&mut os, magic[..3].try_into().expect("shortened magic"), &mut connection),
+                Some(header) => Message::read_partial(&mut is, header.as_ref(), &mut connection),
+                None => Message::read2(&mut is, magic[..3].try_into().expect("shortened magic"), &mut connection),
             };
 
             match message {
@@ -478,7 +473,7 @@ fn main() {
                             Message::Status(status) => {
                                 debug!("STATUS {:?}", &status);
                                 debug!("write that shit back");
-                                status.write(&mut os, &mut connection).unwrap();
+                                status.write(&mut is, &mut connection).unwrap();
 
                                 debug!("Write transaction after status");
 
@@ -498,32 +493,13 @@ fn main() {
                                 };
                                 tx = tx.sign(&secret, Some(123));
 
-                                let transactions = &vec![&tx];
-                                let mut rlp = RlpStream::new_list(transactions.len());
-                                for t in transactions {
-                                    rlp.begin_list(9);
-		                            rlp.append(&t.nonce);
-		                            rlp.append(&t.gas_price);
-		                            rlp.append(&t.gas);
-		                            rlp.append(&t.call);
-		                            rlp.append(&t.value);
-		                            rlp.append(&t.data);
-		                            rlp.append(&t.v);
-		                            rlp.append(&t.r);
-		                            rlp.append(&t.s);
-                                }
-                                let data = &rlp.out();
-                                let mut rlp = RlpStream::new();
-                                rlp.append(&(u32::from(PACKET_TRANSACTIONS)));
-                                let mut compressed = Vec::new();
-                                let len = parity_snappy::compress_into(data, &mut compressed);
-                                let payload = &compressed[0..len];
-                                rlp.append_raw(payload, 1);
-                                connection.write_packet(&rlp.out()).unwrap();
-
                                 debug!("transaction : {:?}", &tx);
                                 debug!("        hash: {:?}", &tx.hash());
-                                return Ok(Message::Tx2(tx));
+
+                                let mx = Message::Tx2(tx);
+                                mx.write(&mut is, magic, &mut connection).unwrap();
+
+                                return Ok(mx);
                             }
                             _ => {
                                 // no actual reject here, its used because commands are hardcoded
