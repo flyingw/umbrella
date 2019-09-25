@@ -12,6 +12,8 @@ pub enum Units {
     Bits,
     /// One hundred millionth of a bitcoin
     Sats,
+    /// One ether
+    Eth,
 }
 
 impl Units {
@@ -23,6 +25,8 @@ impl Units {
             return Ok(Units::Bits);
         } else if s == "sat" || s == "sats" {
             return Ok(Units::Sats);
+        } else if s == "eth" || s == "ethereum" {
+            return Ok(Units::Eth);
         } else {
             let msg = format!("Unknown units: {}", s);
             return Err(Error::BadArgument(msg));
@@ -38,9 +42,10 @@ impl Amount {
     /// Creates from a given amount and unit
     pub fn from(amount: f64, units: Units) -> Amount {
         match units {
-            Units::Bch => Amount((amount * 100_000_000.) as i64),
+            Units::Bch  => Amount((amount * 100_000_000.) as i64),
             Units::Bits => Amount((amount * 100.) as i64),
             Units::Sats => Amount(amount as i64),
+            Units::Eth  => Amount((amount * 100_000_000.) as i64),
         }
     }
 
@@ -50,6 +55,7 @@ impl Amount {
             Units::Bch => self.0 as f64 / 100_000_000.,
             Units::Bits => self.0 as f64 / 100.,
             Units::Sats => self.0 as f64,
+            Units::Eth => self.0 as f64 / 100_000_000.,
         }
     }
 }
