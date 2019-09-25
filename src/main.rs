@@ -61,7 +61,12 @@ use std::thread;
 use ethstore::Crypto;
 use ethkey::Password;
 use crate::messages::commands;
-use ctx::EncCtx;
+use ctx::{Ctx,EncCtx};
+use tiny_keccak::Keccak;
+use ethkey::crypto::{ecdh, ecies};
+use crate::keys::public_to_slice;
+use ethkey::{sign, Secret, Public};
+use ethereum_types::H256;
 
 const NULL_IV: [u8; 16] = [0;16];
 const RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4: usize = 210;
@@ -139,6 +144,79 @@ fn create_transaction(opt: &Opt) -> Tx {
 
     trace!{"transaction: {:#?}", tx};
     return tx;
+}
+
+fn ctx(secret: &Secret
+    , auth_data: &[u8]
+    , ecdhe_secret_key: SecretKey
+    , nonce: Hash256
+    , auth_cipher: Vec<u8>
+    , ack_cipher:  Vec<u8>
+    , public_key: PublicKey) -> Result<impl Ctx> {
+    ecies::decrypt(secret, &[], auth_data).map(|ack| {
+        use crate::hash512::Hash512;
+
+        let mut remote_ephemeral: Public = Public::default();
+        let mut remote_nonce: Hash256 = Hash256::default();
+
+        remote_ephemeral.assign_from_slice(&ack[0..64]);
+        remote_nonce.copy_from_slice(&ack[64..(64+32)]);		
+
+        let ecdhe_secret = Secret::from_slice(&ecdhe_secret_key[0..32]).unwrap();
+		let shared = ecdh::agree(&ecdhe_secret, &remote_ephemeral).unwrap();
+		let mut nonce_material = Hash512::default();
+		(&mut nonce_material[0..32]).copy_from_slice(remote_nonce.as_bytes());
+		(&mut nonce_material[32..64]).copy_from_slice(nonce.as_bytes());
+		let mut key_material = Hash512::default();
+		(&mut key_material[0..32]).copy_from_slice(shared.as_bytes());
+		Keccak::keccak256(nonce_material.as_bytes_mut(), &mut key_material[32..64]);
+		
+        let mut key_material_keccak = Hash256::default();
+		Keccak::keccak256(key_material.as_bytes(), key_material_keccak.as_bytes_mut());
+
+		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
+		
+        let mut key_material_keccak = Hash256::default();
+		Keccak::keccak256(key_material.as_bytes(), key_material_keccak.as_bytes_mut());
+
+		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
+
+		// Using a 0 IV with CTR is fine as long as the same IV is never reused with the same key.
+		// This is the case here: ecdh creates a new secret which will be the symmetric key used
+		// only for this session the 0 IV is only use once with this secret, so we are in the case
+		// of same IV use for different key.
+        let encoder = Aes256Ctr::new(GenericArray::from_slice(&key_material[32..64]), GenericArray::from_slice(&NULL_IV));
+		let decoder = Aes256Ctr::new(GenericArray::from_slice(&key_material[32..64]), GenericArray::from_slice(&NULL_IV));
+
+        let mut key_material_keccak = Hash256::default();
+		Keccak::keccak256(key_material.as_bytes(), key_material_keccak.as_bytes_mut());
+
+		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
+
+		let mac_encoder_key: SecretKey = SecretKey::from_slice(&key_material[32..64]).unwrap();
+
+		let mut egress_mac = Keccak::new_keccak256();
+		let mut mac_material = Hash256::from_slice(&key_material[32..64]) ^ remote_nonce;
+		egress_mac.update(mac_material.as_bytes());
+		egress_mac.update(&auth_cipher);
+
+		let mut ingress_mac = Keccak::new_keccak256();
+		mac_material = Hash256::from_slice(&key_material[32..64]) ^ nonce;
+		ingress_mac.update(mac_material.as_bytes());
+		ingress_mac.update(&ack_cipher);
+        
+		EncCtx {
+			encoder: encoder,
+			decoder: decoder,
+			mac_encoder_key: mac_encoder_key,
+			egress_mac: egress_mac,
+			ingress_mac: ingress_mac,
+			public_key: public_key,
+            expected: commands::HELLO,
+		}
+    }).map_err(|_e| {
+        Error::Unsupported(String::from("need special error"))
+    })
 }
 
 ///
@@ -306,12 +384,6 @@ fn main() {
     trace!("pubkey: {:?}", pub_key);
     trace!("seed node: {:?}", seed);
 
-    use tiny_keccak::Keccak;
-    use ethkey::crypto::{ecdh, ecies};
-    use crate::keys::public_to_slice;
-    use ethkey::{sign, Secret, Public};
-    use ethereum_types::H256;
-
     let nonce: Hash256 = Hash256::random();
     let secp = Secp256k1::new();
     
@@ -358,10 +430,9 @@ fn main() {
         version: message
     };
     
-    let ctx = &mut ();
     let our_version = Message::NodeKey(version);
     debug!("Write {:#?}", our_version);
-    our_version.write(&mut stream, magic, ctx).unwrap();
+    our_version.write(&mut stream, magic, &mut ()).unwrap();
 
     //handshake read
     use std::io::Read;
@@ -370,68 +441,15 @@ fn main() {
 	stream.read_exact(data.as_mut_slice()).unwrap();
 
     let ack_cipher: Vec<u8> = data.clone().to_vec();
-    let mut ctx = ecies::decrypt(&secret, &[], &data).map(|ack| {
-        use crate::hash512::Hash512;
 
-        let mut remote_ephemeral: Public = Public::default();
-        let mut remote_nonce: Hash256 = Hash256::default();
+    let mut ctx = ctx(&secret
+        , &mut data
+        , ecdhe_secret_key
+        , nonce
+        , auth_cipher
+        , ack_cipher
+        , public_key).unwrap();
 
-        remote_ephemeral.assign_from_slice(&ack[0..64]);
-        remote_nonce.copy_from_slice(&ack[64..(64+32)]);		
-
-        let ecdhe_secret = Secret::from_slice(&ecdhe_secret_key[0..32]).unwrap();
-		let shared = ecdh::agree(&ecdhe_secret, &remote_ephemeral).unwrap();
-		let mut nonce_material = Hash512::default();
-		(&mut nonce_material[0..32]).copy_from_slice(remote_nonce.as_bytes());
-		(&mut nonce_material[32..64]).copy_from_slice(nonce.as_bytes());
-		let mut key_material = Hash512::default();
-		(&mut key_material[0..32]).copy_from_slice(shared.as_bytes());
-		Keccak::keccak256(nonce_material.as_bytes_mut(), &mut key_material[32..64]);
-		
-        let mut key_material_keccak = Hash256::default();
-		Keccak::keccak256(key_material.as_bytes(), key_material_keccak.as_bytes_mut());
-
-		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
-		
-        let mut key_material_keccak = Hash256::default();
-		Keccak::keccak256(key_material.as_bytes(), key_material_keccak.as_bytes_mut());
-
-		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
-
-		// Using a 0 IV with CTR is fine as long as the same IV is never reused with the same key.
-		// This is the case here: ecdh creates a new secret which will be the symmetric key used
-		// only for this session the 0 IV is only use once with this secret, so we are in the case
-		// of same IV use for different key.
-        let encoder = Aes256Ctr::new(GenericArray::from_slice(&key_material[32..64]), GenericArray::from_slice(&NULL_IV));
-		let decoder = Aes256Ctr::new(GenericArray::from_slice(&key_material[32..64]), GenericArray::from_slice(&NULL_IV));
-
-        let mut key_material_keccak = Hash256::default();
-		Keccak::keccak256(key_material.as_bytes(), key_material_keccak.as_bytes_mut());
-
-		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
-
-		let mac_encoder_key: SecretKey = SecretKey::from_slice(&key_material[32..64]).unwrap();
-
-		let mut egress_mac = Keccak::new_keccak256();
-		let mut mac_material = Hash256::from_slice(&key_material[32..64]) ^ remote_nonce;
-		egress_mac.update(mac_material.as_bytes());
-		egress_mac.update(&auth_cipher);
-
-		let mut ingress_mac = Keccak::new_keccak256();
-		mac_material = Hash256::from_slice(&key_material[32..64]) ^ nonce;
-		ingress_mac.update(mac_material.as_bytes());
-		ingress_mac.update(&ack_cipher);
-        
-		EncCtx {
-			encoder: encoder,
-			decoder: decoder,
-			mac_encoder_key: mac_encoder_key,
-			egress_mac: egress_mac,
-			ingress_mac: ingress_mac,
-			public_key: public_key,
-            expected: commands::HELLO,
-		}
-    }).unwrap();
 
     let hello = Hello {
         public_key: public_key,
@@ -466,7 +484,7 @@ fn main() {
                                 // reading hello probably helpful for context
                                 debug!("HELLO {:?}", &hello);
                                 // pin expected status command with nail here
-                                ctx.expected = commands::STATUS;
+                                ctx.expect(commands::STATUS);
                             }
                             Message::Status(status) => {
                                 debug!("STATUS {:?}", &status);

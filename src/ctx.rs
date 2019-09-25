@@ -23,6 +23,7 @@ pub trait Ctx {
     fn update_local_mac(&mut self, buf: &[u8]) -> ();
     fn update_remote_mac(&mut self, buf: &[u8]) -> ();
     fn expected(&mut self) -> [u8; 12];
+    fn expect(&mut self, ex: [u8;12]) -> ();
 }
 
 impl Ctx for () {
@@ -34,6 +35,7 @@ impl Ctx for () {
     fn update_local_mac(&mut self, _buf: &[u8])   -> (){}
     fn update_remote_mac(&mut self,  _buf: &[u8]) -> (){}
     fn expected(&mut self) -> [u8; 12]{ panic!("skip"); }
+    fn expect(&mut self, _ex: [u8;12]) -> () {}
 }
 
 impl Ctx for EncCtx {
@@ -45,6 +47,7 @@ impl Ctx for EncCtx {
     fn update_local_mac(&mut self, buf: &[u8]) -> (){ self.ingress_mac.update(buf); }
     fn update_remote_mac(&mut self, buf: &[u8]) -> (){ self.egress_mac.update(buf); }
     fn expected(&mut self) -> [u8; 12]{ self.expected }
+    fn expect(&mut self, ex: [u8;12]) -> (){ self.expected = ex; }
 }
 
 impl Ctx for &mut EncCtx {
@@ -56,4 +59,5 @@ impl Ctx for &mut EncCtx {
     fn update_local_mac(&mut self, buf: &[u8]) -> (){ self.ingress_mac.update(buf); }
     fn update_remote_mac(&mut self, buf: &[u8]) -> (){ self.egress_mac.update(buf); }
     fn expected(&mut self) -> [u8; 12]{ self.expected }
+    fn expect(&mut self, ex: [u8;12]) -> (){ self.expected = ex; }
 }
