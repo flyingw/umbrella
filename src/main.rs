@@ -65,8 +65,9 @@ use crate::messages::commands;
 use ctx::{Ctx,EncCtx};
 use tiny_keccak::Keccak;
 use crate::keys::public_to_slice;
-use ethkey::{sign, Secret, Public};
+use ethkey::{sign, Secret};
 use ethereum_types::H256;
+use crate::keys::slice_to_public;
 
 const NULL_IV: [u8; 16] = [0;16];
 const RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4: usize = 210;
@@ -146,7 +147,7 @@ fn create_transaction(opt: &Opt) -> Tx {
     return tx;
 }
 
-fn ctx(secret: &Secret
+fn ctx(secret: &SecretKey
     , auth_data: &[u8]
     , ecdhe_secret_key: SecretKey
     , nonce: Hash256
@@ -156,19 +157,18 @@ fn ctx(secret: &Secret
     ecies::decrypt(secret, &[], auth_data).map(|ack| {
         use crate::hash512::Hash512;
 
-        let mut remote_ephemeral: Public = Public::default();
         let mut remote_nonce: Hash256 = Hash256::default();
 
-        remote_ephemeral.assign_from_slice(&ack[0..64]);
+        let remote_ephemeral = slice_to_public(&ack[0..64]).unwrap();
         remote_nonce.copy_from_slice(&ack[64..(64+32)]);		
 
-        let ecdhe_secret = Secret::from_slice(&ecdhe_secret_key[0..32]).unwrap();
-		let shared = ecdh::agree(&ecdhe_secret, &remote_ephemeral).unwrap();
+        let shared = ecdh::SharedSecret::new_with_hash(&remote_ephemeral, &ecdhe_secret_key, &mut hash);
+        
 		let mut nonce_material = Hash512::default();
 		(&mut nonce_material[0..32]).copy_from_slice(remote_nonce.as_bytes());
 		(&mut nonce_material[32..64]).copy_from_slice(nonce.as_bytes());
 		let mut key_material = Hash512::default();
-		(&mut key_material[0..32]).copy_from_slice(shared.as_bytes());
+        (&mut key_material[0..32]).copy_from_slice(&shared[..]);
 		Keccak::keccak256(nonce_material.as_bytes_mut(), &mut key_material[32..64]);
 		
         let mut key_material_keccak = Hash256::default();
@@ -365,7 +365,7 @@ fn main() {
     let seed = [&seed, ":", &network.port().to_string()].concat();
 
     let pub_key = opt.sender().pub_key();
-    use crate::keys::slice_to_public;
+    
     let pub_key:PublicKey = slice_to_public(&pub_key).unwrap();
 
     use std::net::{SocketAddr, ToSocketAddrs};
@@ -440,7 +440,7 @@ fn main() {
 
     let ack_cipher: Vec<u8> = data.clone().to_vec();
 
-    let mut ctx = ctx(&secret
+    let mut ctx = ctx(&secret_key
         , &mut data
         , ecdhe_secret_key
         , nonce
