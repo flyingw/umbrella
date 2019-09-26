@@ -21,3 +21,11 @@ cargo run
 ```
 cargo build --release
 ```
+
+## bitcoin-cli
+```
+bitcoin-cli -regtest getnewaddress
+bitcoin-cli -regtest dumpprivkey "address" # secret
+bitcoin-cli -regtest getaddressinfo "address" # pubkey
+bitcoin-cli -regtest listunspent 0
+```
