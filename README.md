@@ -2,60 +2,47 @@
 
 Universal cross network client to write data into blockchain.
 
-WARN: Do not use with real networks. Regtest only.
+WARN: Do not use with real networks. Test/Private only.
 
-## downloads
 
-[v0.1.0](https://github.com/flyingw/umbrella/releases/tag/v0.1.0)
+## prerequisites 
+
+_Forced step. will be removed ASAP._
+
+Place parity near `umbrella` project. Check `path` for all deps in `eth/Cargo.toml`
+By default `parity` should be located on the same level with `umbrella` so path relative to `eth` folder should be `../../parity-ethereum/`.
+
+```
+$ git clone https://github.com/flyingw/parity-ethereum.git
+```
 
 ## build 
 
 ```
 $ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 $ rustup update
-$ cargo build
+$ cargo build [--release]
 ```
 
-```
-cargo build
-./target/debug/umbrella
-cargo run
-cargo build --release
-```
+## downloads
 
-## test setup
+Released binaries
 
-Setup Bitcoin Node and CLI tools
+[v0.1.0](https://github.com/flyingw/umbrella/releases/tag/v0.1.0) Does nothing. Made for internal purposes.
 
-```
-$ brew install bitcoin
-$ git clone https://github.com/Bitcoin-ABC/bitcoin-abc.git | make
-$ etc.
-```
 
-## run 
+## local test setup
 
-Run bitcoin node in regtest mode to test connection localy.
+Select corresponend platform to test:
 
-```
-$ bitcoind[core|abc] -regtest
-$ umbrella -vvvv --in_address $IN_ADD --in_amount $BALANCE --secret $SECRET
-    --outpoint_hash $OUT_HSH --outpoint_index $OUT_PNT
-    --out_address $OUT_ADD --change $CHANGE
-    --dust_address $DST_ADD --dust_amount $DUST
-    --data $DATA --network $NETWORK
-[--help: for details]
-```
-
-### btc
-```bash
-bitcoind -regtest -debug=1
-cargo run btc-reg --change 0.01 --data "68" --dust_address "" --dust_amount 0.1 --in_address "" --in_amount 1.0 --out_address "" --outpoint_hash "ff8c7c3c77aa2e43932ad497cf0c8ba5a24f542ec1bcb7afe329a7166ae8dccd" --outpoint_index 0 --secret ""
-```
+* [Bitchoin ABS](doc/bch/test-setup.md)
+* [Ethereum](doc/eth/test-setup.md)
 
 # links
 
-Use [rust-bch](https://github.com/brentongunning/rust-bch) library to build Bitcoin Cash application.
+Definitelly use [rust-bch](https://github.com/brentongunning/rust-bch) library to build Bitcoin Cash application.
+
+Its hard to recommend [parity-ethereum](https://github.com/paritytech/parity-ethereum) project to create Ethereum applications. We've had a hard times with it and did impossible to get rid of it.
 
 ## browse
 
