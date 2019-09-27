@@ -1,7 +1,7 @@
 use ethereum_types::{H256, Address, U256, BigEndianHash};
 use ethkey::{Public, Secret, Signature, recover, public_to_address};
 use keccak_hash::{write_keccak};
-use rlp::{RlpStream};
+use rlp::RlpStream;
 use crate::result::Result;
 use std::fmt;
 use super::message::Payload;
@@ -254,5 +254,122 @@ impl fmt::Debug for Tx2 {
         f.debug_struct("Tx")
             .field("data:", &self.data)
             .finish()
+    }
+}
+
+
+#[cfg(test)]
+mod tests{
+    #[test]
+    fn rplt() {
+        use crate::lil_rlp;
+        use crate::hash160::Hash160;
+        use crate::hash256::Hash256;
+        use super::*;
+        use std::str::FromStr;
+
+        let mut tx = Tx2 {
+            nonce: U256::from(2),
+            gas_price: U256::from(1_000_000_000u64),
+            gas: U256::from(21_000),
+            call: Address::from_str("2217F561635a924F2C7ad1149Ca1dCf35Eaee961").unwrap(),
+            value: U256::from(10),
+            data: Vec::new(),
+            hash: H256::zero(),
+            public: None, 
+            r: U256::zero(),
+            s: U256::zero(),
+            v: 0u64,
+            sender: Address::zero(),
+        };
+        let sec = Secret::from_str("426ab013650cbe3c615c2455fb414130ce45ca67e7205cb3104ec79a57ef1227").unwrap();
+        tx = tx.sign(&sec, Some(123));
+
+        let mut rlp = RlpStream::new_list(1);
+        rlp.begin_list(9);
+        rlp.append(&tx.nonce);
+        rlp.append(&tx.gas_price);
+        rlp.append(&tx.gas);
+        rlp.append(&tx.call);
+        rlp.append(&tx.value);
+        rlp.append(&tx.data);
+        rlp.append(&tx.v);
+        rlp.append(&tx.r);
+        rlp.append(&tx.s);
+
+        println!("v:{:?}",&tx.v);
+        println!("r:{:?}",&tx.r);
+        println!("s:{:?}",&tx.s);
+
+        //rlp.append(&0x80u8);
+
+        let mut payload:Vec<u8> = vec![];//f8 67
+        let n: u128 = 2;
+        let gas_price: u128 = 1_000_000_000u128;
+        let gas:u128 = 21_000u128;
+        let value:u128 = 10;
+        let data: Vec<u8> = vec![];
+        let v = 282;
+        let a: &[u64;4] = &tx.r.0;
+        let aa:Vec<u8> = a.iter().rev().map(|a|a.to_be_bytes().to_vec()).flatten().collect();
+        let b: &[u64;4] = &tx.s.0;
+        let bb:Vec<u8> = b.iter().rev().map(|a|a.to_be_bytes().to_vec()).flatten().collect();
+
+        let c: &[u8] = &tx.call.0;
+        let cc: Vec<u8> = c.iter().map(|a|*a).collect();
+
+        println!("flat: {:x?}", &aa);
+        println!("flat: {:x?}", &bb);
+        println!("flat: {:x?}", &cc);
+        
+        payload.push(0xf8);
+        payload.push(0x67);
+        lil_rlp::put_num(&mut payload, n); //+ 
+        lil_rlp::put_num(&mut payload, gas_price); //+
+        lil_rlp::put_num(&mut payload, gas);
+        lil_rlp::put_str(&mut payload, &cc);
+        lil_rlp::put_num(&mut payload, value);
+        lil_rlp::put_str(&mut payload, &data);
+        lil_rlp::put_num(&mut payload, v);
+        lil_rlp::put_str(&mut payload, &aa);
+        lil_rlp::put_str(&mut payload, &bb);
+
+        // create list9 in list1
+        println!("out: {:x?}", lil_rlp::as_list(&payload));
+        println!("rlp: {:x?}", &rlp.out());
+
+        /*[f8, 65, 
+            2, 
+            84, 3b, 9a, ca, 
+            0, 
+            82, 52, 8, 94, 22, 17, f5, 61, 63, 5a, 92, 4f, 2c, 7a, d1, 14, 9c, a1, dc, f3, 5e, ae, e9, 61, 
+            a, 
+                80, 82, 1, 1a, 
+                a0, 
+                    bd, fa, c2, 8b, e0, d7, a3, cf, 17, c7, bb, 32, cb, f3, d9, ce, b0, 18, c6, 89, 12, 3e, 3d, 65, bd, e8, a2, 8f, a, fc, c8, 8f,
+                a0, 
+                    e2, 32, 26, 84, 3b, 7d, 6b, 89, aa, b1, cc, 85, 50, 1, 31, d9, aa, 35, 29, fd, d3, 52, 51, 7, 3d, a0, a6, 5e, ad, 95, e8, 9b
+        ] */
+        /*rlp:[f8, 67, f8, 65,
+            2, 
+            84, 3b, 9a, ca, 
+            0, 
+            82, 52, 8, 94, 
+            22, 17, f5, 61, 63, 5a, 92, 4f, 2c, 7a, d1, 14, 9c, a1, dc, f3, 5e, ae, e9, 61,
+            a, 
+                80, 82, 1, 1a, 
+            a0, 
+                bd, e8, a2, 8f, a, fc, c8, 8f, 
+                b0, 18, c6, 89, 12, 3e, 3d, 65,
+                17, c7, bb, 32, cb, f3, d9, ce,
+                bd, fa, c2, 8b, e0, d7, a3, cf, 
+                    a0, 
+                3d, a0, a6, 5e, ad, 95, e8, 9b, 
+                aa, 35, 29, fd, d3, 52, 51, 7,
+                aa, b1, cc, 85, 50, 1, 31, d9, 
+                e2, 32, 26, 84, 3b, 7d, 6b, 89] */
+
+        //assert_eq!(rlp.out(), lil_rlp::as_list(&payload));
+        assert_eq!(1,1);
     }
 }

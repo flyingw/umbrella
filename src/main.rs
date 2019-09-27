@@ -15,7 +15,6 @@ pub mod util;
 pub mod sighash;
 pub mod hash128;
 pub mod hash256;
-pub mod hashu256;
 pub mod hash512;
 pub mod amount;
 pub mod bits;
