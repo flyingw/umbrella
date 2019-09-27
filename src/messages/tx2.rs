@@ -322,8 +322,6 @@ mod tests{
         println!("flat: {:x?}", &bb);
         println!("flat: {:x?}", &cc);
         
-        payload.push(0xf8);
-        payload.push(0x67);
         lil_rlp::put_num(&mut payload, n); //+ 
         lil_rlp::put_num(&mut payload, gas_price); //+
         lil_rlp::put_num(&mut payload, gas);
@@ -335,7 +333,7 @@ mod tests{
         lil_rlp::put_str(&mut payload, &bb);
 
         // create list9 in list1
-        println!("out: {:x?}", lil_rlp::as_list(&payload));
+        println!("out: {:x?}", &lil_rlp::as_list(&lil_rlp::as_list(&payload)));
         println!("rlp: {:x?}", &rlp.out());
 
         /*[f8, 65, 
