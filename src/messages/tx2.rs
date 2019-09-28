@@ -12,6 +12,9 @@ use crate::ctx::Ctx;
 use block_modes::{BlockMode, Ecb, block_padding::{ZeroPadding}};
 use aes_ctr::stream_cipher::SyncStreamCipher;
 use crate::hash128::Hash128;
+use crate::hash256::Hash256;
+use crate::keys;
+use secp256k1::key::{SecretKey, PublicKey};
 use aes::Aes256;
 
 const MAX_PAYLOAD_SIZE: usize = (1 << 24) - 1;
@@ -38,7 +41,7 @@ pub struct Tx2 {
 	/// The S field of the signature; helps describe the point on the curve.
 	pub s: U256,
 	/// Hash of the transaction
-	pub hash: H256,
+	pub hash: Hash256,
     pub sender: Address,
 	pub public: Option<Public>,
 }
@@ -63,7 +66,7 @@ impl Tx2{
         s.drain()
     }
 
-    pub fn hash(&self) -> H256 {
+    pub fn hash(&self) -> Hash256 {
         self.hash
     }
 
@@ -108,19 +111,19 @@ impl Tx2{
 		Ok(recover(&self.signature(), &self.unsigned_hash(self.chain_id())).unwrap() )// unsigned hash probably must be kept
 	}
 
-    pub fn sign(mut self, secret: &Secret, chain_id: Option<u64>) -> Self {
-		let sig = ::ethkey::sign(secret, &self.unsigned_hash(chain_id))
-			.expect("data is valid and context has signing capabilities; qed");
+    pub fn sign(mut self, secret: &SecretKey, chain_id: Option<u64>) -> Self {
+        let hash256 = Hash256::from_slice(self.unsigned_hash(chain_id).as_bytes());
+		let sig = keys::sign(secret, &hash256);
 		
-        self.r = sig.r().into();
-        self.s = sig.s().into();
-        self.v = signature::add_chain_replay_protection(sig.v() as u64, chain_id);
-        self.hash = H256::zero();
+        self.r = sig[0..32].into();
+        self.s = sig[32..64].into();
+        self.v = signature::add_chain_replay_protection(sig[64] as u64, chain_id);
+        self.hash = Hash256::default();
 
         // compute hash, 
         let mut result = [0u8; 32];
         write_keccak(&*self.bytes(), &mut result);
-		self.hash = H256(result);
+		self.hash = Hash256(result);
 
         //
         let public = &self.recover_public().unwrap();
@@ -275,7 +278,7 @@ mod tests{
             call: Address::from_str("2217F561635a924F2C7ad1149Ca1dCf35Eaee961").unwrap(),
             value: U256::from(10),
             data: Vec::new(),
-            hash: H256::zero(),
+            hash: Hash256::zero(),
             public: None, 
             r: U256::zero(),
             s: U256::zero(),

@@ -31,6 +31,7 @@ pub mod keys;
 pub mod ctx;
 pub mod lil_rlp;
 pub mod ecies;
+pub mod json;
 
 pub use serdes::Serializable;
 pub use result::{Error, Result};
@@ -63,10 +64,7 @@ use ethkey::Password;
 use crate::messages::commands;
 use ctx::{Ctx,EncCtx};
 use tiny_keccak::Keccak;
-use crate::keys::public_to_slice;
-use ethkey::{sign, Secret};
-use ethereum_types::H256;
-use crate::keys::slice_to_public;
+use crate::keys::{public_to_slice, sign, slice_to_public};
 
 const NULL_IV: [u8; 16] = [0;16];
 const RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4: usize = 210;
@@ -367,13 +365,9 @@ fn main() {
     use std::net::{SocketAddr, ToSocketAddrs};
     let seed: SocketAddr = seed.to_socket_addrs().unwrap().choose(&mut rng).unwrap();
 
-    let secret: Secret = match opt.sender().crypto() {
-        Some(ref s) => {
-            let cry: Crypto = Crypto::from_str(s).unwrap();
-            let password = Password::from(opt.sender().password());
-            cry.secret(&password).unwrap()
-        }
-        None => Secret::from_str(&opt.sender().secret().unwrap()).unwrap(),
+    let secret: SecretKey = match opt.sender().crypto() {
+        Some(ref s) => json::read_secret(s, &opt.sender().password()),
+        None => SecretKey::from_str(&opt.sender().secret().unwrap()).unwrap(),
     };
 
     trace!("secret: {:?}", secret);
@@ -389,7 +383,7 @@ fn main() {
     
     let (ecdhe_secret_key, ecdhe_public_key) = secp.generate_keypair(&mut rng);
     let ecdhe_public_key_slice = public_to_slice(&ecdhe_public_key);
-    let ecdhe_secret = Secret::from_slice(&ecdhe_secret_key[0..32]).unwrap();
+    let ecdhe_secret = SecretKey::from_slice(&ecdhe_secret_key[0..32]).unwrap();
 
     let mut data = [0u8; /*Signature::SIZE*/ 65 + /*H256::SIZE*/ 32 + /*Public::SIZE*/ 64 + /*H256::SIZE*/ 32 + 1]; //TODO: use associated constants
     let data_len = data.len();
@@ -404,7 +398,7 @@ fn main() {
     let shared = ecdh::SharedSecret::new_with_hash(&pub_key, &secret_key, &mut hash);
 
     let xor = Hash256::from_slice(&shared[..]) ^ nonce;
-    sig.copy_from_slice(&*sign(&ecdhe_secret, &H256::from_slice(xor.as_bytes())).unwrap());
+    sig.copy_from_slice(&sign(&ecdhe_secret, &xor));
     Keccak::keccak256(&ecdhe_public_key_slice, hepubk);
     pubk.copy_from_slice(&public_key_slice);
     data_nonce.copy_from_slice(nonce.as_bytes());
@@ -480,7 +474,7 @@ fn main() {
                                     call: Address::from_str(&opt.sender().out_address()).unwrap(),
                                     value: U256::from(10),
                                     data: Vec::new(),
-                                    hash: H256::zero(),
+                                    hash: Hash256::default(),
                                     public: None, 
                                     r: U256::zero(),
                                     s: U256::zero(),
