@@ -1,7 +1,5 @@
 #[macro_use]
 extern crate log;
-#[macro_use]
-extern crate lazy_static;
 
 extern crate rust_scrypt;
 extern crate serde_json;
@@ -59,8 +57,6 @@ use ethereum_types::{U256};
 use ethkey::Address;
 use std::str::FromStr;
 use std::thread;
-use ethstore::Crypto;
-use ethkey::Password;
 use crate::messages::commands;
 use ctx::{Ctx,EncCtx};
 use tiny_keccak::Keccak;

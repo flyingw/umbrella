@@ -1,12 +1,10 @@
 use aes_ctr::Aes128Ctr;
 use aes_ctr::stream_cipher::NewStreamCipher;
 use aes_ctr::stream_cipher::SyncStreamCipher;
-use aes::Aes256;
 use aes::block_cipher_trait::generic_array::GenericArray;
-use block_modes::{BlockMode, Ecb, block_padding::{ZeroPadding}};
 use hex;
 use rust_scrypt::{scrypt, ScryptParams};
-use secp256k1::{Secp256k1, SecretKey};
+use secp256k1::{SecretKey};
 use serde_json;
 
 pub fn read_secret(json: &String, password: &String) -> SecretKey {
@@ -21,6 +19,7 @@ pub fn read_secret(json: &String, password: &String) -> SecretKey {
   let kdf = get_string(&json, &vec!["crypto", "kdf"]);
   if kdf != "scrypt" { panic!("kdf={} is not supported", kdf) };
   let dklen = get_u64(&json, &vec!["crypto", "kdfparams", "dklen"]);
+  if dklen != 32 { panic!("unsupported dklen={}", dklen); }
   let n = get_u64(&json, &vec!["crypto", "kdfparams", "n"]);
   let p = get_u64(&json, &vec!["crypto", "kdfparams", "p"]);
   let r = get_u64(&json, &vec!["crypto", "kdfparams", "r"]);

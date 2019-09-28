@@ -1,5 +1,5 @@
 use ethereum_types::{H256, Address, U256, BigEndianHash};
-use ethkey::{Public, Secret, Signature, recover, public_to_address};
+use ethkey::{Public, Signature, recover, public_to_address};
 use keccak_hash::{write_keccak};
 use rlp::RlpStream;
 use crate::result::Result;
@@ -14,7 +14,7 @@ use aes_ctr::stream_cipher::SyncStreamCipher;
 use crate::hash128::Hash128;
 use crate::hash256::Hash256;
 use crate::keys;
-use secp256k1::key::{SecretKey, PublicKey};
+use secp256k1::key::{SecretKey};
 use aes::Aes256;
 
 const MAX_PAYLOAD_SIZE: usize = (1 << 24) - 1;
