@@ -477,7 +477,7 @@ fn main() {
                                     v: 0u64,
                                     sender: Default::default(),
                                 };
-                                tx = tx.sign(&secret, Some(123));
+                                tx = tx.sign(&secret, Some(status.network_id as u64));
 
                                 debug!("        hash: {:?}", &tx.hash());
 
