@@ -1,4 +1,3 @@
-use rlp::RlpStream;
 use crate::result::Result;
 use std::fmt;
 use super::message::Payload;
@@ -131,7 +130,6 @@ impl Tx2{
         Keccak::keccak256(&*self.bytes(), &mut result);
 		self.hash = Hash256(result);
 
-        //
         let public = &self.recover_public();
         self.sender = public_to_address(&public);
         self
@@ -178,14 +176,13 @@ impl Serializable<Tx2> for Tx2 {
         lil_rlp::put_str(&mut buf, &self.s.as_bytes().to_vec());
         let data = &lil_rlp::as_list(&lil_rlp::as_list(&buf));  
 
-        let mut rlp = RlpStream::new();
-        rlp.append(&(u32::from(PACKET_TRANSACTIONS)));
+        let mut packet: Vec<u8> = vec![];
+        lil_rlp::put_num(&mut packet, u128::from(PACKET_TRANSACTIONS));
         let mut compressed = Vec::new();
         let len = parity_snappy::compress_into(data, &mut compressed);
-        let payload = &compressed[0..len];
-        rlp.append_raw(payload, 1);
-
-        let payload = &rlp.out();
+        packet.extend(&compressed[0..len]);
+        
+        let payload = &packet;
         
         // check some comments in module tests below
         let len = payload.len();
@@ -240,15 +237,13 @@ impl Payload<Tx2> for Tx2 {
         lil_rlp::put_str(&mut buf, &self.s.as_bytes().to_vec());
         let data = &lil_rlp::as_list(&lil_rlp::as_list(&buf));
                                 
-        let mut rlp = RlpStream::new();
-        rlp.append(&(u32::from(PACKET_TRANSACTIONS)));
+        let mut packet: Vec<u8> = vec![];
+        lil_rlp::put_num(&mut packet, u128::from(PACKET_TRANSACTIONS));
         let mut compressed = Vec::new();
         let len = parity_snappy::compress_into(data, &mut compressed);
-        let payload = &compressed[0..len];
-        rlp.append_raw(payload, 1);
+        packet.extend(&compressed[0..len]);
 
-        //
-        let payload = &rlp.out();
+        let payload = &packet;
         debug!("Payload size: {:?}", &payload.len());
         payload.len()
     }

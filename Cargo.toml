@@ -21,7 +21,6 @@ lazy_static = "1.0"
 ripemd160 = "0.7"
 snowflake = "1.3"
 
-rlp = "0.4.0"
 parity-snappy = "0.1"
 tiny-keccak = "1.4"
 parity-crypto = "0.4.0"
