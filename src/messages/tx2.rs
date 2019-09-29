@@ -1,4 +1,3 @@
-use keccak_hash::{write_keccak};
 use rlp::RlpStream;
 use crate::result::Result;
 use std::fmt;
@@ -15,6 +14,7 @@ use crate::keys::{Address, Signature, sign, recover, public_to_address};
 use secp256k1::key::{SecretKey, PublicKey};
 use aes::Aes256;
 use crate::lil_rlp;
+use tiny_keccak::Keccak;
 
 const MAX_PAYLOAD_SIZE: usize = (1 << 24) - 1;
 
@@ -84,7 +84,7 @@ impl Tx2{
         }
         let res = lil_rlp::as_list(&buf);
         let mut result = [0u8; 32];
-        write_keccak(&res, &mut result);
+	    Keccak::keccak256(&res, &mut result);
 		Hash256(result)
 	}
 
@@ -128,7 +128,7 @@ impl Tx2{
 
         // compute hash, 
         let mut result = [0u8; 32];
-        write_keccak(&*self.bytes(), &mut result);
+        Keccak::keccak256(&*self.bytes(), &mut result);
 		self.hash = Hash256(result);
 
         //
