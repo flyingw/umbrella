@@ -53,14 +53,12 @@ use aes_ctr::Aes256Ctr;
 use aes::block_cipher_trait::generic_array::GenericArray;
 use aes_ctr::stream_cipher::NewStreamCipher;
 
-use ethereum_types::{U256};
-use ethkey::Address;
 use std::str::FromStr;
 use std::thread;
 use crate::messages::commands;
 use ctx::{Ctx,EncCtx};
 use tiny_keccak::Keccak;
-use crate::keys::{public_to_slice, sign, slice_to_public};
+use crate::keys::{public_to_slice, sign, slice_to_public, Address};
 
 const NULL_IV: [u8; 16] = [0;16];
 const RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4: usize = 210;
@@ -463,19 +461,21 @@ fn main() {
                             Message::Hello(_h) => ctx.expect(commands::STATUS),
                             Message::Status(status) => {
                                 status.write(&mut is, &mut ctx).unwrap();
+                                let mut address: Address = Default::default();
+                                let decoded_address = hex::decode(&opt.sender().out_address()).unwrap();
+                                address.copy_from_slice(&decoded_address);
                                 let mut tx = Tx2 {
-                                    nonce: U256::from(2),
-                                    gas_price: U256::from(1_000_000_000u64),
-                                    gas: U256::from(21_000),
-                                    call: Address::from_str(&opt.sender().out_address()).unwrap(),
-                                    value: U256::from(10),
+                                    nonce: 2u128,
+                                    gas_price: 1_000_000_000u128,
+                                    gas: 21_000u128,
+                                    call: address,
+                                    value: 10u128,
                                     data: Vec::new(),
                                     hash: Hash256::default(),
-                                    public: None, 
-                                    r: U256::zero(),
-                                    s: U256::zero(),
+                                    r: Hash256::default(),
+                                    s: Hash256::default(),
                                     v: 0u64,
-                                    sender: Address::zero(),
+                                    sender: Default::default(),
                                 };
                                 tx = tx.sign(&secret, Some(123));
 

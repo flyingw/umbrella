@@ -1,5 +1,3 @@
-use ethereum_types::{H256, Address, U256, BigEndianHash};
-use ethkey::{Public, Signature, recover, public_to_address};
 use keccak_hash::{write_keccak};
 use rlp::RlpStream;
 use crate::result::Result;
@@ -13,90 +11,91 @@ use block_modes::{BlockMode, Ecb, block_padding::{ZeroPadding}};
 use aes_ctr::stream_cipher::SyncStreamCipher;
 use crate::hash128::Hash128;
 use crate::hash256::Hash256;
-use crate::keys;
-use secp256k1::key::{SecretKey};
+use crate::keys::{Address, Signature, sign, recover, public_to_address};
+use secp256k1::key::{SecretKey, PublicKey};
 use aes::Aes256;
+use crate::lil_rlp;
 
 const MAX_PAYLOAD_SIZE: usize = (1 << 24) - 1;
 
 #[derive(Default)]
 pub struct Tx2 {
     /// Nonce.
-	pub nonce: U256,
+	pub nonce: u128,
 	/// Gas price.
-	pub gas_price: U256,
+	pub gas_price: u128,
 	/// Gas paid up front for transaction execution.
-	pub gas: U256,
+	pub gas: u128,
 	/// Action, can be either call or contract create.
 	pub call: Address,
 	/// Transfered value.
-	pub value: U256,
+	pub value: u128,
 	/// Transaction data.
 	pub data: Vec<u8>,
 	/// The V field of the signature; the LS bit described which half of the curve our point falls
 	/// in. The MS bits describe which chain this transaction is for. If 27/28, its for all chains.
 	pub v: u64,
 	/// The R field of the signature; helps describe the point on the curve.
-	pub r: U256,
+	pub r: Hash256,
 	/// The S field of the signature; helps describe the point on the curve.
-	pub s: U256,
+	pub s: Hash256,
 	/// Hash of the transaction
 	pub hash: Hash256,
     pub sender: Address,
-	pub public: Option<Public>,
 }
 
 impl Tx2{
 	pub fn is_unsigned(&self) -> bool {
-		self.r.is_zero() && self.s.is_zero()
+        !self.r.as_bytes().contains(&0) &&
+        !self.s.as_bytes().contains(&0)
 	}
 
     fn bytes(&self) -> Vec<u8> {
-        let mut s = RlpStream::new();
-        s.begin_list(9);
-		s.append(&self.nonce);
-		s.append(&self.gas_price);
-		s.append(&self.gas);
-        s.append(&self.call);
-		s.append(&self.value);
-		s.append(&self.data);
-		s.append(&self.v);
-		s.append(&self.r);
-		s.append(&self.s);
-        s.drain()
+        let mut buf: Vec<u8> = vec![];
+        lil_rlp::put_num(&mut buf, self.nonce);
+        lil_rlp::put_num(&mut buf, self.gas_price);
+        lil_rlp::put_num(&mut buf, self.gas);
+        lil_rlp::put_str(&mut buf, &self.call.to_vec());
+        lil_rlp::put_num(&mut buf, self.value);
+        lil_rlp::put_str(&mut buf, &self.data);
+        lil_rlp::put_num(&mut buf, self.v.into());
+        lil_rlp::put_str(&mut buf, &self.r.as_bytes().to_vec());
+        lil_rlp::put_str(&mut buf, &self.s.as_bytes().to_vec());
+        lil_rlp::as_list(&buf)
     }
 
     pub fn hash(&self) -> Hash256 {
         self.hash
     }
 
-    pub fn unsigned_hash(&self, chain_id: Option<u64>) -> H256 {
+    pub fn unsigned_hash(&self, chain_id: Option<u64>) -> Hash256 {
         // this hash is unsigned
-		let mut stream = RlpStream::new();
-        stream.begin_list(if chain_id.is_none() { 6 } else { 9 });
-		stream.append(&self.nonce);
-		stream.append(&self.gas_price);
-		stream.append(&self.gas);
-        stream.append(&self.call);
-		stream.append(&self.value);
-		stream.append(&self.data);
-		if let Some(n) = chain_id {
-			stream.append(&n);
-			stream.append(&0u8);
-			stream.append(&0u8);
-		}
-
+        let mut buf: Vec<u8> = vec![];
+        lil_rlp::put_num(&mut buf, self.nonce);
+        lil_rlp::put_num(&mut buf, self.gas_price);
+        lil_rlp::put_num(&mut buf, self.gas);
+        lil_rlp::put_str(&mut buf, &self.call.to_vec());
+        lil_rlp::put_num(&mut buf, self.value);
+        lil_rlp::put_str(&mut buf, &self.data);
+        if let Some(n) = chain_id {
+            lil_rlp::put_num(&mut buf, n.into());
+			lil_rlp::put_num(&mut buf, 0u128);
+			lil_rlp::put_num(&mut buf, 0u128);
+        }
+        let res = lil_rlp::as_list(&buf);
         let mut result = [0u8; 32];
-        write_keccak(stream.as_raw(), &mut result);
-		H256(result)
+        write_keccak(&res, &mut result);
+		Hash256(result)
 	}
 
     pub fn standard_v(&self) -> u8 { signature::check_replay_protection(self.v) }
 
     pub fn signature(&self) -> Signature {
-		let r: H256 = BigEndianHash::from_uint(&self.r);
-		let s: H256 = BigEndianHash::from_uint(&self.s);
-		Signature::from_rsv(&r, &s, self.standard_v())
+        let mut sig = [0u8; 65];
+        sig[0..32].copy_from_slice(&self.r.as_bytes());
+        sig[32..64].copy_from_slice(&self.s.as_bytes());
+        sig[64] = self.standard_v();
+        sig
 	}
 
     pub fn chain_id(&self) -> Option<u64> {
@@ -107,17 +106,24 @@ impl Tx2{
 		}
 	}
 
-    pub fn recover_public(&self) -> Result<Public> {
-		Ok(recover(&self.signature(), &self.unsigned_hash(self.chain_id())).unwrap() )// unsigned hash probably must be kept
+    pub fn recover_public(&self) -> PublicKey {
+        let hash256 = self.unsigned_hash(self.chain_id());
+        recover(&self.signature(), &hash256)
+	}
+
+    pub fn add_chain_replay_protection(v: u64, chain_id: Option<u64>) -> u64 {
+		v + if let Some(n) = chain_id { 35 + n * 2 } else { 27 }
 	}
 
     pub fn sign(mut self, secret: &SecretKey, chain_id: Option<u64>) -> Self {
-        let hash256 = Hash256::from_slice(self.unsigned_hash(chain_id).as_bytes());
-		let sig = keys::sign(secret, &hash256);
-		
-        self.r = sig[0..32].into();
-        self.s = sig[32..64].into();
-        self.v = signature::add_chain_replay_protection(sig[64] as u64, chain_id);
+        let hash256 = self.unsigned_hash(chain_id);
+		let sig = sign(secret, &hash256);
+        
+        let r: &[u8] = &sig[0..32];
+        let s: &[u8] = &sig[32..64];
+        self.r = Hash256::from_slice(r);
+        self.s = Hash256::from_slice(s);
+        self.v = Tx2::add_chain_replay_protection(sig[64] as u64, chain_id);
         self.hash = Hash256::default();
 
         // compute hash, 
@@ -126,7 +132,7 @@ impl Tx2{
 		self.hash = Hash256(result);
 
         //
-        let public = &self.recover_public().unwrap();
+        let public = &self.recover_public();
         self.sender = public_to_address(&public);
         self
 	}
@@ -160,20 +166,18 @@ impl Serializable<Tx2> for Tx2 {
         panic!("we've never read transactions");
     }
     fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
-        let mut rlp = RlpStream::new_list(1);
-        rlp.begin_list(9);
-        rlp.append(&self.nonce);
-        rlp.append(&self.gas_price);
-        rlp.append(&self.gas);
-        rlp.append(&self.call);
-        rlp.append(&self.value);
-        rlp.append(&self.data);
-        rlp.append(&self.v);
-        rlp.append(&self.r);
-        rlp.append(&self.s);
-                                
-        let data = &rlp.out();
-                                
+        let mut buf: Vec<u8> = vec![];
+        lil_rlp::put_num(&mut buf, self.nonce);
+        lil_rlp::put_num(&mut buf, self.gas_price);
+        lil_rlp::put_num(&mut buf, self.gas);
+        lil_rlp::put_str(&mut buf, &self.call.to_vec());
+        lil_rlp::put_num(&mut buf, self.value);
+        lil_rlp::put_str(&mut buf, &self.data);
+        lil_rlp::put_num(&mut buf, self.v.into());
+        lil_rlp::put_str(&mut buf, &self.r.as_bytes().to_vec());
+        lil_rlp::put_str(&mut buf, &self.s.as_bytes().to_vec());
+        let data = &lil_rlp::as_list(&lil_rlp::as_list(&buf));  
+
         let mut rlp = RlpStream::new();
         rlp.append(&(u32::from(PACKET_TRANSACTIONS)));
         let mut compressed = Vec::new();
@@ -224,19 +228,17 @@ impl Serializable<Tx2> for Tx2 {
 
 impl Payload<Tx2> for Tx2 {
     fn size(&self) -> usize {
-        let mut rlp = RlpStream::new_list(1);
-        rlp.begin_list(9);
-        rlp.append(&self.nonce);
-        rlp.append(&self.gas_price);
-        rlp.append(&self.gas);
-        rlp.append(&self.call);
-        rlp.append(&self.value);
-        rlp.append(&self.data);
-        rlp.append(&self.v);
-        rlp.append(&self.r);
-        rlp.append(&self.s);
-                                
-        let data = &rlp.out();
+        let mut buf: Vec<u8> = vec![];
+        lil_rlp::put_num(&mut buf, self.nonce);
+        lil_rlp::put_num(&mut buf, self.gas_price);
+        lil_rlp::put_num(&mut buf, self.gas);
+        lil_rlp::put_str(&mut buf, &self.call.to_vec());
+        lil_rlp::put_num(&mut buf, self.value);
+        lil_rlp::put_str(&mut buf, &self.data);
+        lil_rlp::put_num(&mut buf, self.v.into());
+        lil_rlp::put_str(&mut buf, &self.r.as_bytes().to_vec());
+        lil_rlp::put_str(&mut buf, &self.s.as_bytes().to_vec());
+        let data = &lil_rlp::as_list(&lil_rlp::as_list(&buf));
                                 
         let mut rlp = RlpStream::new();
         rlp.append(&(u32::from(PACKET_TRANSACTIONS)));
@@ -257,120 +259,5 @@ impl fmt::Debug for Tx2 {
         f.debug_struct("Tx")
             .field("data:", &self.data)
             .finish()
-    }
-}
-
-
-#[cfg(test)]
-mod tests{
-    #[test]
-    fn rplt() {
-        use crate::lil_rlp;
-        use crate::hash160::Hash160;
-        use crate::hash256::Hash256;
-        use super::*;
-        use std::str::FromStr;
-
-        let mut tx = Tx2 {
-            nonce: U256::from(2),
-            gas_price: U256::from(1_000_000_000u64),
-            gas: U256::from(21_000),
-            call: Address::from_str("2217F561635a924F2C7ad1149Ca1dCf35Eaee961").unwrap(),
-            value: U256::from(10),
-            data: Vec::new(),
-            hash: Hash256::zero(),
-            public: None, 
-            r: U256::zero(),
-            s: U256::zero(),
-            v: 0u64,
-            sender: Address::zero(),
-        };
-        let sec = Secret::from_str("426ab013650cbe3c615c2455fb414130ce45ca67e7205cb3104ec79a57ef1227").unwrap();
-        tx = tx.sign(&sec, Some(123));
-
-        let mut rlp = RlpStream::new_list(1);
-        rlp.begin_list(9);
-        rlp.append(&tx.nonce);
-        rlp.append(&tx.gas_price);
-        rlp.append(&tx.gas);
-        rlp.append(&tx.call);
-        rlp.append(&tx.value);
-        rlp.append(&tx.data);
-        rlp.append(&tx.v);
-        rlp.append(&tx.r);
-        rlp.append(&tx.s);
-
-        println!("v:{:?}",&tx.v);
-        println!("r:{:?}",&tx.r);
-        println!("s:{:?}",&tx.s);
-
-        //rlp.append(&0x80u8);
-
-        let mut payload:Vec<u8> = vec![];//f8 67
-        let n: u128 = 2;
-        let gas_price: u128 = 1_000_000_000u128;
-        let gas:u128 = 21_000u128;
-        let value:u128 = 10;
-        let data: Vec<u8> = vec![];
-        let v = 282;
-        let a: &[u64;4] = &tx.r.0;
-        let aa:Vec<u8> = a.iter().rev().map(|a|a.to_be_bytes().to_vec()).flatten().collect();
-        let b: &[u64;4] = &tx.s.0;
-        let bb:Vec<u8> = b.iter().rev().map(|a|a.to_be_bytes().to_vec()).flatten().collect();
-
-        let c: &[u8] = &tx.call.0;
-        let cc: Vec<u8> = c.iter().map(|a|*a).collect();
-
-        println!("flat: {:x?}", &aa);
-        println!("flat: {:x?}", &bb);
-        println!("flat: {:x?}", &cc);
-        
-        lil_rlp::put_num(&mut payload, n); //+ 
-        lil_rlp::put_num(&mut payload, gas_price); //+
-        lil_rlp::put_num(&mut payload, gas);
-        lil_rlp::put_str(&mut payload, &cc);
-        lil_rlp::put_num(&mut payload, value);
-        lil_rlp::put_str(&mut payload, &data);
-        lil_rlp::put_num(&mut payload, v);
-        lil_rlp::put_str(&mut payload, &aa);
-        lil_rlp::put_str(&mut payload, &bb);
-
-        // create list9 in list1
-        println!("out: {:x?}", &lil_rlp::as_list(&lil_rlp::as_list(&payload)));
-        println!("rlp: {:x?}", &rlp.out());
-
-        /*[f8, 65, 
-            2, 
-            84, 3b, 9a, ca, 
-            0, 
-            82, 52, 8, 94, 22, 17, f5, 61, 63, 5a, 92, 4f, 2c, 7a, d1, 14, 9c, a1, dc, f3, 5e, ae, e9, 61, 
-            a, 
-                80, 82, 1, 1a, 
-                a0, 
-                    bd, fa, c2, 8b, e0, d7, a3, cf, 17, c7, bb, 32, cb, f3, d9, ce, b0, 18, c6, 89, 12, 3e, 3d, 65, bd, e8, a2, 8f, a, fc, c8, 8f,
-                a0, 
-                    e2, 32, 26, 84, 3b, 7d, 6b, 89, aa, b1, cc, 85, 50, 1, 31, d9, aa, 35, 29, fd, d3, 52, 51, 7, 3d, a0, a6, 5e, ad, 95, e8, 9b
-        ] */
-        /*rlp:[f8, 67, f8, 65,
-            2, 
-            84, 3b, 9a, ca, 
-            0, 
-            82, 52, 8, 94, 
-            22, 17, f5, 61, 63, 5a, 92, 4f, 2c, 7a, d1, 14, 9c, a1, dc, f3, 5e, ae, e9, 61,
-            a, 
-                80, 82, 1, 1a, 
-            a0, 
-                bd, e8, a2, 8f, a, fc, c8, 8f, 
-                b0, 18, c6, 89, 12, 3e, 3d, 65,
-                17, c7, bb, 32, cb, f3, d9, ce,
-                bd, fa, c2, 8b, e0, d7, a3, cf, 
-                    a0, 
-                3d, a0, a6, 5e, ad, 95, e8, 9b, 
-                aa, 35, 29, fd, d3, 52, 51, 7,
-                aa, b1, cc, 85, 50, 1, 31, d9, 
-                e2, 32, 26, 84, 3b, 7d, 6b, 89] */
-
-        //assert_eq!(rlp.out(), lil_rlp::as_list(&payload));
-        assert_eq!(1,1);
     }
 }
