@@ -1,6 +1,6 @@
 use parity_crypto::{aes, digest, hmac, is_equal};
-use ethereum_types::H128;
 use rand;
+use rand::RngCore;
 use secp256k1::{self, ecdh};
 use secp256k1::{Secp256k1, SecretKey, PublicKey};
 use crate::keys::{public_to_slice, slice_to_public};
@@ -29,11 +29,12 @@ pub fn encrypt(public_key: &PublicKey, auth_data: &[u8], plain: &[u8]) -> Result
   {
     let msgd = &mut msg[1..];
     msgd[0..64].copy_from_slice(&public_to_slice(&public_key_rand));
-    let iv = H128::random();
-    msgd[64..80].copy_from_slice(iv.as_bytes());
+    let mut iv = [0u8;16];
+    rng.fill_bytes(&mut iv);
+    msgd[64..80].copy_from_slice(&iv);
     {
       let cipher = &mut msgd[(64 + 16)..(64 + 16 + plain.len())];
-      aes::encrypt_128_ctr(ekey, iv.as_bytes(), plain, cipher).unwrap();
+      aes::encrypt_128_ctr(ekey, &iv, plain, cipher).unwrap();
     }
     let mut hmac = hmac::Signer::with(&mkey);
     {
