@@ -14,6 +14,7 @@ use secp256k1::key::{SecretKey, PublicKey};
 use aes::Aes256;
 use crate::lil_rlp;
 use tiny_keccak::Keccak;
+use snap;
 
 const MAX_PAYLOAD_SIZE: usize = (1 << 24) - 1;
 
@@ -178,9 +179,9 @@ impl Serializable<Tx2> for Tx2 {
 
         let mut packet: Vec<u8> = vec![];
         lil_rlp::put_num(&mut packet, u128::from(PACKET_TRANSACTIONS));
-        let mut compressed = Vec::new();
-        let len = parity_snappy::compress_into(data, &mut compressed);
-        packet.extend(&compressed[0..len]);
+        let mut enc = snap::Encoder::new();
+        let compressed = enc.compress_vec(&data).unwrap();
+        packet.extend(&compressed);
         
         let payload = &packet;
         
@@ -239,9 +240,9 @@ impl Payload<Tx2> for Tx2 {
                                 
         let mut packet: Vec<u8> = vec![];
         lil_rlp::put_num(&mut packet, u128::from(PACKET_TRANSACTIONS));
-        let mut compressed = Vec::new();
-        let len = parity_snappy::compress_into(data, &mut compressed);
-        packet.extend(&compressed[0..len]);
+        let mut enc = snap::Encoder::new();
+        let compressed = enc.compress_vec(data).unwrap();
+        packet.extend(&compressed);
 
         let payload = &packet;
         debug!("Payload size: {:?}", &payload.len());

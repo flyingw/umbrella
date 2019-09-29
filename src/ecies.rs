@@ -8,10 +8,7 @@ use aes_ctr::stream_cipher::NewStreamCipher;
 use aes_ctr::stream_cipher::SyncStreamCipher;
 use aes::block_cipher_trait::generic_array::GenericArray;
 use ring::digest::{digest, SHA256};
-use sha2::Sha256;
-use hmac::{Hmac, Mac};
-
-type HmacSha256 = Hmac<Sha256>;
+use ring::{hmac};
 
 fn hash(output: &mut [u8], x: &[u8], _y: &[u8]) -> i32 {
   kdf(&x, &[0u8; 0], output);
@@ -30,7 +27,7 @@ pub fn encrypt(public_key: &PublicKey, auth_data: &[u8], plain: &[u8]) -> Result
   let key = ecdh::SharedSecret::new_with_hash(&public_key, &secret_key_rand, &mut hash);
 
   let ekey = &key[0..16];;
-  let mkey = digest(&SHA256, &key[16..32]);
+  let mkey = hmac::Key::new(hmac::HMAC_SHA256, digest(&SHA256, &key[16..32]).as_ref());
 
   let mut msg = vec![0u8; 1 + 64 + 16 + plain.len() + 32];
   msg[0] = 0x04u8;
@@ -46,14 +43,14 @@ pub fn encrypt(public_key: &PublicKey, auth_data: &[u8], plain: &[u8]) -> Result
       cipher[..plain.len()].copy_from_slice(plain);
 	    enc.try_apply_keystream(cipher).unwrap();
     }
-    let mut hmac = HmacSha256::new_varkey(mkey.as_ref()).unwrap();
+    let mut msg_hmac = vec![];
     {
       let cipher_iv = &msgd[64..(64 + 16 + plain.len())];
-      hmac.input(cipher_iv);
+      msg_hmac.extend(cipher_iv);
     }
-    hmac.input(auth_data);
-    let sig = hmac.result().code();;
-    msgd[(64 + 16 + plain.len())..].copy_from_slice(&sig);
+    msg_hmac.extend(auth_data);
+    let sig = hmac::sign(&mkey, &msg_hmac);
+    msgd[(64 + 16 + plain.len())..].copy_from_slice(sig.as_ref());
   }
   Ok(msg)
 }
@@ -71,7 +68,7 @@ pub fn decrypt(secret_key: &SecretKey, auth_data: &[u8], encrypted: &[u8]) -> Re
   let key = ecdh::SharedSecret::new_with_hash(&public_key, &secret_key, &mut hash);
   
   let ekey = &key[0..16];
-  let mkey = digest(&SHA256, &key[16..32]);
+  let mkey = hmac::Key::new(hmac::HMAC_SHA256, digest(&SHA256, &key[16..32]).as_ref());
 
   let clen = encrypted.len() - meta_len;
   let cipher_with_iv = &e[64..(64+16+clen)];
@@ -80,10 +77,10 @@ pub fn decrypt(secret_key: &SecretKey, auth_data: &[u8], encrypted: &[u8]) -> Re
   let msg_mac = &e[(64+16+clen)..];
 
   // Verify tag
-  let mut hmac = HmacSha256::new_varkey(mkey.as_ref()).unwrap();
-  hmac.input(cipher_with_iv);
-  hmac.input(auth_data);
-  let mac = hmac.result().code();;
+  let mut msg_hmac = vec![];
+  msg_hmac.extend(cipher_with_iv);
+  msg_hmac.extend(auth_data);
+  let mac = hmac::sign(&mkey, &msg_hmac);
 
   if !(&mac.as_ref()[..] == msg_mac) {
     panic!("decrypt error=InvalidMessage, wrong mac");

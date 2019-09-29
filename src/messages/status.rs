@@ -9,6 +9,7 @@ use crate::hash128::Hash128;
 use aes::Aes256;
 use block_modes::{BlockMode, Ecb, block_padding::{ZeroPadding}};
 use aes_ctr::stream_cipher::SyncStreamCipher;
+use snap;
 
 const PACKET_USER: u8 = 0x10;
 const PACKET_STATUS: u8 = 0x00 + PACKET_USER;
@@ -30,7 +31,8 @@ impl Serializable<Status> for Status{
         if packet_id == PACKET_STATUS {
             let mut payload = Vec::new();
             reader.read_to_end(&mut payload)?;
-            let packet: Vec<u8> = parity_snappy::decompress(&payload).unwrap();
+            let mut dec = snap::Decoder::new();
+            let packet: Vec<u8> = dec.decompress_vec(&payload).unwrap();
             let mut iter = packet.iter();
 
             let _skip_size = lil_rlp::list_size(&mut iter).unwrap();
@@ -60,9 +62,8 @@ impl Serializable<Status> for Status{
         lil_rlp::put_str(&mut buf, &self.latest_hash);
         lil_rlp::put_str(&mut buf, &self.genesis);
         let data: Vec<u8> = lil_rlp::as_list(&buf);
-        let mut data_compressed = Vec::new();
-		let data_compressed_len = parity_snappy::compress_into(&data, &mut data_compressed);
-        let data_compressed = &data_compressed[..data_compressed_len];
+        let mut enc = snap::Encoder::new();
+        let data_compressed = enc.compress_vec(&data).unwrap();
 
         let len = data_compressed.len() + 1;
         if len > MAX_PAYLOAD_SIZE {
