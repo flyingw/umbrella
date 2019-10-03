@@ -44,7 +44,6 @@ impl Serializable<Hello> for Hello{
     }
 
     fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
-        println!("write hello");
         let u_public_key = &public_to_slice(&self.public_key)[..];
         
         // check some comments in module tests below

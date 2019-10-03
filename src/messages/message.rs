@@ -227,20 +227,18 @@ impl Message {
                 io::ErrorKind::InvalidData,
                 "Cannot write partial message".to_string(),
             )),
-            Message::Ping(p) => write_with_payload(writer, PING, p, magic),
-            Message::Pong(p) => write_with_payload(writer, PONG, p, magic),
-            Message::Reject(p) => write_with_payload(writer, REJECT, p, magic),
-            Message::FeeFilter(p) => write_with_payload(writer, FEEFILTER, p, magic),
-            Message::SendCmpct(p) => write_with_payload(writer, SENDCMPCT, p, magic),
-            Message::Tx(p) => write_with_payload(writer, TX, p, magic),
-            Message::Tx2(p) => write_with_payload2(writer, TX, p, magic[..3].try_into().expect("shortened magic"), ctx),
-            Message::Verack => write_without_payload(writer, VERACK, magic),
-            Message::Version(v) => write_with_payload(writer, VERSION, v, magic),
-            Message::NodeKey(v) => v.write(writer, ctx),
-            Message::Hello(h) => write_with_payload2(writer, HELLO, h, magic[..3].try_into().expect("shortened magic"), ctx),
-            Message::Status(s) => s.write(writer, ctx)
-                // no payload for status 
-                //write_with_payload2(writer, STATUS, s, magic[..3].try_into().expect("shortened magic"), ctx),
+            Message::Ping(p)     => write_with_payload(writer, PING, p, magic),
+            Message::Pong(p)     => write_with_payload(writer, PONG, p, magic),
+            Message::Reject(p)   => write_with_payload(writer, REJECT, p, magic),
+            Message::FeeFilter(p)=> write_with_payload(writer, FEEFILTER, p, magic),
+            Message::SendCmpct(p)=> write_with_payload(writer, SENDCMPCT, p, magic),
+            Message::Tx(p)       => write_with_payload(writer, TX, p, magic),            
+            Message::Verack      => write_without_payload(writer, VERACK, magic),
+            Message::Version(v)  => write_with_payload(writer, VERSION, v, magic),
+            Message::NodeKey(v)  => v.write(writer, ctx),
+            Message::Tx2(p)      => write_with_payload2(writer, TX, p, magic[..3].try_into().expect("shortened magic"), ctx),
+            Message::Hello(h)    => write_with_payload2(writer, HELLO, h, magic[..3].try_into().expect("shortened magic"), ctx),
+            Message::Status(s)   => write_with_payload2(writer, STATUS,s, magic[..3].try_into().expect("shortened magic"), ctx),
         }
     }
 }

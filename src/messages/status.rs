@@ -2,6 +2,7 @@ use crate::result::{Error, Result};
 use crate::serdes::Serializable;
 use crate::ctx::Ctx;
 use crate::lil_rlp;
+use super::message::Payload;
 use std::io;
 use std::io::{Read, Write};
 use std::fmt;
@@ -15,6 +16,7 @@ const PACKET_USER: u8 = 0x10;
 const PACKET_STATUS: u8 = 0x00 + PACKET_USER;
 const MAX_PAYLOAD_SIZE: usize = (1 << 24) - 1;
 
+#[derive(Clone)]
 pub struct Status {
     pub protocol_version: u128,
     pub network_id: u128,
@@ -75,23 +77,6 @@ impl Serializable<Status> for Status{
         packet[0] = PACKET_STATUS;
         packet[1..len].copy_from_slice(&data_compressed);
 
-        //
-        //
-        //
-        //
-        use super::message_header::{SecHeader};
-        let header = SecHeader {
-            magic: Default::default(),
-            command: Default::default(),
-            payload_size: len as u32,
-        };
-        header.write(writer, ctx)?;
-        //
-        //
-        //
-        //
-        
-        
         Ctx::encoder(ctx).try_apply_keystream(&mut packet[..len]).unwrap();
         if padding != 0 {
             Ctx::encoder(ctx).try_apply_keystream(&mut packet[len..(len + padding)]).unwrap();
@@ -114,6 +99,23 @@ impl Serializable<Status> for Status{
         let mut b = [0;16];
         Ctx::get_remote_mac(ctx, &mut b);
         writer.write_all(&b)
+    }
+}
+
+impl Payload<Status> for Status {
+    fn size(&self) -> usize {
+        let mut buf: Vec<u8> = vec![];
+        lil_rlp::put_num(&mut buf, self.protocol_version);
+        lil_rlp::put_num(&mut buf, self.network_id);
+        lil_rlp::put_num(&mut buf, self.difficulty);
+        lil_rlp::put_str(&mut buf, &self.latest_hash);
+        lil_rlp::put_str(&mut buf, &self.genesis);
+        let data: Vec<u8> = lil_rlp::as_list(&buf);
+        let mut enc = snap::Encoder::new();
+        let data_compressed = enc.compress_vec(&data).unwrap();
+
+        let len = data_compressed.len() + 1;
+        len
     }
 }
 

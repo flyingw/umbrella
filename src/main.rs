@@ -460,7 +460,8 @@ fn main() {
                         match message {
                             Message::Hello(_h) => ctx.expect(commands::STATUS),
                             Message::Status(status) => {
-                                status.write(&mut is, &mut ctx).unwrap();
+                                Message::Status(status.clone()).write(&mut is, magic, &mut ctx).unwrap();
+
                                 let mut address: Address = Default::default();
                                 let decoded_address = hex::decode(&opt.sender().out_address()).unwrap();
                                 address.copy_from_slice(&decoded_address);
