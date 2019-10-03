@@ -1,4 +1,5 @@
 use std::io::{Read, Write};
+use super::message::Payload;
 use crate::ctx::Ctx;
 use crate::result::Result;
 use crate::serdes::Serializable;
@@ -12,14 +13,16 @@ pub struct NodeKey {
 }
 
 impl Serializable<NodeKey> for NodeKey {
-    fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<NodeKey> {
-        Ok(NodeKey {version:vec![]})
-    }
+    fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<NodeKey> { panic!("not supposed to be read") }
 
     fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
-        // Endiannes?
-        println!("WRITE THIS NODE KEY {:?}", self);
         writer.write(self.version.as_ref()).map(|_size| ())
+    }
+}
+
+impl Payload<NodeKey> for NodeKey {
+    fn size(&self) -> usize {
+        self.version.len()
     }
 }
 

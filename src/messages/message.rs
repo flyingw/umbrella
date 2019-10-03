@@ -194,7 +194,7 @@ impl Message {
             return Ok(Message::Hello(hello));
         }
 
-        // Hello
+        // Status 
         if header.command() == commands::STATUS {
             let payload = header.payload(reader, ctx)?;
             let status = Status::read(&mut Cursor::new(payload), ctx)?;
@@ -233,9 +233,9 @@ impl Message {
             Message::FeeFilter(p)=> write_with_payload(writer, FEEFILTER, p, magic),
             Message::SendCmpct(p)=> write_with_payload(writer, SENDCMPCT, p, magic),
             Message::Tx(p)       => write_with_payload(writer, TX, p, magic),            
-            Message::Verack      => write_without_payload(writer, VERACK, magic),
+            Message::Verack      => write_without_payload(writer, VERACK, magic, ctx),
             Message::Version(v)  => write_with_payload(writer, VERSION, v, magic),
-            Message::NodeKey(v)  => v.write(writer, ctx),
+            Message::NodeKey(v)  => write_without_header(writer, v, ctx),
             Message::Tx2(p)      => write_with_payload2(writer, TX, p, magic[..3].try_into().expect("shortened magic"), ctx),
             Message::Hello(h)    => write_with_payload2(writer, HELLO, h, magic[..3].try_into().expect("shortened magic"), ctx),
             Message::Status(s)   => write_with_payload2(writer, STATUS,s, magic[..3].try_into().expect("shortened magic"), ctx),
@@ -272,12 +272,19 @@ impl fmt::Debug for Message {
     }
 }
 
-
+fn write_without_header<T:Serializable<T>>(
+    writer: &mut dyn Write,
+    payload: &dyn Payload<T>,
+    ctx: &mut dyn Ctx,
+) -> io::Result<()>{
+    payload.write(writer, ctx)
+}
 
 fn write_without_payload(
     writer: &mut dyn Write,
     command: [u8; 12],
     magic: [u8; 4],
+    ctx: &mut dyn Ctx,
 ) -> io::Result<()> {
     let header = MessageHeader {
         magic,
@@ -285,7 +292,7 @@ fn write_without_payload(
         payload_size: 0,
         checksum: NO_CHECKSUM,
     };
-    header.write(writer, &mut ())
+    header.write(writer, ctx)
 }
 
 fn write_with_payload2<T:Serializable<T>>(
