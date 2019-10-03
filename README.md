@@ -4,19 +4,7 @@ Universal cross network client to write data into blockchain.
 
 WARN: Do not use with real networks. Test/Private only.
 
-
-## prerequisites 
-
-_Forced step. will be removed ASAP._
-
-Place parity near `umbrella` project. Check `path` for all deps in `eth/Cargo.toml`
-By default `parity` should be located on the same level with `umbrella` so path relative to `eth` folder should be `../../parity-ethereum/`.
-
-```
-$ git clone https://github.com/flyingw/parity-ethereum.git
-```
-
-## build 
+## build
 
 ```
 $ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -42,7 +30,8 @@ Select corresponend platform to test:
 
 Definitelly use [rust-bch](https://github.com/brentongunning/rust-bch) library to build Bitcoin Cash application.
 
-Its hard to recommend [parity-ethereum](https://github.com/paritytech/parity-ethereum) project to create Ethereum applications. We've had a hard times with it and did impossible to get rid of it.
+Its hard to recommend [parity-ethereum](https://github.com/paritytech/parity-ethereum) project to create Ethereum applications.
+We've had a hard times with it and did impossible to get rid of it.
 
 ## browse
 
