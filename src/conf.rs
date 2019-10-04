@@ -76,20 +76,39 @@ pub struct EthWallet {
 
     #[structopt(long)]
     /// Public addrss to be used as output.
+    /// 
     pub out_address: String,
+
+    /// Transfered value
+    /// 
+    #[structopt(long)]
+    pub value: u128, 
+
+    /// Gas paid up front for transaction execution
+    /// 
+    #[structopt(long, default_value="21000")]
+    pub gas: u128,
+
+    /// Gas price
+    /// 
+    #[structopt(long, default_value="1000000000")]
+    pub gas_price: u128,
 }
 
 pub trait Sender {
-    fn pub_key(&self) -> Vec<u8> {return vec![];}
-    fn in_address(&self) -> String {return String::new();}
+    fn change(&self) -> f64 {0.0}
+    fn secret(&self) -> Option<String> {None}
+    fn crypto(&self) -> Option<String> {None}
+    fn pub_key(&self) -> Vec<u8> {vec![]}
+    fn password(&self) -> String {String::new()}
+    fn in_amount(&self) -> f64 {0.0}
+    fn in_address(&self) -> String {String::new()}
     fn out_address(&self) -> String;
-    fn outpoint_hash(&self) -> Hash256 {return Hash256::default();}
-    fn outpoint_index(&self) -> u32 {return 0;}
-    fn change(&self) -> f64 {return 0.0;}
-    fn in_amount(&self) -> f64 {return 0.0;}
-    fn secret(&self) -> Option<String> {return None;}
-    fn crypto(&self) -> Option<String> {return None;}
-    fn password(&self) -> String {return String::new();}
+    fn outpoint_hash(&self) -> Hash256 {Hash256::default()}
+    fn outpoint_index(&self) -> u32 {0}
+    fn gas(&self)       -> u128 {0}
+    fn gas_price(&self) -> u128 {0}
+    fn value(&self)     -> u128 {0}
 }
 
 impl Sender for Wallet {
@@ -103,15 +122,23 @@ impl Sender for Wallet {
 }
 
 impl Sender for EthWallet {
-    fn pub_key(&self) -> Vec<u8> {return self.pub_key.0.clone();}
-    fn secret(&self) -> Option<String> {return self.secret.clone();}
-    fn crypto(&self) -> Option<String> {return self.crypto.clone();}
-    fn password(&self) -> String {return self.password.clone();}
-    fn out_address(&self) -> String {return self.out_address.clone();}
+    fn pub_key(&self)     -> Vec<u8> {self.pub_key.0.clone()}
+    fn secret(&self)      -> Option<String> {self.secret.clone()}
+    fn crypto(&self)      -> Option<String> {self.crypto.clone()}
+    fn password(&self)    -> String {self.password.clone()}
+    fn out_address(&self) -> String {self.out_address.clone()}
+    
+    fn gas(&self)   -> u128 {self.gas}
+    fn value(&self) -> u128 {self.value}
+    fn gas_price(&self) -> u128 {self.gas_price}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HexData(Vec<u8>);
+impl HexData {
+    #[inline]
+    pub fn as_vec(&self) -> Vec<u8> {self.0.clone()}
+}
 impl FromStr for HexData {
     type Err = hex::FromHexError;
 
@@ -128,7 +155,7 @@ pub struct Data {
     pub dust_address: String,
     
     #[structopt(long, default_value="0.0001")]
-    /// Amount to pay for data storeage.
+    /// Amount to pay for data storage.
     /// 
     pub dust_amount: f64,
     

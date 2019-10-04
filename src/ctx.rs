@@ -2,7 +2,6 @@ use aes_ctr::Aes256Ctr;
 use secp256k1::key::{PublicKey, SecretKey};
 use tiny_keccak::Keccak;
 
-
 /// Encrypted Messages serialization context
 pub struct EncCtx {
 	pub public_key: PublicKey,

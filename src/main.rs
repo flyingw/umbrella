@@ -331,6 +331,25 @@ pub fn main1() {
     stream.shutdown(Shutdown::Both).unwrap();
 }
 
+fn create_transaction2(opt: &Opt) -> Tx2 {
+    let mut address: Address = Default::default();
+    let decoded_address = hex::decode(&opt.sender().out_address()).unwrap();
+    address.copy_from_slice(&decoded_address);
+
+    Tx2 {
+        nonce: 2u128,
+        gas_price: opt.sender().gas_price(),
+        gas: opt.sender().gas(),
+        call: address,
+        value: opt.sender().value(),
+        data: opt.data().data.as_vec(),
+        hash: Hash256::default(),
+        r: Hash256::default(),
+        s: Hash256::default(),
+        v: 0u64,
+        sender: Default::default(),
+    }
+}
 
 /// 
 fn main() {
@@ -406,6 +425,8 @@ fn main() {
     let mut is = stream.try_clone().unwrap();
     let magic = network.magic();
 
+    let mut tx = create_transaction2(&opt);
+
     let version = NodeKey {
         version: message
     };
@@ -462,22 +483,6 @@ fn main() {
                             Message::Status(status) => {
                                 Message::Status(status.clone()).write(&mut is, magic, &mut ctx).unwrap();
 
-                                let mut address: Address = Default::default();
-                                let decoded_address = hex::decode(&opt.sender().out_address()).unwrap();
-                                address.copy_from_slice(&decoded_address);
-                                let mut tx = Tx2 {
-                                    nonce: 2u128,
-                                    gas_price: 1_000_000_000u128,
-                                    gas: 21_000u128,
-                                    call: address,
-                                    value: 10u128,
-                                    data: Vec::new(),
-                                    hash: Hash256::default(),
-                                    r: Hash256::default(),
-                                    s: Hash256::default(),
-                                    v: 0u64,
-                                    sender: Default::default(),
-                                };
                                 tx = tx.sign(&secret, Some(status.network_id as u64));
 
                                 debug!("        hash: {:?}", &tx.hash());

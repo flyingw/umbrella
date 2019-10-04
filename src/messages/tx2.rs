@@ -26,7 +26,7 @@ pub struct Tx2 {
 	pub gas_price: u128,
 	/// Gas paid up front for transaction execution.
 	pub gas: u128,
-	/// Action, can be either call or contract create.
+	/// Call address
 	pub call: Address,
 	/// Transfered value.
 	pub value: u128,
@@ -111,6 +111,7 @@ impl Tx2{
         recover(&self.signature(), &hash256)
 	}
 
+    /// Adds chain id into v
     pub fn add_chain_replay_protection(v: u64, chain_id: Option<u64>) -> u64 {
 		v + if let Some(n) = chain_id { 35 + n * 2 } else { 27 }
 	}
@@ -140,11 +141,6 @@ impl Tx2{
 
 // Replay protection logic for v part of transaction's signature
 pub mod signature {
-	/// Adds chain id into v
-	pub fn add_chain_replay_protection(v: u64, chain_id: Option<u64>) -> u64 {
-		v + if let Some(n) = chain_id { 35 + n * 2 } else { 27 }
-	}
-
 	/// Returns refined v
 	/// 0 if `v` would have been 27 under "Electrum" notation, 1 if 28 or 4 if invalid.
 	pub fn check_replay_protection(v: u64) -> u8 {

@@ -7,6 +7,7 @@ CRYPTO='{"cipher":"aes-128-ctr","ciphertext":"ad821681586cac20d4dac7a1becdf83bb6
 PASS="test"
 OUT_ADDRESS="2217F561635a924F2C7ad1149Ca1dCf35Eaee961"
 SECRET="426ab013650cbe3c615c2455fb414130ce45ca67e7205cb3104ec79a57ef1227"
+VALUE="10"
 
   #--crypto $CRYPTO
 
@@ -17,4 +18,5 @@ RUST_BACKTRACE=1 cargo run -- $NETWORK \
   --out_address $OUT_ADDRESS \
   --dust_address "" \
   --dust_amount "0.0" \
+  --value $VALUE \
   --data ""
