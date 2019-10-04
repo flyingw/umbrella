@@ -354,8 +354,8 @@ fn create_transaction2(opt: &Opt) -> Tx2 {
 /// Probably a part of version message with encryption support
 /// 
 fn encrypt_node_version(pub_key:PublicKey
-                      , public_key:PublicKey
-                      , secret_key:SecretKey
+                      , node_public:PublicKey
+                      , node_secret:SecretKey
                       , nonce: Hash256) -> (Vec<u8>, SecretKey) {
     let mut rng = rand::thread_rng();
     let secp = Secp256k1::new();
@@ -365,21 +365,21 @@ fn encrypt_node_version(pub_key:PublicKey
     version[193] = 0x0;
 
     let (sig, rest) = version.split_at_mut(65);
-    let (hepubk, rest) = rest.split_at_mut(32);
-    let (pubk, rest) = rest.split_at_mut(64);
+    let (version_pub, rest) = rest.split_at_mut(32);
+    let (node_pub, rest) = rest.split_at_mut(64);
     let (data_nonce, _) = rest.split_at_mut(32);
     
     let (sec1, pub1) = secp.generate_keypair(&mut rng);
     let pub1 = public_to_slice(&pub1);
     let sec1 =  SecretKey::from_slice(&sec1[..32]).unwrap();
 
-    let shr = ecdh::SharedSecret::new_with_hash(&pub_key, &secret_key, &mut hash);
+    let shr = ecdh::SharedSecret::new_with_hash(&pub_key, &node_secret, &mut hash);
     let xor = Hash256::from_slice(&shr[..]) ^ nonce;
 
     //signature
     sig.copy_from_slice(&sign(&sec1, &xor));
-    Keccak::keccak256(&pub1, hepubk);
-    pubk.copy_from_slice(&public_to_slice(&public_key));
+    Keccak::keccak256(&pub1, version_pub);
+    node_pub.copy_from_slice(&public_to_slice(&node_public));
     data_nonce.copy_from_slice(nonce.as_bytes());
 
     (ecies::encrypt(&pub_key, &[], &version).unwrap(), sec1)
@@ -425,8 +425,8 @@ fn main() {
     let nonce: Hash256 = Hash256::random();
     let secp = Secp256k1::new();
     
-    let (secret_key, public_key) = secp.generate_keypair(&mut rng);
-    let (msg, ecdhe_secret_key) = encrypt_node_version(pub_key, public_key, secret_key, nonce);
+    let (node_secret, node_public) = secp.generate_keypair(&mut rng);
+    let (msg, msg_secret) = encrypt_node_version(pub_key, node_public, node_secret, nonce);
     
     use std::net::TcpStream;
 
@@ -452,17 +452,17 @@ fn main() {
 
     let ack_cipher: Vec<u8> = data.clone().to_vec();
 
-    let mut ctx = ctx(&secret_key
+    let mut ctx = ctx(&node_secret
         , &mut data
-        , ecdhe_secret_key // secret key generated for encrypt message 
+        , msg_secret
         , nonce
-        , msg // messge encrypted with that secret
+        , msg
         , ack_cipher
-        , public_key).unwrap();
+        , node_public).unwrap();
 
 
     let hello = Hello {
-        public_key: public_key,
+        public_key: node_public,
     };
 
     trace!("write out hello");
