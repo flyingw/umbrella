@@ -351,6 +351,40 @@ fn create_transaction2(opt: &Opt) -> Tx2 {
     }
 }
 
+/// Probably a part of version message with encryption support
+/// 
+fn encrypt_node_version(pub_key:PublicKey
+                      , public_key:PublicKey
+                      , secret_key:SecretKey
+                      , nonce: Hash256) -> (Vec<u8>, SecretKey) {
+    let mut rng = rand::thread_rng();
+    let secp = Secp256k1::new();
+
+    let mut version = [0u8;194]; //sig + public + 2*h256 + 1
+
+    version[193] = 0x0;
+
+    let (sig, rest) = version.split_at_mut(65);
+    let (hepubk, rest) = rest.split_at_mut(32);
+    let (pubk, rest) = rest.split_at_mut(64);
+    let (data_nonce, _) = rest.split_at_mut(32);
+    
+    let (sec1, pub1) = secp.generate_keypair(&mut rng);
+    let pub1 = public_to_slice(&pub1);
+    let sec1 =  SecretKey::from_slice(&sec1[..32]).unwrap();
+
+    let shr = ecdh::SharedSecret::new_with_hash(&pub_key, &secret_key, &mut hash);
+    let xor = Hash256::from_slice(&shr[..]) ^ nonce;
+
+    //signature
+    sig.copy_from_slice(&sign(&sec1, &xor));
+    Keccak::keccak256(&pub1, hepubk);
+    pubk.copy_from_slice(&public_to_slice(&public_key));
+    data_nonce.copy_from_slice(nonce.as_bytes());
+
+    (ecies::encrypt(&pub_key, &[], &version).unwrap(), sec1)
+}
+
 /// 
 fn main() {
     let opt = Opt::from_args();
@@ -387,37 +421,12 @@ fn main() {
     trace!("pubkey: {:?}", pub_key);
     trace!("seed node: {:?}", seed);
 
+    // handshake write
     let nonce: Hash256 = Hash256::random();
     let secp = Secp256k1::new();
     
-    //handshake write
     let (secret_key, public_key) = secp.generate_keypair(&mut rng);
-    let public_key_slice = public_to_slice(&public_key);
-    
-    let (ecdhe_secret_key, ecdhe_public_key) = secp.generate_keypair(&mut rng);
-    let ecdhe_public_key_slice = public_to_slice(&ecdhe_public_key);
-    let ecdhe_secret = SecretKey::from_slice(&ecdhe_secret_key[0..32]).unwrap();
-
-    let mut data = [0u8; /*Signature::SIZE*/ 65 + /*H256::SIZE*/ 32 + /*Public::SIZE*/ 64 + /*H256::SIZE*/ 32 + 1]; //TODO: use associated constants
-    let data_len = data.len();
-    
-    data[data_len - 1] = 0x0;
-    let (sig, rest) = data.split_at_mut(65);
-    let (hepubk, rest) = rest.split_at_mut(32);
-    let (pubk, rest) = rest.split_at_mut(64);
-    let (data_nonce, _) = rest.split_at_mut(32);
-
-    // E(remote-pubk, S(ecdhe-random, ecdh-shared-secret^nonce) || H(ecdhe-random-pubk) || pubk || nonce || 0x0)
-    let shared = ecdh::SharedSecret::new_with_hash(&pub_key, &secret_key, &mut hash);
-
-    let xor = Hash256::from_slice(&shared[..]) ^ nonce;
-    sig.copy_from_slice(&sign(&ecdhe_secret, &xor));
-    Keccak::keccak256(&ecdhe_public_key_slice, hepubk);
-    pubk.copy_from_slice(&public_key_slice);
-    data_nonce.copy_from_slice(nonce.as_bytes());
-    
-    let message: Vec<u8> = ecies::encrypt(&pub_key, &[], &data).unwrap();
-    let auth_cipher: Vec<u8> = message.clone();
+    let (msg, ecdhe_secret_key) = encrypt_node_version(pub_key, public_key, secret_key, nonce);
     
     use std::net::TcpStream;
 
@@ -428,7 +437,7 @@ fn main() {
     let mut tx = create_transaction2(&opt);
 
     let version = NodeKey {
-        version: message
+        version: msg.clone()
     };
     
     let our_version = Message::NodeKey(version);
@@ -445,9 +454,9 @@ fn main() {
 
     let mut ctx = ctx(&secret_key
         , &mut data
-        , ecdhe_secret_key
+        , ecdhe_secret_key // secret key generated for encrypt message 
         , nonce
-        , auth_cipher
+        , msg // messge encrypted with that secret
         , ack_cipher
         , public_key).unwrap();
 
