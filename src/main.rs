@@ -143,8 +143,8 @@ fn ctx(secret: &SecretKey
     , ecdhe_secret_key: SecretKey
     , nonce: Hash256
     , auth_cipher: Vec<u8>
-    , ack_cipher:  Vec<u8>
     , public_key: PublicKey) -> Result<impl Ctx> {
+
     ecies::decrypt(secret, &[], auth_data).map(|ack| {
         use crate::hash512::Hash512;
 
@@ -191,10 +191,12 @@ fn ctx(secret: &SecretKey
 		egress_mac.update(mac_material.as_bytes());
 		egress_mac.update(&auth_cipher);
 
+        // message auth code for sent messages here
+        // last part is something we've received as auth acknowledgement unencrypted
 		let mut ingress_mac = Keccak::new_keccak256();
 		mac_material = Hash256::from_slice(&key_material[32..64]) ^ nonce;
 		ingress_mac.update(mac_material.as_bytes());
-		ingress_mac.update(&ack_cipher);
+		ingress_mac.update(&auth_data.clone().to_vec());
         
 		EncCtx {
 			encoder: encoder,
@@ -446,18 +448,14 @@ fn main() {
 
     //handshake read
     use std::io::Read;
-    let mut data: Vec<u8> = vec![0u8; RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4];
-    // ath_ack message?
-	stream.read_exact(data.as_mut_slice()).unwrap();
-
-    let ack_cipher: Vec<u8> = data.clone().to_vec();
+    let mut authack: Vec<u8> = vec![0u8; RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4];
+	stream.read_exact(authack.as_mut_slice()).unwrap();
 
     let mut ctx = ctx(&node_secret
-        , &mut data
+        , &mut authack
         , msg_secret
         , nonce
         , msg
-        , ack_cipher
         , node_public).unwrap();
 
 
@@ -488,6 +486,12 @@ fn main() {
                     } else {
                         partial = None;
                         match message {
+                            Message::Authack => {
+                                println!("Auth acknowledgement");
+                                // update context 
+                                // and send hello
+
+                            }
                             Message::Hello(_h) => ctx.expect(commands::STATUS),
                             Message::Status(status) => {
                                 Message::Status(status.clone()).write(&mut is, magic, &mut ctx).unwrap();

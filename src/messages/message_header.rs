@@ -182,7 +182,7 @@ impl Serializable<SecHeader> for SecHeader {
         let length = ((((header[0] as u32) << 8) + (header[1] as u32)) << 8) + (header[2] as u32);
 
         Ok(SecHeader {
-            magic: Default::default(), // where is a magic and command?
+            magic: Default::default(),
             command: Default::default(),
             payload_size: length,
         })

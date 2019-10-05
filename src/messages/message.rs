@@ -65,9 +65,10 @@ pub mod commands {
     // [Fee filter command](https://en.bitcoin.it/wiki/Protocol_documentation#feefilter)
     pub const FEEFILTER: [u8; 12] = *b"feefilter\0\0\0";
 
-    // [no such command]
+    // Imaginary commands from ethereum protocol messages.
     pub const HELLO: [u8; 12] = *b"hello\0\0\0\0\0\0\0";
     pub const STATUS: [u8; 12] = *b"status\0\0\0\0\0\0";    
+    pub const AUTHACK: [u8;12] = *b"authack\0\0\0\0\0";
 }
 
 /// Bitcoin peer-to-peer message with its payload
@@ -83,6 +84,7 @@ pub enum Message {
     Tx(Tx),
     Tx2(Tx2),
     Verack,
+    Authack, // maybe verack, but without confirmation from our side
     Version(Version),
     NodeKey(NodeKey),
     Hello(Hello),
@@ -114,6 +116,9 @@ impl Message {
     }
 
     pub fn read2(reader: &mut dyn Read, _magic: [u8; 3], ctx: &mut dyn Ctx) -> Result<Self> {
+        // decide here if to read a full header or ack
+        //
+
         let mut header = SecHeader::read(reader, ctx)?;
         //header.command = commands::HELLO;
         header.command = ctx.expected();
@@ -209,6 +214,10 @@ impl Message {
             return Ok(Message::Verack);
         }
 
+        if header.command() == commands::AUTHACK {
+            return Ok(Message::Authack);
+        }
+
         // Unknown message
         if header.payload_size() > 0 {
             header.payload(reader, ctx)?;
@@ -234,6 +243,7 @@ impl Message {
             Message::SendCmpct(p)=> write_with_payload(writer, SENDCMPCT, p, magic),
             Message::Tx(p)       => write_with_payload(writer, TX, p, magic),            
             Message::Verack      => write_without_payload(writer, VERACK, magic, ctx),
+            Message::Authack     => panic!("we shouldn't confirm the auth, remote side should"),
             Message::Version(v)  => write_with_payload(writer, VERSION, v, magic),
             Message::NodeKey(v)  => write_without_header(writer, v, ctx),
             Message::Tx2(p)      => write_with_payload2(writer, TX, p, magic[..3].try_into().expect("shortened magic"), ctx),
@@ -264,6 +274,7 @@ impl fmt::Debug for Message {
             Message::Tx(p) => f.write_str(&format!("{:#?}", p)),
             Message::Tx2(_p) => f.write_str(&format!("{:#?}", "merge txs!")),
             Message::Verack => f.write_str("Verack"),
+            Message::Authack => f.write_str("Authack"),
             Message::Version(p) => f.write_str(&format!("{:#?}", p)),
             Message::NodeKey(v) => f.write_str(&format!("{:#?}", v)),
             Message::Hello(h) => f.write_str(&format!("{:#?}", h)),
