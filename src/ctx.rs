@@ -1,6 +1,7 @@
 use aes_ctr::Aes256Ctr;
 use secp256k1::key::{PublicKey, SecretKey};
 use tiny_keccak::Keccak;
+use crate::messages::commands;
 
 /// Encrypted Messages serialization context
 pub struct EncCtx {
@@ -33,7 +34,7 @@ impl Ctx for () {
     fn get_remote_mac(&mut self, _buf: &mut [u8]) -> (){}
     fn update_local_mac(&mut self, _buf: &[u8])   -> (){}
     fn update_remote_mac(&mut self,  _buf: &[u8]) -> (){}
-    fn expected(&mut self) -> [u8; 12]{ panic!("skip"); }
+    fn expected(&mut self) -> [u8; 12]{ commands::AUTHACK }
     fn expect(&mut self, _ex: [u8;12]) -> () {}
 }
 

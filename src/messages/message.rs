@@ -22,6 +22,10 @@ pub const NO_CHECKSUM: [u8; 4] = [0x5d, 0xf6, 0xe0, 0xe2];
 
 /// Max message payload size (32MB)
 pub const MAX_PAYLOAD_SIZE: u32 = 0x02000000;
+
+///
+const RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4: usize = 210;
+
 //pub const MAX_PAYLOAD_SIZE: usize = (1 << 24) - 1;
 pub type ProtocolId = [u8; 3];
 
@@ -84,7 +88,7 @@ pub enum Message {
     Tx(Tx),
     Tx2(Tx2),
     Verack,
-    Authack, // maybe verack, but without confirmation from our side
+    Authack(Vec<u8>), // maybe verack, but without confirmation from our side
     Version(Version),
     NodeKey(NodeKey),
     Hello(Hello),
@@ -116,24 +120,28 @@ impl Message {
     }
 
     pub fn read2(reader: &mut dyn Read, _magic: [u8; 3], ctx: &mut dyn Ctx) -> Result<Self> {
-        // decide here if to read a full header or ack
-        //
+        debug!("expected: {:?}", ctx.expected());
+        if commands::AUTHACK == ctx.expected() {
+            let mut authack: Vec<u8> = vec![0u8; RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4];
+	        reader.read_exact(authack.as_mut_slice()).unwrap();
 
-        let mut header = SecHeader::read(reader, ctx)?;
-        //header.command = commands::HELLO;
-        header.command = ctx.expected();
-        //header.validate(magic, MAX_PAYLOAD_SIZE)?;
-        match Message::read_partial(reader, &header, ctx) {
-            Ok(msg) => Ok(msg),
-            Err(e) => {
-                if let Error::IOError(ref e) = e {
-                    // Depending on platform, either TimedOut or WouldBlock may be returned to indicate a non-error timeout
-                    if e.kind() == io::ErrorKind::TimedOut || e.kind() == io::ErrorKind::WouldBlock
-                    {
-                        return Ok(Message::Partial(Box::new(header)));
+            Ok(Message::Authack(authack))
+        } else {
+            let mut header = SecHeader::read(reader, ctx)?;
+            header.command = ctx.expected();
+            //header.validate(magic, MAX_PAYLOAD_SIZE)?;
+            match Message::read_partial(reader, &header, ctx) {
+                Ok(msg) => Ok(msg),
+                Err(e) => {
+                    if let Error::IOError(ref e) = e {
+                        // Depending on platform, either TimedOut or WouldBlock may be returned to indicate a non-error timeout
+                        if e.kind() == io::ErrorKind::TimedOut || e.kind() == io::ErrorKind::WouldBlock
+                        {
+                            return Ok(Message::Partial(Box::new(header)));
+                        }
                     }
+                    return Err(e);
                 }
-                return Err(e);
             }
         }
     }
@@ -215,7 +223,7 @@ impl Message {
         }
 
         if header.command() == commands::AUTHACK {
-            return Ok(Message::Authack);
+            panic!("auth ack doesn't supposed to be partially read");
         }
 
         // Unknown message
@@ -243,7 +251,7 @@ impl Message {
             Message::SendCmpct(p)=> write_with_payload(writer, SENDCMPCT, p, magic),
             Message::Tx(p)       => write_with_payload(writer, TX, p, magic),            
             Message::Verack      => write_without_payload(writer, VERACK, magic, ctx),
-            Message::Authack     => panic!("we shouldn't confirm the auth, remote side should"),
+            Message::Authack(_d) => panic!("we shouldn't confirm the auth, remote side should"),
             Message::Version(v)  => write_with_payload(writer, VERSION, v, magic),
             Message::NodeKey(v)  => write_without_header(writer, v, ctx),
             Message::Tx2(p)      => write_with_payload2(writer, TX, p, magic[..3].try_into().expect("shortened magic"), ctx),
@@ -274,7 +282,7 @@ impl fmt::Debug for Message {
             Message::Tx(p) => f.write_str(&format!("{:#?}", p)),
             Message::Tx2(_p) => f.write_str(&format!("{:#?}", "merge txs!")),
             Message::Verack => f.write_str("Verack"),
-            Message::Authack => f.write_str("Authack"),
+            Message::Authack(_d) => f.write_str("Authack"),
             Message::Version(p) => f.write_str(&format!("{:#?}", p)),
             Message::NodeKey(v) => f.write_str(&format!("{:#?}", v)),
             Message::Hello(h) => f.write_str(&format!("{:#?}", h)),

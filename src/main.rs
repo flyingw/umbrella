@@ -61,7 +61,6 @@ use tiny_keccak::Keccak;
 use crate::keys::{public_to_slice, sign, slice_to_public, Address};
 
 const NULL_IV: [u8; 16] = [0;16];
-const RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4: usize = 210;
 
 // Creates public key hash script.
 fn pk_script(addr: &str) -> Script {
@@ -138,7 +137,7 @@ fn create_transaction(opt: &Opt) -> Tx {
     return tx;
 }
 
-fn ctx(secret: &SecretKey
+pub fn ctx(secret: &SecretKey
     , auth_data: &[u8]
     , ecdhe_secret_key: SecretKey
     , nonce: Hash256
@@ -446,37 +445,17 @@ fn main() {
     debug!("Write {:#?}", our_version);
     our_version.write(&mut stream, magic, &mut ()).unwrap();
 
-    //handshake read
-    use std::io::Read;
-    let mut authack: Vec<u8> = vec![0u8; RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4];
-	stream.read_exact(authack.as_mut_slice()).unwrap();
-
-    let mut ctx = ctx(&node_secret
-        , &mut authack
-        , msg_secret
-        , nonce
-        , msg
-        , node_public).unwrap();
-
-
-    let hello = Hello {
-        public_key: node_public,
-    };
-
-    trace!("write out hello");
-    let our_hello = Message::Hello(hello);
-    our_hello.write(&mut stream, magic, &mut ctx).unwrap();
-
     let mut partial: Option<Box<dyn MsgHeader>> = None;
     use std::io;
     use std::convert::TryInto;
 
     let lis = thread::spawn(move || {
+        let mut ct: Box<dyn Ctx> = Box::new(());
         debug!("Connected {:?}", &seed);
         loop {
             let message = match &partial {
-                Some(header) => Message::read_partial(&mut is, header.as_ref(), &mut ctx),
-                None => Message::read2(&mut is, magic[..3].try_into().expect("shortened magic"), &mut ctx),
+                Some(header) => Message::read_partial(&mut is, header.as_ref(), &mut *ct),
+                None => Message::read2(&mut is, magic[..3].try_into().expect("shortened magic"), &mut *ct),
             };
 
             match message {
@@ -486,22 +465,30 @@ fn main() {
                     } else {
                         partial = None;
                         match message {
-                            Message::Authack => {
-                                println!("Auth acknowledgement");
-                                // update context 
-                                // and send hello
+                            Message::Authack(mut data) => {
+                                ct = Box::new(ctx(&node_secret
+                                    , &mut data
+                                    , msg_secret
+                                    , nonce
+                                    , msg.clone()
+                                    , node_public).unwrap());
 
+                                let hello = Hello {
+                                    public_key: node_public,
+                                };
+                                Message::Hello(hello).write(&mut is, magic, &mut *ct).unwrap();
+                                ct.expect(commands::HELLO);
                             }
-                            Message::Hello(_h) => ctx.expect(commands::STATUS),
+                            Message::Hello(_h) => ct.expect(commands::STATUS),
                             Message::Status(status) => {
-                                Message::Status(status.clone()).write(&mut is, magic, &mut ctx).unwrap();
+                                Message::Status(status.clone()).write(&mut is, magic, &mut *ct).unwrap();
 
                                 tx = tx.sign(&secret, Some(status.network_id as u64));
 
                                 debug!("        hash: {:?}", &tx.hash());
 
                                 let mx = Message::Tx2(tx);
-                                mx.write(&mut is, magic, &mut ctx).unwrap();
+                                mx.write(&mut is, magic, &mut *ct).unwrap();
 
                                 return Ok(mx);
                             }
