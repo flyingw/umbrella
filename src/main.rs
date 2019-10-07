@@ -122,9 +122,6 @@ pub fn create_transaction(opt: &Opt) -> Tx {
     let secret_key = SecretKey::from_slice(&privk).expect("32 bytes, within curve order");
     let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
 
-    trace!("secret: {:?} ", secret_key);
-    trace!("public: {:?} ", hex::encode(&pub_key.serialize().as_ref()));
-
     let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
     let sighash = bip143_sighash(&mut tx, 0, &pub_script.0, Amount::from(opt.sender().in_amount(), Units::Bch), sighash_type, &mut cache).unwrap();
     let signature = generate_signature(&privk, &sighash, sighash_type).unwrap();
@@ -132,7 +129,6 @@ pub fn create_transaction(opt: &Opt) -> Tx {
 
     tx.inputs[0].sig_script = sig_script;
 
-    trace!{"transaction: {:#?}", tx};
     return tx;
 }
 
@@ -253,7 +249,6 @@ pub fn main() {
 
     use std::net::{SocketAddr, ToSocketAddrs};
     let seed: SocketAddr = seed.to_socket_addrs().unwrap().choose(&mut rng).unwrap();
-    trace!("seed node: {:?}", seed);
 
     use std::net::TcpStream;
     
@@ -290,11 +285,9 @@ pub fn main() {
                         partial = Some(header);
                     } else {
                         partial = None;
-                        println!("message: {:?}", message);
-
                         match message {
                             Message::Authack(mut data) => {
-                                debug!("Auth ack {:?}", data);
+                                debug!("Auth ack {:?}", hex::encode(&data));
                                 let enc_opt = &enc_opt.as_ref().unwrap();
 
                                 ct = Box::new(ctx(&enc_opt.node_secret
@@ -320,13 +313,10 @@ pub fn main() {
                                     Some(ref s) => json::read_secret(s, &opt.sender().password()),
                                     None => SecretKey::from_str(&opt.sender().secret().unwrap()).unwrap(),
                                 };
-                                trace!("secret: {:?}", secret);
                                 
                                 Message::Status(status.clone()).write(&mut is, magic, &mut *ct).unwrap();
                                 let mut tx = create_transaction2(&opt);
                                 tx = tx.sign(&secret, Some(status.network_id as u64));
-                                debug!("tx hash: {:?}", &tx.hash());
-
                                 let mx = Message::Tx2(tx);
                                 mx.write(&mut is, magic, &mut *ct).unwrap();
 
@@ -345,7 +335,7 @@ pub fn main() {
                             }
                             Message::FeeFilter(ref fee) => {
                                 let tx = create_transaction(&opt);
-                                debug!("Min fee {:?} received, Write {:#?}", fee.minfee, &tx);
+                                debug!("Min fee {:?}, validate", fee.minfee);
                                 let mx = Message::Tx(tx);
                                 mx.write(&mut is, magic, &mut ()).unwrap();
                                 return Ok(mx);
@@ -354,9 +344,7 @@ pub fn main() {
                                 debug!("rejected {:?}", reject);
                                 return Ok(Message::Reject(reject.clone()));
                             }
-                            _ => {
-                                debug!("not handled {:?}",  message);
-                            }
+                            _ => trace!("not handled {:?}",  message),
                         }
                     }
                 }
@@ -376,8 +364,8 @@ pub fn main() {
     match lis.join().expect("couldn't join thread") {
         Ok(Message::Tx(mut v))  => debug!("transaction hash: {:?}", v.hash()),
         Ok(Message::Tx2(mut v)) => debug!("transaction hash: {:?}", v.hash()),
-        Ok(m) => debug!("{:?}", m),
-        Err(r) => debug!("{:?}", r),
+        Ok(m)   => debug!("{:?}", m),
+        Err(r)  => debug!("{:?}", r),
     };
 
     use std::net::Shutdown;

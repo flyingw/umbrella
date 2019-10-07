@@ -121,7 +121,6 @@ impl Payload<Status> for Status {
 
 impl fmt::Debug for Status {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Status")
-            .finish()
+        f.debug_struct("Status").finish()
     }
 }

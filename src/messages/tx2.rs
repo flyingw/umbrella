@@ -226,7 +226,6 @@ impl Payload<Tx2> for Tx2 {
         packet.extend(&compressed);
 
         let payload = &packet;
-        debug!("Payload size: {:?}", &payload.len());
         payload.len()
     }
 }
@@ -234,6 +233,10 @@ impl Payload<Tx2> for Tx2 {
 impl fmt::Debug for Tx2 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Tx")
+            .field("gas", &self.gas)
+            .field("gas price", &self.gas_price)
+            .field("value:", &self.value)
+            .field("address:", &self.call)
             .field("data:", &self.data)
             .finish()
     }

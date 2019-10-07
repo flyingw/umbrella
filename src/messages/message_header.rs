@@ -242,7 +242,7 @@ impl fmt::Debug for SecHeader {
         };
         write!(
             f,
-            "Header {{ magic: {:?}, command: {:?}, payload_size: {},}}",
+            "Secure Header {{ magic: {:?}, command: {:?}, payload_size: {},}}",
             self.magic, command, self.payload_size
         )
     }

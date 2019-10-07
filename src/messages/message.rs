@@ -120,7 +120,6 @@ impl Message {
     }
 
     pub fn read2(reader: &mut dyn Read, _magic: [u8; 3], ctx: &mut dyn Ctx) -> Result<Self> {
-        debug!("expected: {:?}", ctx.expected());
         if commands::AUTHACK == ctx.expected() {
             let mut authack: Vec<u8> = vec![0u8; RLPX_TRANSPORT_AUTH_ACK_PACKET_SIZE_V4];
 	        reader.read_exact(authack.as_mut_slice()).unwrap();
@@ -263,9 +262,7 @@ impl Message {
 
 impl fmt::Debug for dyn MsgHeader + 'static {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("MsgHdr")
-            .field("command", &self.command())
-            .finish()
+        write!(f, "Message Header {{ command: {:?}, payload_size: {},}}", self.command(), self.payload_size())
     }
 }
 
@@ -320,18 +317,14 @@ fn write_with_payload2<T:Serializable<T>>(
     payload: &dyn Payload<T>,
     magic: [u8; 3],
     ctx: &mut dyn Ctx,
-) -> io::Result<()>{
-    debug!("  cmd: {:?}", command);
-    debug!("magic: {:?}", magic);
-    debug!(" size: {:?}", payload.size());
-
+) -> io::Result<()> {
     let header = SecHeader{
         magic,
         command, 
         payload_size: payload.size() as u32,
     };
 
-    debug!("header {:?}", &header);
+    debug!("secure header {:?}", &header);
     header.write(writer, ctx)?;
 
     payload.write(writer, ctx)

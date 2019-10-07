@@ -214,7 +214,6 @@ impl fmt::Debug for Script {
                 OP_CHECKLOCKTIMEVERIFY => ret.push_str("OP_CHECKLOCKTIMEVERIFY"),
                 OP_CHECKSEQUENCEVERIFY => ret.push_str("OP_CHECKSEQUENCEVERIFY"),
                 _ =>
-                    //debug!("format shit failed for {:?}", script[i]); 
                     ret.push_str(&format!("{}", script[i])),
             }
             i = next_op(i, script);
