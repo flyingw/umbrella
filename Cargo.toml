@@ -16,7 +16,6 @@ rust-base58 = "0.0.4"
 ring = "0.16.9"
 byteorder = "1.2"
 digest = "0.7"
-dns-lookup = "0.9"
 ripemd160 = "0.7"
 snowflake = "1.3"
 
