@@ -253,13 +253,6 @@ pub fn main() {
 
     use std::net::{SocketAddr, ToSocketAddrs};
     let seed: SocketAddr = seed.to_socket_addrs().unwrap().choose(&mut rng).unwrap();
-
-    let secret: SecretKey = match opt.sender().crypto() {
-        Some(ref s) => json::read_secret(s, &opt.sender().password()),
-        None => SecretKey::from_str(&opt.sender().secret().unwrap()).unwrap(),
-    };
-
-    trace!("secret: {:?}", secret);
     trace!("seed node: {:?}", seed);
 
     use std::net::TcpStream;
@@ -323,6 +316,12 @@ pub fn main() {
                             }
                             Message::Status(status) => {
                                 debug!("Status {:?}", status);
+                                let secret: SecretKey = match opt.sender().crypto() {
+                                    Some(ref s) => json::read_secret(s, &opt.sender().password()),
+                                    None => SecretKey::from_str(&opt.sender().secret().unwrap()).unwrap(),
+                                };
+                                trace!("secret: {:?}", secret);
+                                
                                 Message::Status(status.clone()).write(&mut is, magic, &mut *ct).unwrap();
                                 let mut tx = create_transaction2(&opt);
                                 tx = tx.sign(&secret, Some(status.network_id as u64));

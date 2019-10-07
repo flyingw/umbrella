@@ -6,6 +6,6 @@
  - make transaction (pay-to-keyhash) +
  * make transaction (pay-to-script) -
  * sign transaction +
- * broadcast transaction -
+ * broadcast transaction +
  * validate -
- * make loop -
+ * make loop +

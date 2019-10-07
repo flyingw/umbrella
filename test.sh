@@ -16,15 +16,15 @@
 #DATA    = "68686c6c6f2c7361696c6f72"
 #NETWORK = "regtest"
 
-IN_ADD="bchreg:qzst858z3jfld7k68tzfzktgk9xje94uaqhe9p2vmn"
-SECRET="cQNcVkB3QqJrwkJuEwowxAK9udLgfGyezdG8vNXN3vbRpWEvShtU"
-BALANCE="20.00"
-CHANGE="19.9998"
+IN_ADD="bchreg:qphrcrv0ua00njxu6jd7rs7n7ntepmvvuvglc80jdn"
+SECRET="cN4hMbVEjSwQEafm5Morxh59CeTpK6MdE4oaVf52TXMYr6CkQQ4F"
+BALANCE="1.0000"
+CHANGE="0.9998"
 DUST="0.0001"
-OUT_HSH="ff8c7c3c77aa2e43932ad497cf0c8ba5a24f542ec1bcb7afe329a7166ae8dccd"
+OUT_HSH="df2741a4164630be86a7528f05da3cdc4acc514569a89017eea4b303a0d66412"
 OUT_PNT=0
-OUT_ADD="bchreg:qpfh27rjv367hst75sq8fghwz3hpn5ygpu9as55x0h"
-DST_ADD="bchreg:qzjh3l4drhzq2cy6a0xaped7xwtsxuk9usfzhthe5h"
+OUT_ADD="bchreg:qqkwrtcw4hqnnsdpsntey63ll8qlr2phsczpqydl98"
+DST_ADD="bchreg:qq6j8yswty4n4unqqcxp2ujuy6eh5769h52dt69vml"
 DATA="68686c6c6f2c7361696c6f72"
 NETWORK="bch-reg"
 
