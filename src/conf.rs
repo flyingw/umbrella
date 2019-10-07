@@ -284,7 +284,7 @@ pub enum Network {
         #[structopt(flatten)] data: Data,
     },
     #[structopt(name="eth", raw(setting="structopt::clap::AppSettings::ColoredHelp"))]
-    // Stup for ethereum network settings
+    /// Operate on Ethereum network
     Eth{
         #[structopt(flatten)] sender: EthWallet,
         //find how to remove that shit
