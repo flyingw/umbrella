@@ -373,8 +373,10 @@ pub fn main() {
         }
     });
 
-    match lis.join() {
-        Ok(v)  => debug!("{:?}", v),
+    match lis.join().expect("couldn't join thread") {
+        Ok(Message::Tx(mut v))  => debug!("transaction hash: {:?}", v.hash()),
+        Ok(Message::Tx2(mut v)) => debug!("transaction hash: {:?}", v.hash()),
+        Ok(m) => debug!("{:?}", m),
         Err(r) => debug!("{:?}", r),
     };
 
