@@ -39,17 +39,13 @@ pub struct Tx2 {
 	pub r: Hash256,
 	/// The S field of the signature; helps describe the point on the curve.
 	pub s: Hash256,
-	/// Hash of the transaction
-	pub hash: Hash256,
 }
 
 impl Tx2 {
-	pub fn is_unsigned(&self) -> bool {
-        !self.r.as_bytes().contains(&0) &&
-        !self.s.as_bytes().contains(&0)
-	}
 
-    fn bytes(&self) -> Vec<u8> {
+    pub fn hash(&mut self) -> Hash256 {
+        let mut result = [0u8; 32];
+        
         let mut buf: Vec<u8> = vec![];
         lil_rlp::put_num(&mut buf, self.nonce);
         lil_rlp::put_num(&mut buf, self.gas_price);
@@ -60,12 +56,15 @@ impl Tx2 {
         lil_rlp::put_num(&mut buf, self.v.into());
         lil_rlp::put_str(&mut buf, &self.r.as_bytes().to_vec());
         lil_rlp::put_str(&mut buf, &self.s.as_bytes().to_vec());
-        lil_rlp::as_list(&buf)
+        
+        Keccak::keccak256(&lil_rlp::as_list(&buf), &mut result);
+		Hash256(result)
     }
 
-    pub fn hash(&self) -> Hash256 {
-        self.hash
-    }
+	pub fn is_unsigned(&self) -> bool {
+        !self.r.as_bytes().contains(&0) &&
+        !self.s.as_bytes().contains(&0)
+	}
 
     pub fn unsigned_hash(&self, chain_id: Option<u64>) -> Hash256 {
         // this hash is unsigned
@@ -119,12 +118,6 @@ impl Tx2 {
         self.r = Hash256::from_slice(r);
         self.s = Hash256::from_slice(s);
         self.v = Tx2::add_chain_replay_protection(sig[64] as u64, chain_id);
-        self.hash = Hash256::default();
-
-        // compute hash, 
-        let mut result = [0u8; 32];
-        Keccak::keccak256(&*self.bytes(), &mut result);
-		self.hash = Hash256(result);
 
         self
 	}

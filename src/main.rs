@@ -148,7 +148,6 @@ fn create_transaction2(opt: &Opt) -> Tx2 {
         call: address,
         value: opt.sender().value(),
         data: opt.data().data.as_vec(),
-        hash: Hash256::default(),
         r: Hash256::default(),
         s: Hash256::default(),
         v: 0u64,
