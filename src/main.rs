@@ -40,7 +40,7 @@ use conf::Opt;
 use structopt::StructOpt;
 
 use network::Network;
-use messages::{Tx, Tx2, TxIn, OutPoint, TxOut, Hello, Reject, RejectCode};
+use messages::{Tx, Tx2, TxIn, OutPoint, TxOut, Hello};
 use messages::{Message,MsgHeader};
 use std::time::Duration;
 use script::Script;
@@ -89,7 +89,7 @@ fn sig_script(sig: &[u8], public_key: &[u8; 33]) -> Script {
     sig_script
 }
 
-fn create_transaction(opt: &Opt) -> Tx {
+pub fn create_transaction(opt: &Opt) -> Tx {
     let pub_script      = pk_script(&opt.sender().in_address());
     let chng_pk_script  = pk_script(&opt.sender().out_address());
     let dump_pk_script  = pk_script(&opt.data().dust_address);
@@ -152,7 +152,6 @@ fn create_transaction2(opt: &Opt) -> Tx2 {
         r: Hash256::default(),
         s: Hash256::default(),
         v: 0u64,
-        sender: Default::default(),
     }
 }
 

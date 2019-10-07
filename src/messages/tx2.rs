@@ -9,8 +9,8 @@ use block_modes::{BlockMode, Ecb, block_padding::{ZeroPadding}};
 use aes_ctr::stream_cipher::SyncStreamCipher;
 use crate::hash128::Hash128;
 use crate::hash256::Hash256;
-use crate::keys::{Address, Signature, sign, recover, public_to_address};
-use secp256k1::key::{SecretKey, PublicKey};
+use crate::keys::{Address, Signature, sign};
+use secp256k1::key::{SecretKey};
 use aes::Aes256;
 use crate::lil_rlp;
 use tiny_keccak::Keccak;
@@ -41,10 +41,9 @@ pub struct Tx2 {
 	pub s: Hash256,
 	/// Hash of the transaction
 	pub hash: Hash256,
-    pub sender: Address,
 }
 
-impl Tx2{
+impl Tx2 {
 	pub fn is_unsigned(&self) -> bool {
         !self.r.as_bytes().contains(&0) &&
         !self.s.as_bytes().contains(&0)
@@ -106,11 +105,6 @@ impl Tx2{
 		}
 	}
 
-    pub fn recover_public(&self) -> PublicKey {
-        let hash256 = self.unsigned_hash(self.chain_id());
-        recover(&self.signature(), &hash256)
-	}
-
     /// Adds chain id into v
     pub fn add_chain_replay_protection(v: u64, chain_id: Option<u64>) -> u64 {
 		v + if let Some(n) = chain_id { 35 + n * 2 } else { 27 }
@@ -132,8 +126,6 @@ impl Tx2{
         Keccak::keccak256(&*self.bytes(), &mut result);
 		self.hash = Hash256(result);
 
-        let public = &self.recover_public();
-        self.sender = public_to_address(&public);
         self
 	}
 }
