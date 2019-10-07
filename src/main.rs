@@ -40,10 +40,9 @@ use conf::Opt;
 use structopt::StructOpt;
 
 use network::Network;
-use messages::{Version, NODE_NONE, PROTOCOL_VERSION, Tx, Tx2, TxIn, OutPoint, TxOut, NodeKey, Hello, Reject, RejectCode};
+use messages::{Tx, Tx2, TxIn, OutPoint, TxOut, Hello, Reject, RejectCode};
 use messages::{Message,MsgHeader};
-use util::secs_since;
-use std::time::{UNIX_EPOCH, Duration};
+use std::time::Duration;
 use script::Script;
 use secp256k1::{ecdh, Secp256k1, SecretKey, PublicKey};
 use sighash::{bip143_sighash, SigHashCache, SIGHASH_FORKID, SIGHASH_ALL};
@@ -58,7 +57,7 @@ use std::thread;
 use crate::messages::commands;
 use ctx::{Ctx,EncCtx};
 use tiny_keccak::Keccak;
-use crate::keys::{public_to_slice, sign, slice_to_public, Address};
+use crate::keys::{slice_to_public, Address};
 
 const NULL_IV: [u8; 16] = [0;16];
 
@@ -251,15 +250,8 @@ pub fn main1() {
     
     let tx = Message::Tx(create_transaction(&opt));
 
-    let version = Version {
-        version: PROTOCOL_VERSION,
-        services: NODE_NONE, 
-        timestamp: secs_since(UNIX_EPOCH) as i64,
-        user_agent: "didactic".to_string(),
-        ..Default::default()
-    };
-
-    let our_version = Message::Version(version);
+    let ct1 = opt.sender().init_ctx();
+    let our_version = opt.sender().version(&ct1);
     debug!("Write {:#?}", our_version);
     
     our_version.write(&mut stream, magic, &mut ()).unwrap();
@@ -352,40 +344,6 @@ fn create_transaction2(opt: &Opt) -> Tx2 {
     }
 }
 
-/// Probably a part of version message with encryption support
-/// 
-fn encrypt_node_version(pub_key:PublicKey
-                      , node_public:PublicKey
-                      , node_secret:SecretKey
-                      , nonce: Hash256) -> (Vec<u8>, SecretKey) {
-    let mut rng = rand::thread_rng();
-    let secp = Secp256k1::new();
-
-    let mut version = [0u8;194]; //sig + public + 2*h256 + 1
-
-    version[193] = 0x0;
-
-    let (sig, rest) = version.split_at_mut(65);
-    let (version_pub, rest) = rest.split_at_mut(32);
-    let (node_pub, rest) = rest.split_at_mut(64);
-    let (data_nonce, _) = rest.split_at_mut(32);
-    
-    let (sec1, pub1) = secp.generate_keypair(&mut rng);
-    let pub1 = public_to_slice(&pub1);
-    let sec1 =  SecretKey::from_slice(&sec1[..32]).unwrap();
-
-    let shr = ecdh::SharedSecret::new_with_hash(&pub_key, &node_secret, &mut hash);
-    let xor = Hash256::from_slice(&shr[..]) ^ nonce;
-
-    //signature
-    sig.copy_from_slice(&sign(&sec1, &xor));
-    Keccak::keccak256(&pub1, version_pub);
-    node_pub.copy_from_slice(&public_to_slice(&node_public));
-    data_nonce.copy_from_slice(nonce.as_bytes());
-
-    (ecies::encrypt(&pub_key, &[], &version).unwrap(), sec1)
-}
-
 /// 
 fn main() {
     let opt = Opt::from_args();
@@ -406,10 +364,6 @@ fn main() {
     let seed = seed.choose(&mut rng).unwrap();
     let seed = [&seed, ":", &network.port().to_string()].concat();
 
-    let pub_key = opt.sender().pub_key();
-    
-    let pub_key:PublicKey = slice_to_public(&pub_key).unwrap();
-
     use std::net::{SocketAddr, ToSocketAddrs};
     let seed: SocketAddr = seed.to_socket_addrs().unwrap().choose(&mut rng).unwrap();
 
@@ -419,16 +373,9 @@ fn main() {
     };
 
     trace!("secret: {:?}", secret);
-    trace!("pubkey: {:?}", pub_key);
     trace!("seed node: {:?}", seed);
 
     // handshake write
-    let nonce: Hash256 = Hash256::random();
-    let secp = Secp256k1::new();
-    
-    let (node_secret, node_public) = secp.generate_keypair(&mut rng);
-    let (msg, msg_secret) = encrypt_node_version(pub_key, node_public, node_secret, nonce);
-    
     use std::net::TcpStream;
 
     let mut stream = TcpStream::connect_timeout(&seed, Duration::from_secs(1)).unwrap();
@@ -437,11 +384,8 @@ fn main() {
 
     let mut tx = create_transaction2(&opt);
 
-    let version = NodeKey {
-        version: msg.clone()
-    };
-    
-    let our_version = Message::NodeKey(version);
+    let ct1 = opt.sender().init_ctx();
+    let our_version = opt.sender().version(&ct1);
     debug!("Write {:#?}", our_version);
     our_version.write(&mut stream, magic, &mut ()).unwrap();
 
@@ -466,15 +410,15 @@ fn main() {
                         partial = None;
                         match message {
                             Message::Authack(mut data) => {
-                                ct = Box::new(ctx(&node_secret
+                                ct = Box::new(ctx(&ct1.node_secret
                                     , &mut data
-                                    , msg_secret
-                                    , nonce
-                                    , msg.clone()
-                                    , node_public).unwrap());
+                                    , ct1.msg_secret
+                                    , ct1.nonce
+                                    , ct1.enc_version.clone()
+                                    , ct1.node_public).unwrap());
 
                                 let hello = Hello {
-                                    public_key: node_public,
+                                    public_key: ct1.node_public,
                                 };
                                 Message::Hello(hello).write(&mut is, magic, &mut *ct).unwrap();
                                 ct.expect(commands::HELLO);

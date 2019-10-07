@@ -1,6 +1,7 @@
 use structopt::StructOpt;
 use std::str::FromStr;
 use crate::hash256::Hash256;
+use secp256k1::{ecdh, Secp256k1, key::{PublicKey, SecretKey}};
 
 #[derive(StructOpt,Debug)]
 /// Sender information.
@@ -48,7 +49,6 @@ pub struct Wallet {
     pub change: f64,
 }
 
-
 #[derive(StructOpt,Debug)]
 /// Eth node info
 pub struct EthWallet {
@@ -95,6 +95,19 @@ pub struct EthWallet {
     pub gas_price: u128,
 }
 
+/// Initial encryption configuration
+#[derive(Clone)]
+pub struct EncOpt {
+    pub node_public: PublicKey,
+    pub node_secret: SecretKey, 
+    pub msg_secret: SecretKey,
+    pub enc_version: Vec<u8>,
+    pub nonce: Hash256,
+}
+
+use crate::keys::{public_to_slice, sign, slice_to_public};
+use crate::messages::{Message, NodeKey, Version, PROTOCOL_VERSION, NODE_NONE};
+
 pub trait Sender {
     fn change(&self) -> f64 {0.0}
     fn secret(&self) -> Option<String> {None}
@@ -109,7 +122,12 @@ pub trait Sender {
     fn gas(&self)       -> u128 {0}
     fn gas_price(&self) -> u128 {0}
     fn value(&self)     -> u128 {0}
+    fn init_ctx(&self) -> EncOpt {panic!("config does not initialized poperly")}
+    fn version(&self, cfg: &EncOpt) -> Message; 
 }
+
+use std::time::UNIX_EPOCH;
+use crate::util::secs_since;
 
 impl Sender for Wallet {
     fn in_address(&self) -> String {return self.in_address.clone();}
@@ -119,6 +137,18 @@ impl Sender for Wallet {
     fn change(&self) -> f64 {return self.change;}
     fn in_amount(&self) -> f64 {return self.in_amount;}
     fn secret(&self) -> Option<String> {return Some(self.secret.clone());}
+
+    fn version(&self, _cfg: &EncOpt) -> Message {
+        let version = Version {
+        version: PROTOCOL_VERSION,
+        services: NODE_NONE, 
+        timestamp: secs_since(UNIX_EPOCH) as i64,
+        user_agent: "umbrella".to_string(),
+        ..Default::default()
+        };
+
+        Message::Version(version)
+    }
 }
 
 impl Sender for EthWallet {
@@ -131,6 +161,75 @@ impl Sender for EthWallet {
     fn gas(&self)   -> u128 {self.gas}
     fn value(&self) -> u128 {self.value}
     fn gas_price(&self) -> u128 {self.gas_price}
+
+    fn init_ctx(&self) -> EncOpt {
+        // move to config
+        let mut rng = rand::thread_rng();
+        //let pub_key = &self.pub_key.0;
+        let pub_key:PublicKey = slice_to_public(&self.pub_key.0).unwrap();
+
+        let nonce: Hash256 = Hash256::random();
+        let secp = Secp256k1::new();
+        let (node_secret, node_public) = secp.generate_keypair(&mut rng);
+        let (msg, msg_secret) = encrypt_node_version(pub_key, node_public, node_secret, nonce);
+
+        let ctx = EncOpt {
+            node_public: node_public,
+            node_secret: node_secret, 
+            msg_secret: msg_secret,
+            enc_version: msg,
+            nonce: nonce,  
+        };
+        ctx
+    }
+
+    fn version(&self, cfg: &EncOpt) -> Message {
+        let version = NodeKey {
+            version: cfg.enc_version.clone(),
+        };
+        Message::NodeKey(version)
+    }
+}
+
+use tiny_keccak::Keccak;
+use crate::ecies;
+/// Probably a part of version message with encryption support
+/// 
+fn encrypt_node_version(pub_key:PublicKey
+                      , node_public:PublicKey
+                      , node_secret:SecretKey
+                      , nonce: Hash256) -> (Vec<u8>, SecretKey) {
+    let mut rng = rand::thread_rng();
+    let secp = Secp256k1::new();
+
+    let mut version = [0u8;194]; //sig + public + 2*h256 + 1
+
+    version[193] = 0x0;
+
+    let (sig, rest) = version.split_at_mut(65);
+    let (version_pub, rest) = rest.split_at_mut(32);
+    let (node_pub, rest) = rest.split_at_mut(64);
+    let (data_nonce, _) = rest.split_at_mut(32);
+    
+    let (sec1, pub1) = secp.generate_keypair(&mut rng);
+    let pub1 = public_to_slice(&pub1);
+    let sec1 =  SecretKey::from_slice(&sec1[..32]).unwrap();
+
+    let shr = ecdh::SharedSecret::new_with_hash(&pub_key, &node_secret, &mut hash);
+    let xor = Hash256::from_slice(&shr[..]) ^ nonce;
+
+    //signature
+    sig.copy_from_slice(&sign(&sec1, &xor));
+    Keccak::keccak256(&pub1, version_pub);
+    node_pub.copy_from_slice(&public_to_slice(&node_public));
+    data_nonce.copy_from_slice(nonce.as_bytes());
+
+    (ecies::encrypt(&pub_key, &[], &version).unwrap(), sec1)
+}
+
+fn hash(output: &mut [u8], x: &[u8], _y: &[u8]) -> i32 {
+    output.copy_from_slice(x);
+    1
 }
 
 #[derive(Debug, Clone)]
