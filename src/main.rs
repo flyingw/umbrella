@@ -136,6 +136,26 @@ fn create_transaction(opt: &Opt) -> Tx {
     return tx;
 }
 
+fn create_transaction2(opt: &Opt) -> Tx2 {
+    let mut address: Address = Default::default();
+    let decoded_address = hex::decode(&opt.sender().out_address()).unwrap();
+    address.copy_from_slice(&decoded_address);
+
+    Tx2 {
+        nonce: 2u128,
+        gas_price: opt.sender().gas_price(),
+        gas: opt.sender().gas(),
+        call: address,
+        value: opt.sender().value(),
+        data: opt.data().data.as_vec(),
+        hash: Hash256::default(),
+        r: Hash256::default(),
+        s: Hash256::default(),
+        v: 0u64,
+        sender: Default::default(),
+    }
+}
+
 pub fn ctx(secret: &SecretKey
     , auth_data: &[u8]
     , ecdhe_secret_key: SecretKey
@@ -213,7 +233,7 @@ pub fn ctx(secret: &SecretKey
 ///
 /// Send transaction to selected network.
 /// 
-pub fn main1() {
+pub fn main() {
     let opt = Opt::from_args();
     
     stderrlog::new().module(module_path!())
@@ -236,19 +256,26 @@ pub fn main1() {
     use std::net::{SocketAddr, ToSocketAddrs};
     let seed: SocketAddr = seed.to_socket_addrs().unwrap().choose(&mut rng).unwrap();
 
+    let secret: SecretKey = match opt.sender().crypto() {
+        Some(ref s) => json::read_secret(s, &opt.sender().password()),
+        None => SecretKey::from_str(&opt.sender().secret().unwrap()).unwrap(),
+    };
+
+    trace!("secret: {:?}", secret);
+    trace!("seed node: {:?}", seed);
+
     use std::net::TcpStream;
     
     let mut stream = TcpStream::connect_timeout(&seed, Duration::from_secs(1)).unwrap();
     // + kind: ConnectionRefused for next seed
-    stream.set_nodelay(true).unwrap();
-    stream.set_nonblocking(true).unwrap();
     stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
     
     let magic = network.magic();
     let mut partial: Option<Box<dyn MsgHeader>> = None;
     let mut is = stream.try_clone().unwrap();
     
-    let tx = Message::Tx(create_transaction(&opt));
+    //let     tx = create_transaction(&opt);
+    let mut tx = create_transaction2(&opt);
 
     let ct1 = opt.sender().init_ctx();
     let our_version = opt.sender().version(&ct1);
@@ -257,14 +284,17 @@ pub fn main1() {
     our_version.write(&mut stream, magic, &mut ()).unwrap();
 
     use std::io;
-    let mut ct = ();
+    use std::convert::TryInto;
+    //let mut ct = ();
 
     let lis = thread::spawn(move || {
+        let mut ct: Box<dyn Ctx> = Box::new(());
         debug!("Connected {:?}", &seed);
         loop {
             let message = match &partial {
-                Some(header) => Message::read_partial(&mut is, header.as_ref(), &mut ct),
-                None => Message::read(&mut is, network.magic(), &mut ct),
+                Some(header) => Message::read_partial(&mut is, header.as_ref(), &mut *ct),
+                //None => Message::read(&mut is, network.magic(), &mut *ct),
+                None => Message::read2(&mut is, magic[..3].try_into().expect("shortened magic"), &mut *ct),
             };
 
             match message {
@@ -276,6 +306,37 @@ pub fn main1() {
                         println!("message: {:?}", message);
 
                         match message {
+                            Message::Authack(mut data) => {
+                                debug!("Auth ack {:?}", data);
+                                ct = Box::new(ctx(&ct1.node_secret
+                                    , &mut data
+                                    , ct1.msg_secret
+                                    , ct1.nonce
+                                    , ct1.enc_version.clone()
+                                    , ct1.node_public).unwrap());
+
+                                let hello = Hello {
+                                    public_key: ct1.node_public,
+                                };
+                                Message::Hello(hello).write(&mut is, magic, &mut *ct).unwrap();
+                                ct.expect(commands::HELLO);
+                            }
+                            Message::Hello(h) => {
+                                debug!("Hello {:?}", h);
+                                ct.expect(commands::STATUS)
+                            }
+                            Message::Status(status) => {
+                                debug!("Status {:?}", status);
+                                Message::Status(status.clone()).write(&mut is, magic, &mut *ct).unwrap();
+                                tx = tx.sign(&secret, Some(status.network_id as u64));
+
+                                debug!("        hash: {:?}", &tx.hash());
+
+                                let mx = Message::Tx2(tx);
+                                mx.write(&mut is, magic, &mut *ct).unwrap();
+
+                                return Ok(mx);
+                            }
                             Message::Version(v) => {
                                 debug!("Version {:?}, verract", v);
                             }
@@ -288,9 +349,10 @@ pub fn main1() {
                                 Message::Pong(ping.clone()).write(&mut is, magic, &mut ()).unwrap();
                             }
                             Message::FeeFilter(ref fee) => {
+                                // let mx = Message::Tx(tx);
                                 debug!("Min fee {:?} received, Write {:#?}", fee.minfee, &tx);
-                                tx.write(&mut is, magic, &mut ()).unwrap();
-                                return Ok(tx);
+                                // mx.write(&mut is, magic, &mut ()).unwrap();
+                                // return Ok(mx);
                             }
                             Message::Reject(ref reject) => {
                                 debug!("rejected {:?}", reject);
@@ -320,153 +382,6 @@ pub fn main1() {
         Err(r) => debug!("{:?}", r),
     };
 
-    use std::net::Shutdown;
-    stream.shutdown(Shutdown::Both).unwrap();
-}
-
-fn create_transaction2(opt: &Opt) -> Tx2 {
-    let mut address: Address = Default::default();
-    let decoded_address = hex::decode(&opt.sender().out_address()).unwrap();
-    address.copy_from_slice(&decoded_address);
-
-    Tx2 {
-        nonce: 2u128,
-        gas_price: opt.sender().gas_price(),
-        gas: opt.sender().gas(),
-        call: address,
-        value: opt.sender().value(),
-        data: opt.data().data.as_vec(),
-        hash: Hash256::default(),
-        r: Hash256::default(),
-        s: Hash256::default(),
-        v: 0u64,
-        sender: Default::default(),
-    }
-}
-
-/// 
-fn main() {
-    let opt = Opt::from_args();
-
-    stderrlog::new().module(module_path!())
-        .quiet(opt.quiet)
-        .verbosity(4)
-        .modules(vec!("umbrella", "eth"))
-        .init().unwrap();
-
-    trace!("Options {:?}", opt);
-
-    use rand::seq::{SliceRandom, IteratorRandom};
-    let mut rng = rand::thread_rng();
-
-    let network = opt.network.network();
-    let seed = network.seeds();
-    let seed = seed.choose(&mut rng).unwrap();
-    let seed = [&seed, ":", &network.port().to_string()].concat();
-
-    use std::net::{SocketAddr, ToSocketAddrs};
-    let seed: SocketAddr = seed.to_socket_addrs().unwrap().choose(&mut rng).unwrap();
-
-    let secret: SecretKey = match opt.sender().crypto() {
-        Some(ref s) => json::read_secret(s, &opt.sender().password()),
-        None => SecretKey::from_str(&opt.sender().secret().unwrap()).unwrap(),
-    };
-
-    trace!("secret: {:?}", secret);
-    trace!("seed node: {:?}", seed);
-
-    // handshake write
-    use std::net::TcpStream;
-
-    let mut stream = TcpStream::connect_timeout(&seed, Duration::from_secs(1)).unwrap();
-    let mut is = stream.try_clone().unwrap();
-    let magic = network.magic();
-
-    let mut tx = create_transaction2(&opt);
-
-    let ct1 = opt.sender().init_ctx();
-    let our_version = opt.sender().version(&ct1);
-    debug!("Write {:#?}", our_version);
-    our_version.write(&mut stream, magic, &mut ()).unwrap();
-
-    let mut partial: Option<Box<dyn MsgHeader>> = None;
-    use std::io;
-    use std::convert::TryInto;
-
-    let lis = thread::spawn(move || {
-        let mut ct: Box<dyn Ctx> = Box::new(());
-        debug!("Connected {:?}", &seed);
-        loop {
-            let message = match &partial {
-                Some(header) => Message::read_partial(&mut is, header.as_ref(), &mut *ct),
-                None => Message::read2(&mut is, magic[..3].try_into().expect("shortened magic"), &mut *ct),
-            };
-
-            match message {
-                Ok(message) => {
-                    if let Message::Partial( header) = message {
-                        partial = Some(header);
-                    } else {
-                        partial = None;
-                        match message {
-                            Message::Authack(mut data) => {
-                                ct = Box::new(ctx(&ct1.node_secret
-                                    , &mut data
-                                    , ct1.msg_secret
-                                    , ct1.nonce
-                                    , ct1.enc_version.clone()
-                                    , ct1.node_public).unwrap());
-
-                                let hello = Hello {
-                                    public_key: ct1.node_public,
-                                };
-                                Message::Hello(hello).write(&mut is, magic, &mut *ct).unwrap();
-                                ct.expect(commands::HELLO);
-                            }
-                            Message::Hello(_h) => ct.expect(commands::STATUS),
-                            Message::Status(status) => {
-                                Message::Status(status.clone()).write(&mut is, magic, &mut *ct).unwrap();
-
-                                tx = tx.sign(&secret, Some(status.network_id as u64));
-
-                                debug!("        hash: {:?}", &tx.hash());
-
-                                let mx = Message::Tx2(tx);
-                                mx.write(&mut is, magic, &mut *ct).unwrap();
-
-                                return Ok(mx);
-                            }
-                            _ => {
-                                // no actual reject here, its used because commands are hardcoded
-                                // read the command from stream and fail here!
-                                return Ok(Message::Reject(Reject{
-                                    message: "String".to_string(),
-                                    code: RejectCode::RejectMalformed,
-                                    reason: "String".to_string(),
-                                    data: vec![],
-                                    }
-                                ));
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    if let Error::IOError(ref e) = e {
-                            if e.kind() == io::ErrorKind::WouldBlock || 
-                                e.kind() == io::ErrorKind::TimedOut {
-                                continue;
-                            }
-                    }
-                    return Err(e);
-                }
-            }
-        }
-    });
-
-    match lis.join() {
-        Ok(v)  => debug!("{:?}", v),
-        Err(r) => debug!("{:?}", r),
-    };
     use std::net::Shutdown;
     stream.shutdown(Shutdown::Both).unwrap();
 }

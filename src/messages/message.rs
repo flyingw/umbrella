@@ -272,21 +272,21 @@ impl fmt::Debug for dyn MsgHeader + 'static {
 impl fmt::Debug for Message {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Message::Other(p) => f.write_str(&format!("{:#?}", p)),
-            Message::Partial(h) => f.write_str(&format!("Partial {:#?}", h)),
-            Message::Ping(p) => f.write_str(&format!("{:#?}", p)),
-            Message::Pong(p) => f.debug_struct("Pong").field("nonce", &p.nonce).finish(),
+            Message::Other(p)     => f.write_str(&format!("{:#?}", p)),
+            Message::Partial(h)   => f.write_str(&format!("Partial {:#?}", h)),
+            Message::Ping(p)      => f.write_str(&format!("{:#?}", p)),
+            Message::Pong(p)      => f.debug_struct("Pong").field("nonce", &p.nonce).finish(),
             Message::FeeFilter(p) => f.write_str(&format!("{:#?}", p)),
-            Message::Reject(p) => f.write_str(&format!("{:#?}", p)),
+            Message::Reject(p)    => f.write_str(&format!("{:#?}", p)),
             Message::SendCmpct(p) => f.write_str(&format!("{:#?}", p)),
-            Message::Tx(p) => f.write_str(&format!("{:#?}", p)),
-            Message::Tx2(_p) => f.write_str(&format!("{:#?}", "merge txs!")),
-            Message::Verack => f.write_str("Verack"),
-            Message::Authack(_d) => f.write_str("Authack"),
-            Message::Version(p) => f.write_str(&format!("{:#?}", p)),
-            Message::NodeKey(v) => f.write_str(&format!("{:#?}", v)),
-            Message::Hello(h) => f.write_str(&format!("{:#?}", h)),
-            Message::Status(s) => f.write_str(&format!("{:#?}", s)),
+            Message::Tx(p)        => f.write_str(&format!("{:#?}", p)),
+            Message::Tx2(p)       => f.write_str(&format!("{:#?}", p)),
+            Message::Verack       => f.write_str("Verack"),
+            Message::Authack(_d)  => f.write_str("Authack"),
+            Message::Version(p)   => f.write_str(&format!("{:#?}", p)),
+            Message::NodeKey(v)   => f.write_str(&format!("{:#?}", v)),
+            Message::Hello(h)     => f.write_str(&format!("{:#?}", h)),
+            Message::Status(s)    => f.write_str(&format!("{:#?}", s)),
         }
     }
 }
