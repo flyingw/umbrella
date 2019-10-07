@@ -8,44 +8,44 @@ use secp256k1::{ecdh, Secp256k1, key::{PublicKey, SecretKey}};
 pub struct Wallet {
     #[structopt(long)]
     /// Public address of sender to be used as input.
-    /// 
+    ///
     pub in_address: String,
 
     #[structopt(long)]
     /// input UTXO amount
-    /// 
+    ///
     pub in_amount: f64,
 
     #[structopt(long, parse(try_from_str="Hash256::decode"))]
     /// OutPoint transaction id.
-    /// 
+    ///
     pub outpoint_hash: Hash256,
 
     #[structopt(long)]
     /// OutPoint vout index.
-    /// 
+    ///
     pub outpoint_index: u32,
 
     #[structopt(long)]
     /// Private key to sign sender input. 
-    /// 
+    ///
     /// Supported format: WIF (Wallet Import Format) - base56check encoded string.
-    /// 
+    ///
     /// > bitcoin-cli -regtest dumpprivkey "address"
-    /// 
+    ///
     pub secret: String,
 
     #[structopt(long)]
     /// Public addrss to be used as output for change.
-    /// 
+    ///
     /// > bitcoin-cli -regtest getnewaddress
-    /// 
+    ///
     pub out_address: String,
 
     #[structopt(long)]
     /// Change from input transaction. 
     /// Amout that should be returned to new sender address and don't burned or spent for writing data.
-    /// 
+    ///
     pub change: f64,
 }
 
@@ -59,38 +59,38 @@ pub struct EthWallet {
 
     #[structopt(long, required_unless="crypto")]
     /// Secret key. Having this key drastically improve the performance.
-    /// 
+    ///
     pub secret: Option<String>,
 
     #[structopt(long, required_unless="secret")]
     /// Crypto part of privkey file.
     /// Generating private key on ETH will take a lot of time (for undiscovered yet reason),
     /// so if you have it from another sources just provide the secret key
-    /// 
+    ///
     pub crypto: Option<String>,
 
     #[structopt(long)]
     /// Secret key password
-    /// 
+    ///
     pub password: String,
 
     #[structopt(long)]
     /// Public addrss to be used as output.
-    /// 
+    ///
     pub out_address: String,
 
     /// Transfered value
-    /// 
+    ///
     #[structopt(long)]
     pub value: u128, 
 
     /// Gas paid up front for transaction execution
-    /// 
+    ///
     #[structopt(long, default_value="21000")]
     pub gas: u128,
 
     /// Gas price
-    /// 
+    ///
     #[structopt(long, default_value="1000000000")]
     pub gas_price: u128,
 }

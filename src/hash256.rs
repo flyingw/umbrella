@@ -39,7 +39,7 @@ impl Hash256 {
 
     pub fn random() -> Self {
         let mut res = Self::default();
-        let mut rng = rand::rngs::EntropyRng::new();
+        let mut rng = rand::rngs::OsRng::new().unwrap();
         rng.fill_bytes(res.as_bytes_mut());
         res
     }
