@@ -271,28 +271,24 @@ pub fn main() {
     let magic = network.magic();
     let mut partial: Option<Box<dyn MsgHeader>> = None;
     let mut is = stream.try_clone().unwrap();
-    
-    //let     tx = create_transaction(&opt);
-    let mut tx = create_transaction2(&opt);
 
-    let ct1 = opt.sender().init_ctx();
-    let our_version = opt.sender().version(&ct1);
+    let enc_opt = opt.sender().encryption_conf();
+    let our_version = opt.sender().version(&enc_opt);    
     debug!("Write {:#?}", our_version);
     
     our_version.write(&mut stream, magic, &mut ()).unwrap();
 
     use std::io;
     use std::convert::TryInto;
-    //let mut ct = ();
 
     let lis = thread::spawn(move || {
         let mut ct: Box<dyn Ctx> = Box::new(());
         debug!("Connected {:?}", &seed);
         loop {
-            let message = match &partial {
-                Some(header) => Message::read_partial(&mut is, header.as_ref(), &mut *ct),
-                //None => Message::read(&mut is, network.magic(), &mut *ct),
-                None => Message::read2(&mut is, magic[..3].try_into().expect("shortened magic"), &mut *ct),
+            let message = match (&partial, &enc_opt) {
+                (Some(header),_) => Message::read_partial(&mut is, header.as_ref(), &mut *ct),
+                (None, Some(_x)) => Message::read2(&mut is, magic[..3].try_into().expect("shortened magic"), &mut *ct),
+                (None,None)      => Message::read(&mut is, network.magic(), &mut *ct),
             };
 
             match message {
@@ -306,15 +302,17 @@ pub fn main() {
                         match message {
                             Message::Authack(mut data) => {
                                 debug!("Auth ack {:?}", data);
-                                ct = Box::new(ctx(&ct1.node_secret
+                                let enc_opt = &enc_opt.as_ref().unwrap();
+
+                                ct = Box::new(ctx(&enc_opt.node_secret
                                     , &mut data
-                                    , ct1.msg_secret
-                                    , ct1.nonce
-                                    , ct1.enc_version.clone()
-                                    , ct1.node_public).unwrap());
+                                    , enc_opt.msg_secret
+                                    , enc_opt.nonce
+                                    , enc_opt.enc_version.clone()
+                                    , enc_opt.node_public).unwrap());
 
                                 let hello = Hello {
-                                    public_key: ct1.node_public,
+                                    public_key: enc_opt.node_public,
                                 };
                                 Message::Hello(hello).write(&mut is, magic, &mut *ct).unwrap();
                                 ct.expect(commands::HELLO);
@@ -326,9 +324,9 @@ pub fn main() {
                             Message::Status(status) => {
                                 debug!("Status {:?}", status);
                                 Message::Status(status.clone()).write(&mut is, magic, &mut *ct).unwrap();
+                                let mut tx = create_transaction2(&opt);
                                 tx = tx.sign(&secret, Some(status.network_id as u64));
-
-                                debug!("        hash: {:?}", &tx.hash());
+                                debug!("tx hash: {:?}", &tx.hash());
 
                                 let mx = Message::Tx2(tx);
                                 mx.write(&mut is, magic, &mut *ct).unwrap();
@@ -347,10 +345,11 @@ pub fn main() {
                                 Message::Pong(ping.clone()).write(&mut is, magic, &mut ()).unwrap();
                             }
                             Message::FeeFilter(ref fee) => {
-                                // let mx = Message::Tx(tx);
+                                let tx = create_transaction(&opt);
                                 debug!("Min fee {:?} received, Write {:#?}", fee.minfee, &tx);
-                                // mx.write(&mut is, magic, &mut ()).unwrap();
-                                // return Ok(mx);
+                                let mx = Message::Tx(tx);
+                                mx.write(&mut is, magic, &mut ()).unwrap();
+                                return Ok(mx);
                             }
                             Message::Reject(ref reject) => {
                                 debug!("rejected {:?}", reject);

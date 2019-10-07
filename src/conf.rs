@@ -122,8 +122,8 @@ pub trait Sender {
     fn gas(&self)       -> u128 {0}
     fn gas_price(&self) -> u128 {0}
     fn value(&self)     -> u128 {0}
-    fn init_ctx(&self) -> EncOpt {panic!("config does not initialized poperly")}
-    fn version(&self, cfg: &EncOpt) -> Message; 
+    fn encryption_conf(&self) -> Option<EncOpt> { None }
+    fn version(&self, cfg: &Option<EncOpt>) -> Message; 
 }
 
 use std::time::UNIX_EPOCH;
@@ -138,13 +138,13 @@ impl Sender for Wallet {
     fn in_amount(&self) -> f64 {return self.in_amount;}
     fn secret(&self) -> Option<String> {return Some(self.secret.clone());}
 
-    fn version(&self, _cfg: &EncOpt) -> Message {
+    fn version(&self, _cfg: &Option<EncOpt>) -> Message {
         let version = Version {
-        version: PROTOCOL_VERSION,
-        services: NODE_NONE, 
-        timestamp: secs_since(UNIX_EPOCH) as i64,
-        user_agent: "umbrella".to_string(),
-        ..Default::default()
+            version: PROTOCOL_VERSION,
+            services: NODE_NONE, 
+            timestamp: secs_since(UNIX_EPOCH) as i64,
+            user_agent: "umbrella".to_string(),
+            ..Default::default()
         };
 
         Message::Version(version)
@@ -162,10 +162,8 @@ impl Sender for EthWallet {
     fn value(&self) -> u128 {self.value}
     fn gas_price(&self) -> u128 {self.gas_price}
 
-    fn init_ctx(&self) -> EncOpt {
-        // move to config
+    fn encryption_conf(&self) -> Option<EncOpt> {
         let mut rng = rand::thread_rng();
-        //let pub_key = &self.pub_key.0;
         let pub_key:PublicKey = slice_to_public(&self.pub_key.0).unwrap();
 
         let nonce: Hash256 = Hash256::random();
@@ -173,19 +171,18 @@ impl Sender for EthWallet {
         let (node_secret, node_public) = secp.generate_keypair(&mut rng);
         let (msg, msg_secret) = encrypt_node_version(pub_key, node_public, node_secret, nonce);
 
-        let ctx = EncOpt {
+        Some(EncOpt {
             node_public: node_public,
             node_secret: node_secret, 
             msg_secret: msg_secret,
             enc_version: msg,
             nonce: nonce,  
-        };
-        ctx
+        })
     }
 
-    fn version(&self, cfg: &EncOpt) -> Message {
+    fn version(&self, cfg: &Option<EncOpt>) -> Message {
         let version = NodeKey {
-            version: cfg.enc_version.clone(),
+            version: cfg.as_ref().unwrap().enc_version.clone(),
         };
         Message::NodeKey(version)
     }
