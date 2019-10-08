@@ -617,11 +617,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "snowflake"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
 name = "sourcefile"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -772,7 +767,6 @@ dependencies = [
  "secp256k1 0.15.5 (git+https://github.com/flyingw/rust-secp256k1.git)",
  "serde_json 1.0.41 (registry+https://github.com/rust-lang/crates.io-index)",
  "snap 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "snowflake 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "stderrlog 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "structopt 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "tiny-keccak 1.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1001,7 +995,6 @@ dependencies = [
 "checksum serde 1.0.101 (registry+https://github.com/rust-lang/crates.io-index)" = "9796c9b7ba2ffe7a9ce53c2287dfc48080f4b2b362fcc245a259b3a7201119dd"
 "checksum serde_json 1.0.41 (registry+https://github.com/rust-lang/crates.io-index)" = "2f72eb2a68a7dc3f9a691bfda9305a1c017a6215e5a4545c258500d2099a37c2"
 "checksum snap 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)" = "95d697d63d44ad8b78b8d235bf85b34022a78af292c8918527c5f0cffdde7f43"
-"checksum snowflake 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "27207bb65232eda1f588cf46db2fee75c0808d557f6b3cf19a75f5d6d7c94df1"
 "checksum sourcefile 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)" = "4bf77cb82ba8453b42b6ae1d692e4cdc92f9a47beaf89a847c8be83f4e328ad3"
 "checksum spin 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)" = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
 "checksum stderrlog 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)" = "61dc66b7ae72b65636dbf36326f9638fb3ba27871bb737a62e2c309b87d91b70"
