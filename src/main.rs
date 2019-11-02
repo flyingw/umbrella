@@ -165,7 +165,7 @@ pub fn ctx(secret: &SecretKey
         let remote_ephemeral = slice_to_public(&ack[0..64]).unwrap();
         remote_nonce.copy_from_slice(&ack[64..(64+32)]);		
 
-        let shared = ecdh::SharedSecret::new_with_hash(&remote_ephemeral, &ecdhe_secret_key, &mut hash);
+        let shared = ecdh::SharedSecret::new_with_hash(&remote_ephemeral, &ecdhe_secret_key, &mut ecdh_hash);
         
 		let mut nonce_material = Hash512::default();
 		(&mut nonce_material[0..32]).copy_from_slice(remote_nonce.as_bytes());
@@ -372,7 +372,7 @@ pub fn main() {
     stream.shutdown(Shutdown::Both).unwrap();
 }
 
-fn hash(output: &mut [u8], x: &[u8], _y: &[u8]) -> i32 {
+fn ecdh_hash(output: &mut [u8], x: &[u8], _y: &[u8]) -> i32 {
     output.copy_from_slice(x);
     1
 }
