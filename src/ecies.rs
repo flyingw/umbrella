@@ -26,7 +26,7 @@ pub fn encrypt(public_key: &PublicKey, auth_data: &[u8], plain: &[u8]) -> Result
 
   let key = ecdh::SharedSecret::new_with_hash(&public_key, &secret_key_rand, &mut hash);
 
-  let ekey = &key[0..16];;
+  let ekey = &key[0..16];
   let mkey = hmac::Key::new(hmac::HMAC_SHA256, digest(&SHA256, &key[16..32]).as_ref());
 
   let mut msg = vec![0u8; 1 + 64 + 16 + plain.len() + 32];
