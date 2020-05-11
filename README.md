@@ -19,13 +19,13 @@ Released binaries
 * [v0.1.0](https://github.com/flyingw/umbrella/releases/tag/v0.1.0) Does nothing. Made for internal purposes.
 * [v0.2.0](https://github.com/flyingw/umbrella/releases/tag/v0.2.0) Do ETH and BCH transactions.
 
-
 ## local test setup
 
 Select corresponend platform to test:
 
-* [Bitchoin ABS](doc/bch/test-setup.md)
-* [Ethereum](doc/eth/test-setup.md)
+* [Bitchoin ABS](doc/bch/test-setup.md) and [run](./test.sh)
+* [Ethereum](doc/eth/test-setup.md)     and [run](./testht.sh)
+* [Bitcoin SV](doc/bsv/test-setup.md)   and [run](./test_bsv.sh)
 
 # links
 
@@ -37,3 +37,22 @@ We've had a hard times with it and did impossible to get rid of it.
 ## browse
 
 [abe](https://github.com/marioschlipf/bitcoin-abe)
+
+## implementation
+
+There are differecnt options to implement client which writes data
+One way is to use API calls which is relies on thrid paty providers
+Other way is to use node. It can be ran as full or lightweight but in either
+case user should setup. Local node could allow RPC which is full protocol for cli.
+To make client without dependeny to local node we can connect to real nodes.
+But as security measure RPC is closed on real nodes. That's why we pretend to be another
+node in network. As soon as we send transaction we closing the connection
+About Rust. When selecting language it was not only choice about efficiently
+but about building native client without dependency on vm. it is natural choice
+for anyone developing client software. cpp has no benefits here because all
+needed librariews are implemented in rust and nothing from system utils is required.
+Also it is very nice to binary to be as small as possible that is why this solution
+contains minimum of dependencies and we are working to make them bare minimum.
+Other optiomizations from compiler also applied to make binary light.
+Client is pilyglot. It is supports at the moment bch and eth. In progress btc and bsv.
+Support of nem is investigated. Other blockchains' support is subject to discuss.
