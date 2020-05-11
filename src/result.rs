@@ -35,6 +35,7 @@ pub enum Error {
     UnspecifiedRingError,
     /// The data or functionality is not supported by this library
     Unsupported(String),
+    NotImplemented,
 }
 
 impl std::fmt::Display for Error {
@@ -53,6 +54,7 @@ impl std::fmt::Display for Error {
             Error::Timeout => f.write_str("Timeout"),
             Error::UnspecifiedRingError => f.write_str("Unspecified ring error"),
             Error::Unsupported(s) => f.write_str(&format!("Unsuppored: {}", s)),
+            Error::NotImplemented => f.write_str("Not implemented")
         }
     }
 }
@@ -73,6 +75,7 @@ impl std::error::Error for Error {
             Error::Timeout => "Timeout",
             Error::UnspecifiedRingError => "Unspecified ring error",
             Error::Unsupported(_) => "Unsupported",
+            Error::NotImplemented => "Not implemented",
         }
     }
 

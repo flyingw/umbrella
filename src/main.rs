@@ -40,7 +40,7 @@ use conf::Opt;
 use structopt::StructOpt;
 
 use network::Network;
-use messages::{Tx, Tx2, TxIn, OutPoint, TxOut, Hello};
+use messages::{Tx, Tx2, TxBsv, TxIn, OutPoint, TxOut, Hello};
 use messages::{Message,MsgHeader};
 use std::time::Duration;
 use script::Script;
@@ -333,6 +333,12 @@ pub fn main() {
                                 debug!("Write {:#?}", ping);
                                 Message::Pong(ping.clone()).write(&mut is, magic, &mut ()).unwrap();
                             }
+                            Message::FeeFilter(ref fee) if network == Network::BsvRegtest => {
+                                debug!("Min fee {:?}, validate", fee.minfee);
+                                // let mx = Message::TxBsv(opt);
+                                // mx.write(&mut is, magic, &mut ()).unwrap();
+                                // return Ok(mx);
+                            }
                             Message::FeeFilter(ref fee) => {
                                 let tx = create_transaction(&opt);
                                 debug!("Min fee {:?}, validate", fee.minfee);
@@ -375,4 +381,19 @@ pub fn main() {
 fn hash(output: &mut [u8], x: &[u8], _y: &[u8]) -> i32 {
     output.copy_from_slice(x);
     1
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+    use super::*;
+    #[test]
+    fn test_write() {
+        let mut is = Cursor::new(Vec::new());
+        let tx = TxBsv {
+            key: (&"cRVFvtZENLvnV4VAspNkZxjpKvt65KC5pKnKtK7Riaqv5p1ppbnh").to_string()
+        };
+        tx.write(&mut is, &mut ()).unwrap();
+        assert_eq!(hex::encode(&is.get_ref()), "01000000");
+    }
 }
