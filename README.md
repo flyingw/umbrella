@@ -47,6 +47,8 @@ case user should setup. Local node could allow RPC which is full protocol for cl
 To make client without dependeny to local node we can connect to real nodes.
 But as security measure RPC is closed on real nodes. That's why we pretend to be another
 node in network. As soon as we send transaction we closing the connection
+one of the main downsides of selected solution is no easy way to list unspent.
+that is why it is responsibilty of user to provide output with enough funds.
 About Rust. When selecting language it was not only choice about efficiently
 but about building native client without dependency on vm. it is natural choice
 for anyone developing client software. cpp has no benefits here because all
@@ -56,3 +58,7 @@ contains minimum of dependencies and we are working to make them bare minimum.
 Other optiomizations from compiler also applied to make binary light.
 Client is pilyglot. It is supports at the moment bch and eth. In progress btc and bsv.
 Support of nem is investigated. Other blockchains' support is subject to discuss.
+Other reason to use rust because it is only general-purpose language which 
+implements automatic memory managment without garbage collection. Of course it 
+has other nice features, for example, concurrency, but we do not use them in this
+project.

@@ -9,3 +9,9 @@
  * broadcast transaction +
  * validate -
  * make loop +
+
+- support bsv
+- support btc
+- support nem
+- support multiple inputs with cli
+- use BufWriter around TcpStream
