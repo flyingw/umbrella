@@ -297,7 +297,7 @@ pub enum Network {
         #[structopt(flatten)] data: Data,
     },
     #[structopt(name="bsv-reg", raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
-    /// Operate on Bitcoin Core Regtest network
+    /// Operate on Bitcoin SV Regtest network
     BSVReg{
         #[structopt(flatten)] sender: Wallet,
         #[structopt(flatten)] data: Data,
