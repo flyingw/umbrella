@@ -51,6 +51,7 @@ use rust_base58::base58::FromBase58;
 use aes_ctr::Aes256Ctr;
 use aes::block_cipher_trait::generic_array::GenericArray;
 use aes_ctr::stream_cipher::NewStreamCipher;
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 use std::str::FromStr;
 use std::thread;
@@ -81,26 +82,6 @@ fn pk_script(addr: &str) -> Script {
     s   
 }
 
-// Creates public key hash script.
-fn pk_script_bsv(addr: &str) -> Script {
-    let mut s = Script::new();
-    let mut payload = [1;20];
-
-    use cashaddr::cashaddr_decode;
-
-    // let hash = cashaddr_decode(addr, Network::Regtest).expect("correct cash address");
-    // payload.copy_from_slice(&hash.0[..20]);
-
-    use op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160};
-
-    s.append(OP_DUP);
-    s.append(OP_HASH160);
-    // s.append_data(&payload);
-    s.append(OP_EQUALVERIFY);
-    s.append(OP_CHECKSIG);
-    s   
-}
-
 /// Creates a sigscript to sign a p2pkh transaction
 fn sig_script(sig: &[u8], public_key: &[u8; 33]) -> Script {
     let mut sig_script = Script::new();
@@ -113,49 +94,6 @@ pub fn create_transaction(opt: &Opt) -> Tx {
     let pub_script      = pk_script(&opt.sender().in_address());
     let chng_pk_script  = pk_script(&opt.sender().out_address());
     let dump_pk_script  = pk_script(&opt.data().dust_address);
-
-    trace!("pk: {:?}", &pub_script);
-    trace!("ck: {:?}", &chng_pk_script);
-    trace!("dk: {:?}", &dump_pk_script);
-
-    let mut tx = Tx {
-        version: 2,
-        inputs: vec![TxIn{
-            prev_output: OutPoint {
-                hash:  opt.sender().outpoint_hash(),
-                index: opt.sender().outpoint_index(),
-            },
-            ..Default::default()
-        }],
-        outputs: vec![
-            TxOut{ amount: Amount::from(opt.sender().change(), Units::Bch), pk_script: chng_pk_script,}, 
-            TxOut{ amount: Amount::from(opt.data().dust_amount, Units::Bch), pk_script: dump_pk_script, }],
-        lock_time:0
-    };
-
-    let secp = Secp256k1::new();
-    let mut cache = SigHashCache::new();
-    
-    let mut privk = [0;32];
-    privk.copy_from_slice(&opt.sender().secret().unwrap().from_base58().unwrap()[1..33]); 
-
-    let secret_key = SecretKey::from_slice(&privk).expect("32 bytes, within curve order");
-    let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
-
-    let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
-    let sighash = bip143_sighash(&mut tx, 0, &pub_script.0, Amount::from(opt.sender().in_amount(), Units::Bch), sighash_type, &mut cache).unwrap();
-    let signature = generate_signature(&privk, &sighash, sighash_type).unwrap();
-    let sig_script = sig_script(&signature, &pub_key.serialize());
-
-    tx.inputs[0].sig_script = sig_script;
-
-    return tx;
-}
-
-pub fn create_transaction_bsv(opt: &Opt) -> Tx {
-    let pub_script      = pk_script_bsv(&opt.sender().in_address());
-    let chng_pk_script  = pk_script_bsv(&opt.sender().out_address());
-    let dump_pk_script  = pk_script_bsv(&opt.data().dust_address);
 
     trace!("pk: {:?}", &pub_script);
     trace!("ck: {:?}", &chng_pk_script);
@@ -396,11 +334,13 @@ pub fn main() {
                                 debug!("Write {:#?}", ping);
                                 Message::Pong(ping.clone()).write(&mut is, magic, &mut ()).unwrap();
                             }
+                            Message::FeeFilter(ref fee) if network == Network::BsvMainnet => {
+                                debug!("Min fee {:?}, validate", fee.minfee);
+                                panic!("ni")
+                            }
                             Message::FeeFilter(ref fee) if network == Network::BsvRegtest => {
                                 debug!("Min fee {:?}, validate", fee.minfee);
-                                // let mx = Message::TxBsv(opt);
-                                // mx.write(&mut is, magic, &mut ()).unwrap();
-                                // return Ok(mx);
+                                panic!("ni")
                             }
                             Message::FeeFilter(ref fee) => {
                                 let tx = create_transaction(&opt);
@@ -446,6 +386,120 @@ fn hash(output: &mut [u8], x: &[u8], _y: &[u8]) -> i32 {
     1
 }
 
+#[derive(Default, PartialEq, Eq, Hash, Clone, Debug)]
+pub struct Unspent {
+    amount: u64,
+    txid: String,
+    txindex: u32,
+}
+
+#[derive(Default, PartialEq, Eq, Hash, Clone, Debug)]
+pub struct Output {
+    dest: String,
+    amount: u64,
+}
+
+fn get_op_pushdata_code(dest: &String) -> Vec<u8> {
+    let mut xs = Vec::new();
+    let OP_PUSHDATA1: u8 = 0x4c;
+    let OP_PUSHDATA2: u8 = 0x4d;
+    let OP_PUSHDATA4: u8 = 0x4e;
+    let length_data = dest.len();
+    if length_data <= 0x4c {
+        xs.write_u8(length_data as u8);
+    } else if length_data <= 0xff {
+        xs.write_u8(OP_PUSHDATA1);
+        xs.write_u8(length_data as u8);
+    } else if length_data <= 0xffff {
+        xs.write_u8(OP_PUSHDATA2);
+        xs.write_u16::<LittleEndian>(length_data as u16);
+    } else {
+        xs.write_u8(OP_PUSHDATA4);
+        xs.write_u32::<LittleEndian>(length_data as u32);
+    }
+    xs
+}
+
+fn int_to_varint(val: u64) -> Vec<u8> {
+    let mut xs = Vec::new();
+    var_int::write(val as u64, &mut xs).unwrap();
+    xs
+}
+
+fn get_op_return_size(message: &String) -> u64 {
+    let OP_FALSE: u8 = 0x00;
+    let OP_RETURN: u8 = 0x6a;
+    let mut op_return_size = 
+        8 // int64_t amount 0x00000000
+        + [OP_FALSE, OP_RETURN].len() // 2 bytes
+        + get_op_pushdata_code(message).len() // 1 byte if <75 bytes, 2 bytes if OP_PUSHDATA1...
+        + message.len(); // Max 220 bytes at present
+    // "Var_Int" that preceeds OP_RETURN - 0xdf is max value with current 220 byte limit (so only adds 1 byte)
+    op_return_size += int_to_varint(op_return_size as u64).len();
+    op_return_size as u64
+}
+
+fn get_fee(speed: &str) -> f64 {
+    match speed {
+        "fast"   => 2.0,
+        "medium" => 1.0,
+        "slow"   => 0.5,
+        _ => panic!("Invalid speed argument.")
+    }
+}
+
+fn estimate_tx_fee(n_in: u64, compressed: bool, op_return_size: u64) -> u64 {
+    let n_out = 1;
+    let satoshis = get_fee(&"slow");
+    let estimated_size =
+        4 + // version
+        n_in * (if compressed { 148 } else { 180 })
+        + (int_to_varint(n_in).len() as u64)
+        + n_out * 34  // excluding op_return outputs, dealt with separately
+        + (int_to_varint(n_out).len() as u64)
+        + op_return_size  // grand total size of op_return outputs(s) and related field(s)
+        + 4;  // time lock
+    f64::ceil((estimated_size as f64) * satoshis) as u64
+}
+
+fn sanitize_tx_data(unspents: Vec<Unspent>, leftover: &String, message: &String, compressed: bool) -> Vec<Output> {
+    let mut res = Vec::new();
+    res.push(Output{
+        dest: message.to_string(),
+        amount: 0,
+    });
+    if unspents.len() == 0 {
+        panic!("Transactions must have at least one unspent.");
+    }
+    if message.len() > 100000 {
+        panic!("too long message");
+    }
+    let total_op_return_size = get_op_return_size(message);
+    let calculated_fee = estimate_tx_fee(unspents.len() as u64, compressed, total_op_return_size);
+    let total_out = calculated_fee;
+    // print!("{}", total_out);
+    let total_in: u64 = unspents.iter().map(|x| x.amount).sum();
+    let remaining = total_in - total_out;
+    let DUST = 546;
+    if remaining > DUST {
+        res.push(Output{
+            dest: leftover.to_string(),
+            amount: remaining,
+        });
+    } else if remaining < 0 {
+        panic!("Balance {} is less than {} (including fee).", total_in, total_out);
+    }
+    res
+}
+
+fn private_key_to_public_key(private_key: &String) -> String {
+    panic!("ni")
+}
+
+fn private_key_to_address(public_key: &String, network: &Network) -> String {
+    panic!("ni")
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
@@ -481,48 +535,33 @@ mod tests {
     }
 
     #[test]
-    fn test_bsv() {
-        use conf::{Network, Wallet, Data, HexData};
-        let tx = create_transaction_bsv(&Opt{
-            network: Network::BSVReg{
-                sender: Wallet{
-                    in_address: "bsvreg:mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".to_string(),
-                    in_amount: f64::from_str("50.00000000").unwrap(),
-                    outpoint_hash: Hash256::decode("4bc41432979746dbd6c613dc5b2a2c1234ecc6a5bf3b48d108b4ecba90ea43fe").unwrap(),
-                    outpoint_index: 0,
-                    secret: "cRVFvtZENLvnV4VAspNkZxjpKvt65KC5pKnKtK7Riaqv5p1ppbnh".to_string(),
-                    out_address: "bsvreg:mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".to_string(),
-                    change: f64::from_str("0.9998").unwrap(),
-                },
-                data: Data{
-                    dust_address: "bsvreg:mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".to_string(),
-                    dust_amount: f64::from_str("0.0001").unwrap(),
-                    data: HexData::from_str("68686c6c6f2c7361696c6f72").unwrap(),
-                },
-            },
-            quiet: false,
-        });
-        let mut is = Cursor::new(Vec::new());
-        tx.write(&mut is, &mut ()).unwrap();
-        let res = hex::encode(&is.get_ref());
-        let exp = "0100000001fd9c28a5d1645277bd17218a5789a8ad5790b30395a37fd33aee617805acc6ce000000006b48304502210090298a2bf23e5640396400e4afea95c872b7da1a90abba35da7aab3d1299627702206196a592a5a2d99f5dfba4830965e97ca5ae7359a1e72ae2f712dde60a80db9b41210347fa53577cf93729ac48b1bc44df12d3dd9b88c2d9991abe84000e94728e9a26ffffffff02000000000000000005006a02686999f1052a010000001976a9146acc9139e75729d2dea892695e54b66ff105ac2888ac00000000";
-        assert_eq!(res, exp)
-    }
-    
-    #[test]
     fn test_write() {
-        let mut is = Cursor::new(Vec::new());
-        let tx = TxBsv {
-            key: (&"cRVFvtZENLvnV4VAspNkZxjpKvt65KC5pKnKtK7Riaqv5p1ppbnh").to_string(),
-            unspents: vec![UnspentBsv{
-                txid: hex::decode("cec6ac057861ee3ad37fa39503b39057ada889578a2117bd775264d1a5289cfd").unwrap(),
-                txindex: 0,
-            }],
-        };
-        tx.write(&mut is, &mut ()).unwrap();
-        let res = hex::encode(&is.get_ref());
-        // let exp = "0100000001fd9c28a5d1645277bd17218a5789a8ad5790b30395a37fd33aee617805acc6ce000000006b48304502210090298a2bf23e5640396400e4afea95c872b7da1a90abba35da7aab3d1299627702206196a592a5a2d99f5dfba4830965e97ca5ae7359a1e72ae2f712dde60a80db9b41210347fa53577cf93729ac48b1bc44df12d3dd9b88c2d9991abe84000e94728e9a26ffffffff02000000000000000005006a02686999f1052a010000001976a9146acc9139e75729d2dea892695e54b66ff105ac2888ac00000000";
-        let exp = "0100000001fd9c28a5d1645277bd17218a5789a8ad5790b30395a37fd33aee617805acc6ce00000000ffffffff";
-        assert_eq!(res, exp)
+        // input data
+        let private_key = "cRVFvtZENLvnV4VAspNkZxjpKvt65KC5pKnKtK7Riaqv5p1ppbnh".to_string();
+        let unspents = vec![Unspent{
+            amount: 5000000000,
+            txid: "cec6ac057861ee3ad37fa39503b39057ada889578a2117bd775264d1a5289cfd".to_string(),
+            txindex: 0
+        }];
+        let msg = "hi".to_string();
+        let network = Network::BsvRegtest;
+
+        // derived data from input
+        let pk_compressed = private_key.len() == 33;
+        let public_key = private_key_to_public_key(&private_key);
+        let private_key_address = private_key_to_address(&public_key, &network);
+
+        // test sanitize_tx_data
+        let outputs = sanitize_tx_data(unspents, &private_key_address, &msg, pk_compressed);
+        assert_eq!(outputs, vec![Output{
+            dest: "hi".to_string(),
+            amount: 0,
+        }, Output{
+            dest: "1AjhgvGqN8o2wboaLrnqTMTpNeH4f8HMqT".to_string(),
+            amount: 4999999897,
+        }]);
+
+        // test create_p2pkh_transaction
+
     }
 }

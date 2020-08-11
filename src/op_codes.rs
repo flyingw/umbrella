@@ -193,3 +193,5 @@ pub const OP_CHECKMULTISIGVERIFY: u8 = 175;
 pub const OP_CHECKLOCKTIMEVERIFY: u8 = 177;
 /// Marks transaction as invalid if the top stack item is less than the transaction's sequence used for relative lock time
 pub const OP_CHECKSEQUENCEVERIFY: u8 = 178;
+
+pub const OP_PUSH_20: u8 = 0x14;

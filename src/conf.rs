@@ -292,7 +292,7 @@ pub enum Network {
     },
     #[structopt(name="btc-reg", raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
     /// Operate on Bitcoin Core Regtest network
-    BTCReg{
+    BSV{
         #[structopt(flatten)] sender: Wallet,
         #[structopt(flatten)] data: Data,
     },
@@ -311,7 +311,7 @@ impl Network {
             Network::BCHTest{..}=> crate::network::Network::Testnet,
             Network::BCHReg{..} => crate::network::Network::Regtest,
             Network::Eth{..}    => crate::network::Network::Ethereum,
-            Network::BTCReg{..} => crate::network::Network::BtcRegtest,
+            Network::BSV{..} => crate::network::Network::BsvMainnet,
             Network::BSVReg{..} => crate::network::Network::BsvRegtest,
         }
     }
@@ -338,7 +338,7 @@ impl Opt {
             Network::BCHTest{sender, ..}=> sender,
             Network::BCHReg{sender, ..} => sender,
             Network::Eth{sender, ..}    => sender,
-            Network::BTCReg{sender, ..} => sender,
+            Network::BSV{sender, ..} => sender,
             Network::BSVReg{sender, ..} => sender,
         }
     }
@@ -349,7 +349,7 @@ impl Opt {
             Network::BCHTest{sender:_, data}=> data,
             Network::BCHReg{sender:_, data} => data,
             Network::Eth{sender:_, data}    => data,
-            Network::BTCReg{sender:_, data} => data,
+            Network::BSV{sender:_, data} => data,
             Network::BSVReg{sender:_, data} => data,
         }
     }
