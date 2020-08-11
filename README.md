@@ -10,6 +10,7 @@ WARN: Do not use with real networks. Test/Private only.
 $ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 $ rustup update
 $ cargo build [--release]
+$ ./test
 ```
 
 ## downloads
@@ -34,11 +35,20 @@ Definitelly use [rust-bch](https://github.com/brentongunning/rust-bch) library t
 Its hard to recommend [parity-ethereum](https://github.com/paritytech/parity-ethereum) project to create Ethereum applications.
 We've had a hard times with it and did impossible to get rid of it.
 
+Nice lib bitsv for python. It works with API but was highly inspired by.
+
 ## browse
 
 [abe](https://github.com/marioschlipf/bitcoin-abe)
 
 ## implementation
+
+limitations:
+- use lightweight node
+- do not use json apis
+- do not use rpc api
+- single cli for all blockchains
+- native cli = rust
 
 There are differecnt options to implement client which writes data
 One way is to use API calls which is relies on thrid paty providers

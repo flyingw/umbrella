@@ -21,7 +21,7 @@ pub mod fee_filter;
 pub use version::{Version,NODE_NONE,PROTOCOL_VERSION};
 pub use tx::Tx;
 pub use tx2::Tx2;
-pub use txbsv::TxBsv;
+pub use txbsv::{TxBsv, UnspentBsv};
 pub use tx_in::TxIn;
 pub use tx_out::TxOut;
 pub use out_point::OutPoint;

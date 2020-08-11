@@ -40,7 +40,7 @@ use conf::Opt;
 use structopt::StructOpt;
 
 use network::Network;
-use messages::{Tx, Tx2, TxBsv, TxIn, OutPoint, TxOut, Hello};
+use messages::{Tx, Tx2, TxBsv, UnspentBsv, TxIn, OutPoint, TxOut, Hello};
 use messages::{Message,MsgHeader};
 use std::time::Duration;
 use script::Script;
@@ -391,9 +391,16 @@ mod tests {
     fn test_write() {
         let mut is = Cursor::new(Vec::new());
         let tx = TxBsv {
-            key: (&"cRVFvtZENLvnV4VAspNkZxjpKvt65KC5pKnKtK7Riaqv5p1ppbnh").to_string()
+            key: (&"cRVFvtZENLvnV4VAspNkZxjpKvt65KC5pKnKtK7Riaqv5p1ppbnh").to_string(),
+            unspents: vec![UnspentBsv{
+                txid: hex::decode("cec6ac057861ee3ad37fa39503b39057ada889578a2117bd775264d1a5289cfd").unwrap(),
+                txindex: 0,
+            }],
         };
         tx.write(&mut is, &mut ()).unwrap();
-        assert_eq!(hex::encode(&is.get_ref()), "01000000");
+        let res = hex::encode(&is.get_ref());
+        // let exp = "0100000001fd9c28a5d1645277bd17218a5789a8ad5790b30395a37fd33aee617805acc6ce000000006b48304502210090298a2bf23e5640396400e4afea95c872b7da1a90abba35da7aab3d1299627702206196a592a5a2d99f5dfba4830965e97ca5ae7359a1e72ae2f712dde60a80db9b41210347fa53577cf93729ac48b1bc44df12d3dd9b88c2d9991abe84000e94728e9a26ffffffff02000000000000000005006a02686999f1052a010000001976a9146acc9139e75729d2dea892695e54b66ff105ac2888ac00000000";
+        let exp = "0100000001fd9c28a5d1645277bd17218a5789a8ad5790b30395a37fd33aee617805acc6ce00000000ffffffff";
+        assert_eq!(res, exp)
     }
 }

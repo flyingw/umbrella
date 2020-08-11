@@ -1,23 +1,52 @@
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use super::message::Payload;
-use super::out_point::{COINBASE_OUTPOINT_HASH, COINBASE_OUTPOINT_INDEX};
-use super::tx_out::TxOut;
-use super::tx_in::TxIn;
-use std::fmt;
+use byteorder::{LittleEndian, WriteBytesExt};
+// use std::fmt;
 use std::io;
 use std::io::{Read, Write};
 use crate::var_int;
-use crate::hash256::{sha256d, Hash256};
 use crate::result::{Error, Result};
 use crate::serdes::Serializable;
 use crate::ctx::Ctx;
 
-#[derive(Default, PartialEq, Eq, Hash, Clone)]
-pub struct TxBsv {
-    pub key: String
-    // pub txid: String
-    // pub txindex: Int
+// #[derive(Debug, Default, PartialEq, Eq, Hash, Clone)]
+pub struct UnspentBsv {
+    pub txid: Vec<u8>,
+    pub txindex: u32,
     // pub amount: Int
+}
+
+pub const OP_DUP: u8 = 118;
+pub const OP_HASH160: u8 = 169;
+pub const OP_PUSH_20: u8 = 0x14;
+pub const OP_EQUALVERIFY: u8 = 136;
+pub const OP_CHECKSIG: u8 = 172;
+
+impl Serializable<UnspentBsv> for UnspentBsv {
+    fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<UnspentBsv> {
+        Err(Error::NotImplemented)
+    }
+
+    fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
+        // txid
+        let mut txid = self.txid.clone();
+        txid.reverse();
+        writer.write(&txid)?;
+        // txindex
+        writer.write_u32::<LittleEndian>(self.txindex)?;
+        // scriptCode
+        let script_code = [OP_DUP, OP_HASH160, OP_PUSH_20,
+                            // address_to_public_key_hash(self.address) +
+                            OP_EQUALVERIFY, OP_CHECKSIG];
+        print!("{}", hex::encode(script_code));
+        // sequence
+        writer.write(&[0xff, 0xff, 0xff, 0xff])?;
+        Ok(())
+    }
+}
+
+// #[derive(Default, PartialEq, Eq, Hash, Clone)]
+pub struct TxBsv {
+    pub key: String,
+    pub unspents: Vec<UnspentBsv>,
     // pub msg: String
 }
 
@@ -38,12 +67,22 @@ pub struct TxBsv {
 // }
 
 impl Serializable<TxBsv> for TxBsv {
-    fn read(reader: &mut dyn Read, ctx: &mut dyn Ctx) -> Result<TxBsv> {
+    fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<TxBsv> {
         Err(Error::NotImplemented)
     }
 
     fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
         writer.write_u32::<LittleEndian>(1)?;
+        var_int::write(self.unspents.len() as u64, writer)?;
+        for tx_in in self.unspents.iter() {
+            tx_in.write(writer, ctx)?;
+        }
+
+        // address
+        
+        
+        // hex::decode(txid).revert + sha256(sha256(writer.write_u32::<LittleEndian>(txindex)?)
+        
         // var_int::write(self.inputs.len() as u64, writer)?;
         // for tx_in in self.inputs.iter() {
         //     tx_in.write(writer, ctx)?;
