@@ -387,6 +387,36 @@ fn hash(output: &mut [u8], x: &[u8], _y: &[u8]) -> i32 {
 mod tests {
     use std::io::Cursor;
     use super::*;
+
+    #[test]
+    fn test_bch() {
+        use conf::{Network, Wallet, Data, HexData};
+        let tx = create_transaction(&Opt{
+            network: Network::BCHReg{
+                sender: Wallet{
+                    in_address: "bchreg:qphrcrv0ua00njxu6jd7rs7n7ntepmvvuvglc80jdn".to_string(),
+                    in_amount: 1.0000,
+                    outpoint_hash: Hash256::decode("df2741a4164630be86a7528f05da3cdc4acc514569a89017eea4b303a0d66412").unwrap(),
+                    outpoint_index: 0,
+                    secret: "cN4hMbVEjSwQEafm5Morxh59CeTpK6MdE4oaVf52TXMYr6CkQQ4F".to_string(),
+                    out_address: "bchreg:qqkwrtcw4hqnnsdpsntey63ll8qlr2phsczpqydl98".to_string(),
+                    change: f64::from_str("0.9998").unwrap(),
+                },
+                data: Data{
+                    dust_address: "bchreg:qq6j8yswty4n4unqqcxp2ujuy6eh5769h52dt69vml".to_string(),
+                    dust_amount: f64::from_str("0.0001").unwrap(),
+                    data: HexData::from_str("68686c6c6f2c7361696c6f72").unwrap(),
+                },
+            },
+            quiet: false,
+        });
+        let mut is = Cursor::new(Vec::new());
+        tx.write(&mut is, &mut ()).unwrap();
+        let res = hex::encode(&is.get_ref());
+        let exp = "02000000011264d6a003b3a4ee1790a8694551cc4adc3cda058f52a786be304616a44127df000000006b483045022100d8e386aab795d56f9d7b7d6a51e5e79f9838227bc87b264140399fa31846cb8802203c3726092a64e6c9979e38a422a56292d76dfd0ac7fdb8201386101af5b277594121029239a0bf858ee84dc7dc17cd036967038091ca44eccad3d430e60be6c7cec6100000000002e092f505000000001976a9142ce1af0eadc139c1a184d7926a3ff9c1f1a8378688ac10270000000000001976a9143523920e592b3af260060c15725c26b37a7b45bd88ac00000000";
+        assert_eq!(res, exp)
+    }
+    
     #[test]
     fn test_write() {
         let mut is = Cursor::new(Vec::new());

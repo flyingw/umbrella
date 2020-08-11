@@ -355,10 +355,10 @@ impl Opt {
     }
 }
 
-#[cfg(test)]
-mod tests{
-    #[test] fn help_network() {
-        use super::*;
-        Opt::from_iter(&["umbrella", "help", "bch-reg"]);
-    }
-}
+// #[cfg(test)]
+// mod tests{
+//     #[test] fn help_network() {
+//         use super::*;
+//         Opt::from_iter(&["umbrella", "help", "bch-reg"]);
+//     }
+// }
