@@ -40,7 +40,7 @@ use conf::Opt;
 use structopt::StructOpt;
 
 use network::Network;
-use messages::{Tx, Tx2, TxBsv, UnspentBsv, TxIn, OutPoint, TxOut, Hello};
+use messages::{Tx, Tx2, TxIn, OutPoint, TxOut, Hello};
 use messages::{Message,MsgHeader};
 use std::time::Duration;
 use script::Script;
@@ -51,7 +51,7 @@ use rust_base58::base58::FromBase58;
 use aes_ctr::Aes256Ctr;
 use aes::block_cipher_trait::generic_array::GenericArray;
 use aes_ctr::stream_cipher::NewStreamCipher;
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{LittleEndian, WriteBytesExt}; //ReadBytesExt
 
 use std::str::FromStr;
 use std::thread;
@@ -401,21 +401,21 @@ pub struct Output {
 
 fn get_op_pushdata_code(dest: &String) -> Vec<u8> {
     let mut xs = Vec::new();
-    let OP_PUSHDATA1: u8 = 0x4c;
-    let OP_PUSHDATA2: u8 = 0x4d;
-    let OP_PUSHDATA4: u8 = 0x4e;
+    const OP_PUSHDATA1: u8 = 0x4c;
+    const OP_PUSHDATA2: u8 = 0x4d;
+    const OP_PUSHDATA4: u8 = 0x4e;
     let length_data = dest.len();
     if length_data <= 0x4c {
-        xs.write_u8(length_data as u8);
+        xs.write_u8(length_data as u8).unwrap();
     } else if length_data <= 0xff {
-        xs.write_u8(OP_PUSHDATA1);
-        xs.write_u8(length_data as u8);
+        xs.write_u8(OP_PUSHDATA1).unwrap();
+        xs.write_u8(length_data as u8).unwrap();
     } else if length_data <= 0xffff {
-        xs.write_u8(OP_PUSHDATA2);
-        xs.write_u16::<LittleEndian>(length_data as u16);
+        xs.write_u8(OP_PUSHDATA2).unwrap();
+        xs.write_u16::<LittleEndian>(length_data as u16).unwrap();
     } else {
-        xs.write_u8(OP_PUSHDATA4);
-        xs.write_u32::<LittleEndian>(length_data as u32);
+        xs.write_u8(OP_PUSHDATA4).unwrap();
+        xs.write_u32::<LittleEndian>(length_data as u32).unwrap();
     }
     xs
 }
@@ -427,8 +427,8 @@ fn int_to_varint(val: u64) -> Vec<u8> {
 }
 
 fn get_op_return_size(message: &String) -> u64 {
-    let OP_FALSE: u8 = 0x00;
-    let OP_RETURN: u8 = 0x6a;
+    const OP_FALSE: u8 = 0x00;
+    const OP_RETURN: u8 = 0x6a;
     let mut op_return_size = 
         8 // int64_t amount 0x00000000
         + [OP_FALSE, OP_RETURN].len() // 2 bytes
@@ -479,12 +479,12 @@ fn sanitize_tx_data(unspents: Vec<Unspent>, leftover: &String, message: &String,
     let total_out = calculated_fee;
     // print!("{}", total_out);
     let total_in: u64 = unspents.iter().map(|x| x.amount).sum();
-    let remaining = total_in - total_out;
-    let DUST = 546;
+    let remaining = total_in as i128 - total_out as i128;
+    const DUST: i128 = 546;
     if remaining > DUST {
         res.push(Output{
             dest: leftover.to_string(),
-            amount: remaining,
+            amount: remaining as u64,
         });
     } else if remaining < 0 {
         panic!("Balance {} is less than {} (including fee).", total_in, total_out);
@@ -492,11 +492,23 @@ fn sanitize_tx_data(unspents: Vec<Unspent>, leftover: &String, message: &String,
     res
 }
 
-fn private_key_to_public_key(private_key: &String) -> String {
+fn b58decode(string: &String) -> Vec<u8> {
+    string.from_base58().unwrap()
+}
+
+// fn b58decode_check(_wif: &String) -> String {
+//     panic!("ni")
+// }
+
+// fn wif_to_bytes(_wif: &String) -> String {
+//     panic!("ni")
+// }
+
+fn private_key_to_public_key(_wif: &String) -> String {
     panic!("ni")
 }
 
-fn private_key_to_address(public_key: &String, network: &Network) -> String {
+fn private_key_to_address(_public_key: &String, _network: &Network) -> String {
     panic!("ni")
 }
 
@@ -532,6 +544,11 @@ mod tests {
         let res = hex::encode(&is.get_ref());
         let exp = "02000000011264d6a003b3a4ee1790a8694551cc4adc3cda058f52a786be304616a44127df000000006b483045022100d8e386aab795d56f9d7b7d6a51e5e79f9838227bc87b264140399fa31846cb8802203c3726092a64e6c9979e38a422a56292d76dfd0ac7fdb8201386101af5b277594121029239a0bf858ee84dc7dc17cd036967038091ca44eccad3d430e60be6c7cec6100000000002e092f505000000001976a9142ce1af0eadc139c1a184d7926a3ff9c1f1a8378688ac10270000000000001976a9143523920e592b3af260060c15725c26b37a7b45bd88ac00000000";
         assert_eq!(res, exp)
+    }
+
+    #[test]
+    fn test_utils() {
+        assert_eq!(b58decode(&"2yGEbwRFyft7uRe2t".to_string()), "hello there!".to_string().into_bytes())
     }
 
     #[test]
