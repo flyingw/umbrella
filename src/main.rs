@@ -52,6 +52,7 @@ use aes_ctr::Aes256Ctr;
 use aes::block_cipher_trait::generic_array::GenericArray;
 use aes_ctr::stream_cipher::NewStreamCipher;
 use byteorder::{LittleEndian, WriteBytesExt}; //ReadBytesExt
+use std::convert::TryInto;
 
 use std::str::FromStr;
 use std::thread;
@@ -268,7 +269,6 @@ pub fn main() {
     our_version.write(&mut stream, magic, &mut ()).unwrap();
 
     use std::io;
-    use std::convert::TryInto;
 
     let lis = thread::spawn(move || {
         let mut ct: Box<dyn Ctx> = Box::new(());
@@ -496,13 +496,35 @@ fn b58decode(string: &String) -> Vec<u8> {
     string.from_base58().unwrap()
 }
 
-// fn b58decode_check(_wif: &String) -> String {
-//     panic!("ni")
-// }
+fn b58decode_check(string: &String) -> Vec<u8> {
+    let decoded = &b58decode(string)[..];
+    let mut shortened = vec![0; decoded.len()-4];
+    shortened.copy_from_slice(&decoded[ .. decoded.len()-4]);
+    let decoded_checksum: [u8;4] = decoded[decoded.len() - 4 .. ].try_into().unwrap();
+    let hash_checksum = double_sha256_checksum(&shortened);
+    if decoded_checksum != hash_checksum {
+        panic!("Decoded checksum {:?} derived from \"{:?}\" is not equal to hash checksum {:?}.", decoded_checksum, string, hash_checksum)
+    }
+    shortened
+}
 
-// fn wif_to_bytes(_wif: &String) -> String {
-//     panic!("ni")
-// }
+fn sha256(bytestr: &[u8]) -> [u8;32] {
+    use ring::digest::{digest, SHA256};
+    digest(&SHA256, bytestr).as_ref().try_into().unwrap()
+}
+
+fn double_sha256(bytestr: &Vec<u8>) -> [u8;32] {
+    sha256(&sha256(&bytestr[..]))
+}
+
+fn double_sha256_checksum(bytestr: &Vec<u8>) -> [u8;4] {
+    double_sha256(bytestr)[..4].try_into().unwrap()
+}
+
+fn wif_to_bytes(wif: &String) -> String {
+    let private_key = b58decode_check(wif);
+    panic!("ni")
+}
 
 fn private_key_to_public_key(_wif: &String) -> String {
     panic!("ni")
@@ -548,7 +570,10 @@ mod tests {
 
     #[test]
     fn test_utils() {
-        assert_eq!(b58decode(&"2yGEbwRFyft7uRe2t".to_string()), "hello there!".to_string().into_bytes())
+        let decoded = b58decode(&"2yGEbwRFyft7uRe2t".to_string());
+        assert_eq!(decoded, "hello there!".to_string().as_bytes());
+        assert_eq!(&decoded[ .. decoded.len() - 4], "hello th".to_string().as_bytes());
+        assert_eq!(&decoded[decoded.len() - 4 .. ], "ere!".to_string().as_bytes());
     }
 
     #[test]
