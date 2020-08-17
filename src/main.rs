@@ -557,7 +557,7 @@ mod tests {
             dest: "hi".to_string(),
             amount: 0,
         }, Output{
-            dest: "1AjhgvGqN8o2wboaLrnqTMTpNeH4f8HMqT".to_string(),
+            dest: "mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".to_string(),
             amount: 4999999897,
         }]);
 
