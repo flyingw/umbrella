@@ -13,6 +13,7 @@ hex = "0.3"
 rand = "0.6.5"
 secp256k1 = { git = "https://github.com/flyingw/rust-secp256k1.git" }
 rust-base58 = "0.0.4"
+bs58 = "0.4.0"
 ring = "0.16.9"
 byteorder = "1.2"
 digest = "0.7"

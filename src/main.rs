@@ -395,11 +395,11 @@ pub struct Unspent {
 
 #[derive(Default, PartialEq, Eq, Hash, Clone, Debug)]
 pub struct Output {
-    dest: String,
+    dest: Vec<u8>,
     amount: u64,
 }
 
-fn get_op_pushdata_code(dest: &String) -> Vec<u8> {
+fn get_op_pushdata_code(dest: &Vec<u8>) -> Vec<u8> {
     let mut xs = Vec::new();
     const OP_PUSHDATA1: u8 = 0x4c;
     const OP_PUSHDATA2: u8 = 0x4d;
@@ -426,7 +426,7 @@ fn int_to_varint(val: u64) -> Vec<u8> {
     xs
 }
 
-fn get_op_return_size(message: &String) -> u64 {
+fn get_op_return_size(message: &Vec<u8>) -> u64 {
     const OP_FALSE: u8 = 0x00;
     const OP_RETURN: u8 = 0x6a;
     let mut op_return_size = 
@@ -462,10 +462,10 @@ fn estimate_tx_fee(n_in: u64, compressed: bool, op_return_size: u64) -> u64 {
     f64::ceil((estimated_size as f64) * satoshis) as u64
 }
 
-fn sanitize_tx_data(unspents: Vec<Unspent>, leftover: &String, message: &String, compressed: bool) -> Vec<Output> {
+fn sanitize_tx_data(unspents: Vec<Unspent>, leftover: Vec<u8>, message: &Vec<u8>, compressed: bool) -> Vec<Output> {
     let mut res = Vec::new();
     res.push(Output{
-        dest: message.to_string(),
+        dest: message.clone(),
         amount: 0,
     });
     if unspents.len() == 0 {
@@ -483,7 +483,7 @@ fn sanitize_tx_data(unspents: Vec<Unspent>, leftover: &String, message: &String,
     const DUST: i128 = 546;
     if remaining > DUST {
         res.push(Output{
-            dest: leftover.to_string(),
+            dest: leftover,
             amount: remaining as u64,
         });
     } else if remaining < 0 {
@@ -526,12 +526,26 @@ fn wif_to_bytes(wif: &String) -> String {
     panic!("ni")
 }
 
-fn private_key_to_public_key(_wif: &String) -> String {
-    panic!("ni")
+fn private_key_to_public_key(_wif: &String) -> Vec<u8> {
+    let secp = Secp256k1::new();
+    let mut privk = [0;32];
+    privk.copy_from_slice(&_wif.from_base58().unwrap()[1..33]); 
+    let secret_key = SecretKey::from_slice(&privk).expect("32 bytes, within curve order");
+    let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
+    pub_key.serialize().to_vec()
 }
 
-fn private_key_to_address(_public_key: &String, _network: &Network) -> String {
-    panic!("ni")
+fn b58encode_check(bytestr: Vec<u8>) -> Vec<u8> {
+    let mut xs = vec![];
+    xs.extend(bytestr.clone());
+    xs.extend(double_sha256_checksum(&bytestr).to_vec());
+    bs58::encode(xs).into_vec()
+}
+
+fn public_key_to_address(_public_key: Vec<u8>, _network: &Network) -> Vec<u8> {
+    let mut xs = hash160(&_public_key[..]).0.to_vec();
+    xs.insert(0, _network.legacyaddr_pubkeyhash_flag());
+    b58encode_check(xs)
 }
 
 #[cfg(test)]
@@ -574,6 +588,12 @@ mod tests {
         assert_eq!(decoded, "hello there!".to_string().as_bytes());
         assert_eq!(&decoded[ .. decoded.len() - 4], "hello th".to_string().as_bytes());
         assert_eq!(&decoded[decoded.len() - 4 .. ], "ere!".to_string().as_bytes());
+
+        let private_key = "cRVFvtZENLvnV4VAspNkZxjpKvt65KC5pKnKtK7Riaqv5p1ppbnh".to_string();
+        let network = Network::BsvRegtest;
+        let public_key = private_key_to_public_key(&private_key);
+        let address = public_key_to_address(public_key, &network);
+        assert_eq!(address, "mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".to_string().as_bytes());
     }
 
     #[test]
@@ -585,21 +605,21 @@ mod tests {
             txid: "cec6ac057861ee3ad37fa39503b39057ada889578a2117bd775264d1a5289cfd".to_string(),
             txindex: 0
         }];
-        let msg = "hi".to_string();
+        let msg = "hi".as_bytes().to_vec();
         let network = Network::BsvRegtest;
 
         // derived data from input
         let pk_compressed = private_key.len() == 33;
         let public_key = private_key_to_public_key(&private_key);
-        let private_key_address = private_key_to_address(&public_key, &network);
+        let address = public_key_to_address(public_key, &network);
 
         // test sanitize_tx_data
-        let outputs = sanitize_tx_data(unspents, &private_key_address, &msg, pk_compressed);
+        let outputs = sanitize_tx_data(unspents, address, &msg, pk_compressed);
         assert_eq!(outputs, vec![Output{
-            dest: "hi".to_string(),
+            dest: "hi".as_bytes().to_vec(),
             amount: 0,
         }, Output{
-            dest: "mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".to_string(),
+            dest: "mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".as_bytes().to_vec(),
             amount: 4999999897,
         }]);
 

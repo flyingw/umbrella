@@ -238,7 +238,7 @@ impl Message {
         use self::commands::*;
         use std::convert::TryInto;
         match self {
-            Message::Other(s) => Err(io::Error::new(io::ErrorKind::InvalidData, s.as_ref())),
+            Message::Other(s) => Err(io::Error::new(io::ErrorKind::InvalidData, s.to_string())),
             Message::Partial(_) => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Cannot write partial message".to_string(),
