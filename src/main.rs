@@ -609,8 +609,9 @@ mod tests {
         let network = Network::BsvRegtest;
 
         // derived data from input
-        let pk_compressed = private_key.len() == 33;
         let public_key = private_key_to_public_key(&private_key);
+        let pk_compressed = public_key.len() == 33;
+        assert_eq!(pk_compressed, true);
         let address = public_key_to_address(public_key, &network);
 
         // test sanitize_tx_data
