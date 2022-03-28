@@ -548,6 +548,10 @@ fn public_key_to_address(_public_key: Vec<u8>, _network: &Network) -> Vec<u8> {
     b58encode_check(xs)
 }
 
+fn address_to_public_key_hash(address: &String) -> Vec<u8> {
+    b58decode_check(address)[1..].to_vec()
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
@@ -624,7 +628,15 @@ mod tests {
             amount: 4999999897,
         }]);
 
-        // test create_p2pkh_transaction
+        let mut is = Cursor::new(Vec::new());
+        messages::TxBsv {
+            // key: "",
+            unspents: vec![], //todo
+            outputs
+        }.write(&mut is, &mut ()).unwrap();
+        let res = hex::encode(&is.get_ref());
+        let exp = "0100000001fd9c28a5d1645277bd17218a5789a8ad5790b30395a37fd33aee617805acc6ce000000006b48304502210090298a2bf23e5640396400e4afea95c872b7da1a90abba35da7aab3d1299627702206196a592a5a2d99f5dfba4830965e97ca5ae7359a1e72ae2f712dde60a80db9b41210347fa53577cf93729ac48b1bc44df12d3dd9b88c2d9991abe84000e94728e9a26ffffffff02000000000000000005006a02686999f1052a010000001976a9146acc9139e75729d2dea892695e54b66ff105ac2888ac00000000";
+        assert_eq!(res, exp)
 
     }
 }

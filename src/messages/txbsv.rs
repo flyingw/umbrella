@@ -6,12 +6,14 @@ use crate::var_int;
 use crate::result::{Error, Result};
 use crate::serdes::Serializable;
 use crate::ctx::Ctx;
+use crate::address_to_public_key_hash;
 
 // #[derive(Debug, Default, PartialEq, Eq, Hash, Clone)]
 pub struct UnspentBsv {
     pub txid: Vec<u8>,
     pub txindex: u32,
     // pub amount: Int
+    pub address: String
 }
 
 pub const OP_DUP: u8 = 118;
@@ -32,22 +34,19 @@ impl Serializable<UnspentBsv> for UnspentBsv {
         writer.write(&txid)?;
         // txindex
         writer.write_u32::<LittleEndian>(self.txindex)?;
-        // scriptCode
-        let script_code = [OP_DUP, OP_HASH160, OP_PUSH_20,
-                            // address_to_public_key_hash(self.address) +
-                            OP_EQUALVERIFY, OP_CHECKSIG];
-        print!("{}", hex::encode(script_code));
+        //todo: amount
         // sequence
-        writer.write(&[0xff, 0xff, 0xff, 0xff])?;
+        // writer.write(&[0xff, 0xff, 0xff, 0xff])?;
         Ok(())
     }
 }
 
 // #[derive(Default, PartialEq, Eq, Hash, Clone)]
 pub struct TxBsv {
-    pub key: String,
+    // pub key: String,
     pub unspents: Vec<UnspentBsv>,
     // pub msg: String
+    pub outputs: Vec<Output>
 }
 
 // impl TxBsv {
@@ -74,9 +73,9 @@ impl Serializable<TxBsv> for TxBsv {
     fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
         writer.write_u32::<LittleEndian>(1)?;
         var_int::write(self.unspents.len() as u64, writer)?;
-        for tx_in in self.unspents.iter() {
-            tx_in.write(writer, ctx)?;
-        }
+        // for tx_in in self.unspents.iter() {
+        //     tx_in.write(writer, ctx)?;
+        // }
 
         // address
         
