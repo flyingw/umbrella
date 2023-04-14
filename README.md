@@ -6,11 +6,10 @@ WARN: Do not use with real networks. Test/Private only.
 
 ## build
 
-```
-$ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-$ rustup update
-$ cargo build [--release]
-$ ./test
+```sh
+curl https://sh.rustup.rs -sSf | sh
+cargo build [--release]
+./test
 ```
 
 ## downloads
@@ -50,9 +49,9 @@ limitations:
 - single cli for all blockchains
 - native cli = rust
 
-There are differecnt options to implement client which writes data
-One way is to use API calls which is relies on thrid paty providers
-Other way is to use node. It can be ran as full or lightweight but in either
+There are different options to implement client which writes data.
+One way is to use API calls which is relies on thrid-paty providers.
+Other way is to use node. It can be run as full or lightweight but in either
 case user should setup. Local node could allow RPC which is full protocol for cli.
 To make client without dependeny to local node we can connect to real nodes.
 But as security measure RPC is closed on real nodes. That's why we pretend to be another

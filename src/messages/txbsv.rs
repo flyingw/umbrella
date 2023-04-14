@@ -7,13 +7,14 @@ use crate::result::{Error, Result};
 use crate::serdes::Serializable;
 use crate::ctx::Ctx;
 use crate::address_to_public_key_hash;
+use crate::Output;
 
 // #[derive(Debug, Default, PartialEq, Eq, Hash, Clone)]
 pub struct UnspentBsv {
-    pub txid: Vec<u8>,
+    pub txid: String,
     pub txindex: u32,
-    // pub amount: Int
-    pub address: String
+    pub amount: u64
+    // pub address: String
 }
 
 pub const OP_DUP: u8 = 118;
@@ -29,9 +30,9 @@ impl Serializable<UnspentBsv> for UnspentBsv {
 
     fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
         // txid
-        let mut txid = self.txid.clone();
-        txid.reverse();
-        writer.write(&txid)?;
+        // let mut txid = self.txid.clone();
+        // txid.reverse();
+        // writer.write(&txid)?;
         // txindex
         writer.write_u32::<LittleEndian>(self.txindex)?;
         //todo: amount

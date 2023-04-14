@@ -60,6 +60,7 @@ use crate::messages::commands;
 use ctx::{Ctx,EncCtx};
 use tiny_keccak::Keccak;
 use crate::keys::{slice_to_public, Address};
+use crate::messages::UnspentBsv;
 
 const NULL_IV: [u8; 16] = [0;16];
 
@@ -462,7 +463,7 @@ fn estimate_tx_fee(n_in: u64, compressed: bool, op_return_size: u64) -> u64 {
     f64::ceil((estimated_size as f64) * satoshis) as u64
 }
 
-fn sanitize_tx_data(unspents: Vec<Unspent>, leftover: Vec<u8>, message: &Vec<u8>, compressed: bool) -> Vec<Output> {
+fn sanitize_tx_data(unspents: &Vec<UnspentBsv>, leftover: Vec<u8>, message: &Vec<u8>, compressed: bool) -> Vec<Output> {
     let mut res = Vec::new();
     res.push(Output{
         dest: message.clone(),
@@ -604,7 +605,7 @@ mod tests {
     fn test_write() {
         // input data
         let private_key = "cRVFvtZENLvnV4VAspNkZxjpKvt65KC5pKnKtK7Riaqv5p1ppbnh".to_string();
-        let unspents = vec![Unspent{
+        let unspents = vec![UnspentBsv{
             amount: 5000000000,
             txid: "cec6ac057861ee3ad37fa39503b39057ada889578a2117bd775264d1a5289cfd".to_string(),
             txindex: 0
@@ -619,7 +620,7 @@ mod tests {
         let address = public_key_to_address(public_key, &network);
 
         // test sanitize_tx_data
-        let outputs = sanitize_tx_data(unspents, address, &msg, pk_compressed);
+        let outputs = sanitize_tx_data(&unspents, address, &msg, pk_compressed);
         assert_eq!(outputs, vec![Output{
             dest: "hi".as_bytes().to_vec(),
             amount: 0,
@@ -631,7 +632,7 @@ mod tests {
         let mut is = Cursor::new(Vec::new());
         messages::TxBsv {
             // key: "",
-            unspents: vec![], //todo
+            unspents: unspents,
             outputs
         }.write(&mut is, &mut ()).unwrap();
         let res = hex::encode(&is.get_ref());
