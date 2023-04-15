@@ -685,7 +685,7 @@ mod tests {
         let private_key = "cRVFvtZENLvnV4VAspNkZxjpKvt65KC5pKnKtK7Riaqv5p1ppbnh".to_string();
         let unspents = vec![UnspentBsv{
             amount: 5000000000,
-            txid: "cec6ac057861ee3ad37fa39503b39057ada889578a2117bd775264d1a5289cfd".to_string(),
+            txid: "cec6ac057861ee3ad37fa39503b39057ada889578a2117bd775264d1a5289cfd".as_bytes().to_vec(),
             txindex: 0
         }];
         let msg = "hi".as_bytes().to_vec();

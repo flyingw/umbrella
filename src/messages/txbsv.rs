@@ -12,7 +12,7 @@ use std::io::Cursor;
 
 // #[derive(Debug, Default, PartialEq, Eq, Hash, Clone)]
 pub struct UnspentBsv {
-    pub txid: String,
+    pub txid: Vec<u8>,
     pub txindex: u32,
     pub amount: u64
     // pub address: String
@@ -57,7 +57,6 @@ impl Serializable<TxBsv> for TxBsv {
         writer.write_u32::<LittleEndian>(1)?;
         var_int::write(self.unspents.len() as u64, writer)?;
         
-        // test output encoding separately
         let mut is = Cursor::new(Vec::new());
         for tx_out in self.outputs.iter() {
             tx_out.write(&mut is, &mut ()).unwrap();
@@ -65,6 +64,10 @@ impl Serializable<TxBsv> for TxBsv {
         
         for tx_in in self.unspents.iter() {
             // tx_in.write(writer, ctx)?;
+            let mut txid = hex::decode(&tx_in.txid).unwrap();
+            txid.reverse();
+            writer.write(&txid);
+            //todo
         }
 
         // address
