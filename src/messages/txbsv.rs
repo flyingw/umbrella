@@ -8,6 +8,7 @@ use crate::serdes::Serializable;
 use crate::ctx::Ctx;
 use crate::address_to_public_key_hash;
 use crate::Output;
+use std::io::Cursor;
 
 // #[derive(Debug, Default, PartialEq, Eq, Hash, Clone)]
 pub struct UnspentBsv {
@@ -22,25 +23,6 @@ pub const OP_HASH160: u8 = 169;
 pub const OP_PUSH_20: u8 = 0x14;
 pub const OP_EQUALVERIFY: u8 = 136;
 pub const OP_CHECKSIG: u8 = 172;
-
-impl Serializable<UnspentBsv> for UnspentBsv {
-    fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<UnspentBsv> {
-        Err(Error::NotImplemented)
-    }
-
-    fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
-        // txid
-        // let mut txid = self.txid.clone();
-        // txid.reverse();
-        // writer.write(&txid)?;
-        // txindex
-        writer.write_u32::<LittleEndian>(self.txindex)?;
-        //todo: amount
-        // sequence
-        // writer.write(&[0xff, 0xff, 0xff, 0xff])?;
-        Ok(())
-    }
-}
 
 // #[derive(Default, PartialEq, Eq, Hash, Clone)]
 pub struct TxBsv {
@@ -74,9 +56,16 @@ impl Serializable<TxBsv> for TxBsv {
     fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
         writer.write_u32::<LittleEndian>(1)?;
         var_int::write(self.unspents.len() as u64, writer)?;
-        // for tx_in in self.unspents.iter() {
-        //     tx_in.write(writer, ctx)?;
-        // }
+        
+        // test output encoding separately
+        let mut is = Cursor::new(Vec::new());
+        for tx_out in self.outputs.iter() {
+            tx_out.write(&mut is, &mut ()).unwrap();
+        }
+        
+        for tx_in in self.unspents.iter() {
+            // tx_in.write(writer, ctx)?;
+        }
 
         // address
         

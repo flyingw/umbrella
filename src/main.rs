@@ -61,6 +61,8 @@ use ctx::{Ctx,EncCtx};
 use tiny_keccak::Keccak;
 use crate::keys::{slice_to_public, Address};
 use crate::messages::UnspentBsv;
+use std::io;
+use std::io::{Read, Write};
 
 const NULL_IV: [u8; 16] = [0;16];
 
@@ -400,6 +402,58 @@ pub struct Output {
     amount: u64,
 }
 
+impl Serializable<Output> for Output {
+    fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<Output> {
+        Err(Error::NotImplemented)
+    }
+
+    fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
+        if self.amount > 0 {
+            // writer.write_u8(0x00);
+            use op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_PUSH_20};
+            // writer.write_u8(OP_DUP);
+            writer.write_u64::<LittleEndian>(self.amount)?;
+
+            let mut xs = Vec::new();
+            xs.write_u8(OP_DUP).unwrap();
+            xs.write_u8(OP_HASH160).unwrap();
+            xs.write_u8(OP_PUSH_20).unwrap();
+            xs.write(&address_to_public_key_hash(&self.dest)).unwrap();
+            xs.write_u8(OP_EQUALVERIFY).unwrap();
+            xs.write_u8(OP_CHECKSIG).unwrap();
+
+            var_int::write(xs.len() as u64, writer)?;
+            writer.write(&xs)?;
+        } else {
+            const OP_FALSE: u8 = 0x00;
+            const OP_RETURN: u8 = 0x6a;
+            
+            // const script = 
+            // writer.write_u32::<LittleEndian>(1)?;
+            // var_int::write(self.unspents.len() as u64, writer)?;
+
+            let mut xs = Vec::new();
+            xs.write_u8(OP_FALSE).unwrap();
+            xs.write_u8(OP_RETURN).unwrap();
+            xs.write(&get_op_pushdata_code(&self.dest)).unwrap();
+            xs.write(&self.dest).unwrap();
+
+            writer.write_u8(0x00);
+            writer.write_u8(0x00);
+            writer.write_u8(0x00);
+            writer.write_u8(0x00);
+            writer.write_u8(0x00);
+            writer.write_u8(0x00);
+            writer.write_u8(0x00);
+            writer.write_u8(0x00);
+            var_int::write(xs.len() as u64, writer)?;
+            writer.write(&xs)?;
+        }
+
+        Ok(())
+    }
+}
+
 fn get_op_pushdata_code(dest: &Vec<u8>) -> Vec<u8> {
     let mut xs = Vec::new();
     const OP_PUSHDATA1: u8 = 0x4c;
@@ -493,11 +547,11 @@ fn sanitize_tx_data(unspents: &Vec<UnspentBsv>, leftover: Vec<u8>, message: &Vec
     res
 }
 
-fn b58decode(string: &String) -> Vec<u8> {
+fn b58decode(string: &Vec<u8>) -> Vec<u8> {
     string.from_base58().unwrap()
 }
 
-fn b58decode_check(string: &String) -> Vec<u8> {
+fn b58decode_check(string: &Vec<u8>) -> Vec<u8> {
     let decoded = &b58decode(string)[..];
     let mut shortened = vec![0; decoded.len()-4];
     shortened.copy_from_slice(&decoded[ .. decoded.len()-4]);
@@ -522,7 +576,7 @@ fn double_sha256_checksum(bytestr: &Vec<u8>) -> [u8;4] {
     double_sha256(bytestr)[..4].try_into().unwrap()
 }
 
-fn wif_to_bytes(wif: &String) -> String {
+fn wif_to_bytes(wif: &Vec<u8>) -> String {
     let private_key = b58decode_check(wif);
     panic!("ni")
 }
@@ -549,7 +603,7 @@ fn public_key_to_address(_public_key: Vec<u8>, _network: &Network) -> Vec<u8> {
     b58encode_check(xs)
 }
 
-fn address_to_public_key_hash(address: &String) -> Vec<u8> {
+fn address_to_public_key_hash(address: &Vec<u8>) -> Vec<u8> {
     b58decode_check(address)[1..].to_vec()
 }
 
@@ -589,7 +643,7 @@ mod tests {
 
     #[test]
     fn test_utils() {
-        let decoded = b58decode(&"2yGEbwRFyft7uRe2t".to_string());
+        let decoded = b58decode(&"2yGEbwRFyft7uRe2t".as_bytes().to_vec());
         assert_eq!(decoded, "hello there!".to_string().as_bytes());
         assert_eq!(&decoded[ .. decoded.len() - 4], "hello th".to_string().as_bytes());
         assert_eq!(&decoded[decoded.len() - 4 .. ], "ere!".to_string().as_bytes());
@@ -599,6 +653,30 @@ mod tests {
         let public_key = private_key_to_public_key(&private_key);
         let address = public_key_to_address(public_key, &network);
         assert_eq!(address, "mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".to_string().as_bytes());
+    }
+
+    #[test]
+    fn test_output_write1() {
+        let mut is2 = Cursor::new(Vec::new());
+        Output{
+            dest: "hi".as_bytes().to_vec(),
+            amount: 0,
+        }.write(&mut is2, &mut ()).unwrap();
+        let res2 = hex::encode(&is2.get_ref());
+        let exp2 = "000000000000000005006a026869";
+        assert_eq!(res2, exp2);
+    }
+
+    #[test]
+    fn test_output_write2() {
+        let mut is2 = Cursor::new(Vec::new());
+        Output{
+            dest: "mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".as_bytes().to_vec(),
+            amount: 4999999897,
+        }.write(&mut is2, &mut ()).unwrap();
+        let res2 = hex::encode(&is2.get_ref());
+        let exp2 = "99f1052a010000001976a9146acc9139e75729d2dea892695e54b66ff105ac2888ac";
+        assert_eq!(res2, exp2);
     }
 
     #[test]
@@ -628,6 +706,7 @@ mod tests {
             dest: "mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".as_bytes().to_vec(),
             amount: 4999999897,
         }]);
+
 
         let mut is = Cursor::new(Vec::new());
         messages::TxBsv {
