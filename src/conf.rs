@@ -1,7 +1,7 @@
 use structopt::StructOpt;
 use std::str::FromStr;
 use crate::hash256::Hash256;
-use secp256k1::{ecdh, Secp256k1, key::{PublicKey, SecretKey}};
+use secp256k1::{ecdh, Secp256k1, PublicKey, SecretKey};
 
 #[derive(StructOpt,Debug)]
 /// Sender information.
@@ -212,8 +212,8 @@ fn encrypt_node_version(pub_key:PublicKey
     let pub1 = public_to_slice(&pub1);
     let sec1 =  SecretKey::from_slice(&sec1[..32]).unwrap();
 
-    let shr = ecdh::SharedSecret::new_with_hash(&pub_key, &node_secret, &mut hash);
-    let xor = Hash256::from_slice(&shr[..]) ^ nonce;
+    let shr = &ecdh::shared_secret_point(&pub_key, &node_secret)[..32];
+    let xor = Hash256::from_slice(&shr) ^ nonce;
 
     //signature
     sig.copy_from_slice(&sign(&sec1, &xor));
@@ -222,11 +222,6 @@ fn encrypt_node_version(pub_key:PublicKey
     data_nonce.copy_from_slice(nonce.as_bytes());
 
     (ecies::encrypt(&pub_key, &[], &version).unwrap(), sec1)
-}
-
-fn hash(output: &mut [u8], x: &[u8], _y: &[u8]) -> i32 {
-    output.copy_from_slice(x);
-    1
 }
 
 #[derive(Debug, Clone)]

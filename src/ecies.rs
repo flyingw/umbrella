@@ -10,11 +10,6 @@ use aes::block_cipher_trait::generic_array::GenericArray;
 use ring::digest::{digest, SHA256};
 use ring::{hmac};
 
-fn hash(output: &mut [u8], x: &[u8], _y: &[u8]) -> i32 {
-  kdf(&x, &[0u8; 0], output);
-  1
-}
-
 /// Encrypt a message with a public key, writing an HMAC covering both
 /// the plaintext and authenticated data.
 ///
@@ -24,9 +19,10 @@ pub fn encrypt(public_key: &PublicKey, auth_data: &[u8], plain: &[u8]) -> Result
   let secp = Secp256k1::new();
   let (secret_key_rand, public_key_rand) = secp.generate_keypair(&mut rng);
 
-  let key = ecdh::SharedSecret::new_with_hash(&public_key, &secret_key_rand, &mut hash);
+  let mut key = [0u8; 32];
+  kdf(&ecdh::shared_secret_point(&public_key, &secret_key_rand)[..32], &[0u8; 0], &mut key);
 
-  let ekey = &key[0..16];;
+  let ekey = &key[0..16];
   let mkey = hmac::Key::new(hmac::HMAC_SHA256, digest(&SHA256, &key[16..32]).as_ref());
 
   let mut msg = vec![0u8; 1 + 64 + 16 + plain.len() + 32];
@@ -65,7 +61,8 @@ pub fn decrypt(secret_key: &SecretKey, auth_data: &[u8], encrypted: &[u8]) -> Re
 
   let e = &encrypted[1..];
   let public_key = slice_to_public(&e[0..64]).unwrap();
-  let key = ecdh::SharedSecret::new_with_hash(&public_key, &secret_key, &mut hash);
+  let mut key = [0u8; 32];
+  kdf(&ecdh::shared_secret_point(&public_key, &secret_key)[..32], &[0u8; 0], &mut key);
   
   let ekey = &key[0..16];
   let mkey = hmac::Key::new(hmac::HMAC_SHA256, digest(&SHA256, &key[16..32]).as_ref());
@@ -106,7 +103,7 @@ fn kdf(shared: &[u8], s1: &[u8], dest: &mut [u8]) {
     buf.extend(&shared[..]);
     buf.extend(s1);
     let d = digest(&SHA256, &buf);
-    &mut dest[written..(written + 32)].copy_from_slice(d.as_ref());
+    let _ = &mut dest[written..(written + 32)].copy_from_slice(d.as_ref());
     written += 32;
     ctr += 1;
   }

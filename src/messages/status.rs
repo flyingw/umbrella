@@ -88,7 +88,7 @@ impl Serializable<Status> for Status{
         Ctx::get_remote_mac(ctx, prev.as_bytes_mut());
 
 		let mut enc = Hash128::default();
-		&mut enc[..].copy_from_slice(prev.as_bytes());
+		let _ = &mut enc[..].copy_from_slice(prev.as_bytes());
 
         let mac_encoder: Ecb<Aes256, ZeroPadding> = Ecb::new_var(&ctx.secret_key()[..], &[]).expect("failed to aes ecb 1");
 	    let enc_mut = enc.as_bytes_mut();

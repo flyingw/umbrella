@@ -8,7 +8,7 @@ use super::message::Payload;
 use crate::ctx::Ctx;
 use crate::hash128::Hash128;
 use super::message::ETH_63_CAPABILITY;
-use secp256k1::key::{PublicKey};
+use secp256k1::PublicKey;
 use aes::Aes256;
 use block_modes::{BlockMode, Ecb, block_padding::{ZeroPadding}};
 use aes_ctr::stream_cipher::SyncStreamCipher;
@@ -73,7 +73,7 @@ impl Serializable<Hello> for Hello{
         let padding = (16 - (len % 16)) % 16;
         let mut packet: Vec<u8> = vec![0u8; len + padding + 16];
         
-		&mut packet[..len].copy_from_slice(&payload);
+		let _ = &mut packet[..len].copy_from_slice(&payload);
         Ctx::encoder(ctx).try_apply_keystream(&mut packet[..len]).unwrap();
 
 		if padding != 0 {
@@ -88,7 +88,7 @@ impl Serializable<Hello> for Hello{
         Ctx::get_remote_mac(ctx, prev.as_bytes_mut());
 
 		let mut enc = Hash128::default();
-		&mut enc[..].copy_from_slice(prev.as_bytes());
+		let _ = &mut enc[..].copy_from_slice(prev.as_bytes());
 
         let mac_encoder: Ecb<Aes256, ZeroPadding> = Ecb::new_var(&ctx.secret_key()[..], &[]).expect("failed to aes ecb 1");
 	    let enc_mut = enc.as_bytes_mut();

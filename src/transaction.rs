@@ -11,7 +11,7 @@ pub fn generate_signature(
     let secp = Secp256k1::signing_only();
     let message = Message::from_slice(&sighash.0)?;
     let secret_key = SecretKey::from_slice(private_key)?;
-    let mut signature = secp.sign(&message, &secret_key);
+    let mut signature = secp.sign_ecdsa(&message, &secret_key);
     signature.normalize_s();
     let mut sig = signature.serialize_der().to_vec();
     sig.push(sighash_type);
