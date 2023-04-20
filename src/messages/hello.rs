@@ -8,7 +8,7 @@ use super::message::Payload;
 use crate::ctx::Ctx;
 use crate::hash128::Hash128;
 use super::message::ETH_63_CAPABILITY;
-use secp256k1::key::{PublicKey};
+use secp256k1::PublicKey;
 use aes::Aes256;
 use block_modes::{BlockMode, Ecb, block_padding::{ZeroPadding}};
 use aes_ctr::stream_cipher::SyncStreamCipher;

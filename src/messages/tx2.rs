@@ -10,7 +10,7 @@ use aes_ctr::stream_cipher::SyncStreamCipher;
 use crate::hash128::Hash128;
 use crate::hash256::Hash256;
 use crate::keys::{Address, Signature, sign};
-use secp256k1::key::{SecretKey};
+use secp256k1::SecretKey;
 use aes::Aes256;
 use crate::lil_rlp;
 use tiny_keccak::Keccak;

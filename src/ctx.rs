@@ -1,5 +1,5 @@
 use aes_ctr::Aes256Ctr;
-use secp256k1::key::{PublicKey, SecretKey};
+use secp256k1::{PublicKey, SecretKey};
 use tiny_keccak::Keccak;
 use crate::messages::commands;
 
