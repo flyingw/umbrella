@@ -170,13 +170,13 @@ pub fn ctx(secret: &SecretKey
         let remote_ephemeral = slice_to_public(&ack[0..64]).unwrap();
         remote_nonce.copy_from_slice(&ack[64..(64+32)]);		
 
-        let shared = ecdh::SharedSecret::new_with_hash(&remote_ephemeral, &ecdhe_secret_key, &mut hash);
+        let shared = &ecdh::shared_secret_point(&remote_ephemeral, &ecdhe_secret_key)[..32];
         
 		let mut nonce_material = Hash512::default();
 		(&mut nonce_material[0..32]).copy_from_slice(remote_nonce.as_bytes());
 		(&mut nonce_material[32..64]).copy_from_slice(nonce.as_bytes());
 		let mut key_material = Hash512::default();
-        (&mut key_material[0..32]).copy_from_slice(&shared[..]);
+        (&mut key_material[0..32]).copy_from_slice(&shared);
 		Keccak::keccak256(nonce_material.as_bytes_mut(), &mut key_material[32..64]);
 		
         let mut key_material_keccak = Hash256::default();
@@ -380,11 +380,6 @@ pub fn main() {
 
     use std::net::Shutdown;
     stream.shutdown(Shutdown::Both).unwrap();
-}
-
-fn hash(output: &mut [u8], x: &[u8], _y: &[u8]) -> i32 {
-    output.copy_from_slice(x);
-    1
 }
 
 #[derive(Default, PartialEq, Eq, Hash, Clone, Debug)]
@@ -699,7 +694,7 @@ mod tests {
         let message = Message::from_slice(&hex::decode(hashed).unwrap()).unwrap();
         let secret_key = private_key_to_secret_key(&private_key);
         assert_eq!(secret_key, SecretKey::from_slice(&hex::decode("748c9dc4643c0ee4d0dd047277af81bf8cee1b4947ed6fd84cb7b660a5e1f613").unwrap()).unwrap());
-        let mut signature = secp.sign(&message, &secret_key);
+        let mut signature = secp.sign_ecdsa(&message, &secret_key);
         signature.normalize_s();
         let mut sig = signature.serialize_der().to_vec();
         sig.push(sighash_type);

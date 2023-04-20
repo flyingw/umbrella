@@ -1,6 +1,5 @@
-use secp256k1::recovery::{RecoverableSignature, RecoveryId};
-use secp256k1::{Message, Secp256k1, Error};
-use secp256k1::key::{SecretKey, PublicKey};
+use secp256k1::ecdsa::{RecoverableSignature, RecoveryId};
+use secp256k1::{Message, Secp256k1, Error, SecretKey, PublicKey};
 use tiny_keccak::Keccak;
 use crate::hash256::Hash256;
 
@@ -24,7 +23,7 @@ pub fn public_to_slice(public_key: &PublicKey) -> [u8;64] {
 pub fn sign(secret_key: &SecretKey, message: &Hash256) -> Signature {
 	let secp = Secp256k1::new();
 	let message: &Message = &Message::from_slice(&message[..]).unwrap();
-	let signature: RecoverableSignature = secp.sign_recoverable(message, &secret_key);
+	let signature: RecoverableSignature = secp.sign_ecdsa_recoverable(message, &secret_key);
 	let (rec_id, data) = signature.serialize_compact();
 	let mut data_arr: Signature = [0; 65];
 
@@ -39,7 +38,7 @@ pub fn recover(signature: &Signature, message: &Hash256) -> PublicKey {
 	let recover_id = RecoveryId::from_i32(signature[64] as i32).unwrap();
 	let message = Message::from_slice(&message[..]).unwrap();
 	let rsig: RecoverableSignature = RecoverableSignature::from_compact(&signature[0..64], recover_id).unwrap();
-	secp.recover(&message, &rsig).unwrap()
+	secp.recover_ecdsa(&message, &rsig).unwrap()
 }
 
 pub fn public_to_address(public: &PublicKey) -> Address {

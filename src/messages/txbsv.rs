@@ -123,7 +123,7 @@ impl Serializable<TxBsv> for TxBsv {
             let mut privk = [0;32];
             privk.copy_from_slice(&self.private_key.from_base58().unwrap()[1..33]);
             let secret_key = SecretKey::from_slice(&privk).expect("32 bytes, within curve order");
-            let mut signature = secp.sign(&message, &secret_key);
+            let mut signature = secp.sign_ecdsa(&message, &secret_key);
             signature.normalize_s();
             let mut sig = signature.serialize_der().to_vec();
             sig.push(sighash_type);
