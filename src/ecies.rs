@@ -22,7 +22,7 @@ pub fn encrypt(public_key: &PublicKey, auth_data: &[u8], plain: &[u8]) -> Result
   let mut key = [0u8; 32];
   kdf(&ecdh::shared_secret_point(&public_key, &secret_key_rand)[..32], &[0u8; 0], &mut key);
 
-  let ekey = &key[0..16];;
+  let ekey = &key[0..16];
   let mkey = hmac::Key::new(hmac::HMAC_SHA256, digest(&SHA256, &key[16..32]).as_ref());
 
   let mut msg = vec![0u8; 1 + 64 + 16 + plain.len() + 32];
@@ -103,7 +103,7 @@ fn kdf(shared: &[u8], s1: &[u8], dest: &mut [u8]) {
     buf.extend(&shared[..]);
     buf.extend(s1);
     let d = digest(&SHA256, &buf);
-    &mut dest[written..(written + 32)].copy_from_slice(d.as_ref());
+    let _ = &mut dest[written..(written + 32)].copy_from_slice(d.as_ref());
     written += 32;
     ctr += 1;
   }
