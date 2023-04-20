@@ -1,35 +1,39 @@
 use byteorder::{LittleEndian, WriteBytesExt};
-// use std::fmt;
-use std::io;
-use std::io::{Read, Write};
-use crate::var_int;
+use crate::ctx::Ctx;
+use crate::double_sha256;
+use crate::key_scriptcode;
+use crate::Output;
 use crate::result::{Error, Result};
 use crate::serdes::Serializable;
-use crate::ctx::Ctx;
-use crate::address_to_public_key_hash;
-use crate::Output;
+use crate::var_int;
+use crate::{SIGHASH_ALL, SIGHASH_FORKID};
+use rust_base58::FromBase58;
+use secp256k1::SecretKey;
+use secp256k1::{Message, Secp256k1};
 use std::io::Cursor;
+use std::io::{Read, Write};
+use std::io;
 
 // #[derive(Debug, Default, PartialEq, Eq, Hash, Clone)]
 pub struct UnspentBsv {
     pub txid: Vec<u8>,
     pub txindex: u32,
-    pub amount: u64
-    // pub address: String
+    pub amount: u64,
 }
 
-pub const OP_DUP: u8 = 118;
-pub const OP_HASH160: u8 = 169;
-pub const OP_PUSH_20: u8 = 0x14;
-pub const OP_EQUALVERIFY: u8 = 136;
-pub const OP_CHECKSIG: u8 = 172;
+// pub const OP_DUP: u8 = 118;
+// pub const OP_HASH160: u8 = 169;
+// pub const OP_PUSH_20: u8 = 0x14;
+// pub const OP_EQUALVERIFY: u8 = 136;
+// pub const OP_CHECKSIG: u8 = 172;
 
 // #[derive(Default, PartialEq, Eq, Hash, Clone)]
 pub struct TxBsv {
     // pub key: String,
     pub unspents: Vec<UnspentBsv>,
     // pub msg: String
-    pub outputs: Vec<Output>
+    pub outputs: Vec<Output>,
+    pub private_key: Vec<u8>,
 }
 
 // impl TxBsv {
@@ -48,12 +52,20 @@ pub struct TxBsv {
 //     }
 // }
 
+pub struct TxInBsv {
+    pub txid: Vec<u8>,
+    pub txindex: u32,
+    pub amount: u64,
+    //script
+    //script_len
+}
+
 impl Serializable<TxBsv> for TxBsv {
     fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<TxBsv> {
         Err(Error::NotImplemented)
     }
 
-    fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
+    fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
         writer.write_u32::<LittleEndian>(1)?;
         var_int::write(self.unspents.len() as u64, writer)?;
         
@@ -61,14 +73,71 @@ impl Serializable<TxBsv> for TxBsv {
         for tx_out in self.outputs.iter() {
             tx_out.write(&mut is, &mut ()).unwrap();
         }
-        
-        for tx_in in self.unspents.iter() {
-            // tx_in.write(writer, ctx)?;
-            let mut txid = hex::decode(&tx_in.txid).unwrap();
+        let hash_outputs = double_sha256(is.get_ref());
+
+        let mut inputs = Vec::new();
+        for unspent in self.unspents.iter() {
+            let mut txid = hex::decode(&unspent.txid).unwrap();
             txid.reverse();
-            writer.write(&txid);
-            //todo
+            inputs.push(TxInBsv{
+                txid: txid,
+                txindex: unspent.txindex,
+                amount: unspent.amount,
+            });
         }
+
+        let mut hash_prevouts1 = Cursor::new(Vec::new());
+        for tx_in in inputs.iter() {
+            hash_prevouts1.write(&tx_in.txid)?;
+            hash_prevouts1.write_u32::<LittleEndian>(tx_in.txindex)?;
+        }
+        let hash_prevouts = double_sha256(&hash_prevouts1.get_ref());
+
+        let mut hash_sequence1 = Cursor::new(Vec::new());
+        for _ in inputs.iter() {
+            hash_sequence1.write_u32::<LittleEndian>(0xffffffff)?;
+        }
+        let hash_sequence = double_sha256(&hash_sequence1.get_ref());
+
+        // let mut inputScripts = Vec::new();
+        for tx_in in inputs.iter() {
+            let mut to_be_hashed = Cursor::new(Vec::new());
+            to_be_hashed.write_u32::<LittleEndian>(1)?;
+            to_be_hashed.write(&hash_prevouts)?;
+            to_be_hashed.write(&hash_sequence)?;
+            to_be_hashed.write(&tx_in.txid)?;
+            to_be_hashed.write_u32::<LittleEndian>(tx_in.txindex)?;
+            let scriptcode = key_scriptcode(&self.private_key);
+            var_int::write(scriptcode.len() as u64, &mut to_be_hashed)?;
+            to_be_hashed.write(&scriptcode)?;
+            to_be_hashed.write_u64::<LittleEndian>(tx_in.amount)?;
+            to_be_hashed.write_u32::<LittleEndian>(0xffffffff)?;
+            to_be_hashed.write(&hash_outputs)?;
+            to_be_hashed.write_u32::<LittleEndian>(0)?;
+            to_be_hashed.write_u32::<LittleEndian>(0x41)?;
+            let hashed = double_sha256(to_be_hashed.get_ref()); // sign will not do sha256
+
+            let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
+            let secp = Secp256k1::signing_only();
+            let message = Message::from_slice(&hashed).unwrap();
+            let mut privk = [0;32];
+            privk.copy_from_slice(&self.private_key.from_base58().unwrap()[1..33]);
+            let secret_key = SecretKey::from_slice(&privk).expect("32 bytes, within curve order");
+            let mut signature = secp.sign(&message, &secret_key);
+            signature.normalize_s();
+            let mut sig = signature.serialize_der().to_vec();
+            sig.push(sighash_type);
+
+            //todo make script_sig with sig
+        }
+
+        //construct_input_block
+        // for tx_in in inputs.iter() {
+        //     writer.write(&tx_in.txid);
+        //     writer.write_u32::<LittleEndian>(tx_in.txindex);
+
+        //     // writer.write(script_len);
+        // }
 
         // address
         

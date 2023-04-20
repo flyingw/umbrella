@@ -106,7 +106,7 @@ fn kdf(shared: &[u8], s1: &[u8], dest: &mut [u8]) {
     buf.extend(&shared[..]);
     buf.extend(s1);
     let d = digest(&SHA256, &buf);
-    &mut dest[written..(written + 32)].copy_from_slice(d.as_ref());
+    let _ = &mut dest[written..(written + 32)].copy_from_slice(d.as_ref());
     written += 32;
     ctr += 1;
   }

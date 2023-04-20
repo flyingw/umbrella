@@ -271,8 +271,6 @@ pub fn main() {
     
     our_version.write(&mut stream, magic, &mut ()).unwrap();
 
-    use std::io;
-
     let lis = thread::spawn(move || {
         let mut ct: Box<dyn Ctx> = Box::new(());
         debug!("Connected {:?}", &seed);
@@ -407,23 +405,13 @@ impl Serializable<Output> for Output {
         Err(Error::NotImplemented)
     }
 
-    fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
+    fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
         if self.amount > 0 {
-            // writer.write_u8(0x00);
-            use op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_PUSH_20};
-            // writer.write_u8(OP_DUP);
             writer.write_u64::<LittleEndian>(self.amount)?;
 
-            let mut xs = Vec::new();
-            xs.write_u8(OP_DUP).unwrap();
-            xs.write_u8(OP_HASH160).unwrap();
-            xs.write_u8(OP_PUSH_20).unwrap();
-            xs.write(&address_to_public_key_hash(&self.dest)).unwrap();
-            xs.write_u8(OP_EQUALVERIFY).unwrap();
-            xs.write_u8(OP_CHECKSIG).unwrap();
-
-            var_int::write(xs.len() as u64, writer)?;
-            writer.write(&xs)?;
+            let scriptcode = key_scriptcode(&self.dest);
+            var_int::write(scriptcode.len() as u64, writer)?;
+            writer.write(&scriptcode)?;
         } else {
             const OP_FALSE: u8 = 0x00;
             const OP_RETURN: u8 = 0x6a;
@@ -438,20 +426,32 @@ impl Serializable<Output> for Output {
             xs.write(&get_op_pushdata_code(&self.dest)).unwrap();
             xs.write(&self.dest).unwrap();
 
-            writer.write_u8(0x00);
-            writer.write_u8(0x00);
-            writer.write_u8(0x00);
-            writer.write_u8(0x00);
-            writer.write_u8(0x00);
-            writer.write_u8(0x00);
-            writer.write_u8(0x00);
-            writer.write_u8(0x00);
+            writer.write_u8(0x00)?;
+            writer.write_u8(0x00)?;
+            writer.write_u8(0x00)?;
+            writer.write_u8(0x00)?;
+            writer.write_u8(0x00)?;
+            writer.write_u8(0x00)?;
+            writer.write_u8(0x00)?;
+            writer.write_u8(0x00)?;
             var_int::write(xs.len() as u64, writer)?;
             writer.write(&xs)?;
         }
 
         Ok(())
     }
+}
+
+fn key_scriptcode(dest: &Vec<u8>) -> Vec<u8> {
+    use op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_PUSH_20};
+    let mut xs = Vec::new();
+    xs.write_u8(OP_DUP).unwrap();
+    xs.write_u8(OP_HASH160).unwrap();
+    xs.write_u8(OP_PUSH_20).unwrap();
+    xs.write(&address_to_public_key_hash(&dest)).unwrap();
+    xs.write_u8(OP_EQUALVERIFY).unwrap();
+    xs.write_u8(OP_CHECKSIG).unwrap();
+    xs
 }
 
 fn get_op_pushdata_code(dest: &Vec<u8>) -> Vec<u8> {
@@ -576,16 +576,20 @@ fn double_sha256_checksum(bytestr: &Vec<u8>) -> [u8;4] {
     double_sha256(bytestr)[..4].try_into().unwrap()
 }
 
-fn wif_to_bytes(wif: &Vec<u8>) -> String {
-    let private_key = b58decode_check(wif);
-    panic!("ni")
+// fn wif_to_bytes(wif: &Vec<u8>) -> String {
+//     let private_key = b58decode_check(wif);
+//     panic!("ni")
+// }
+
+fn private_key_to_secret_key(wif: &String) -> SecretKey {
+    let mut privk = [0;32];
+    privk.copy_from_slice(&wif.from_base58().unwrap()[1..33]); 
+    SecretKey::from_slice(&privk).expect("32 bytes, within curve order")
 }
 
-fn private_key_to_public_key(_wif: &String) -> Vec<u8> {
+fn private_key_to_public_key(wif: &String) -> Vec<u8> {
+    let secret_key = private_key_to_secret_key(wif);
     let secp = Secp256k1::new();
-    let mut privk = [0;32];
-    privk.copy_from_slice(&_wif.from_base58().unwrap()[1..33]); 
-    let secret_key = SecretKey::from_slice(&privk).expect("32 bytes, within curve order");
     let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
     pub_key.serialize().to_vec()
 }
@@ -680,6 +684,30 @@ mod tests {
     }
 
     #[test]
+    fn test_signature_bsv() {
+        use secp256k1::{Message, Secp256k1};
+        let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
+        assert_eq!(sighash_type, 0x41);
+
+        let private_key = "cRVFvtZENLvnV4VAspNkZxjpKvt65KC5pKnKtK7Riaqv5p1ppbnh".to_string();
+
+        // let hashed = "1de06a2fabae2b020ea38298111cd22b84c7dd7fc7473eb07da6a51df8ee85a6";
+        let hashed = "0ee40f326fb83415461348dd0a6ebe5081314dfa30845e6948dc9d043fcb8c7a"; // double sha256
+        let signature_expected = "304502210090298a2bf23e5640396400e4afea95c872b7da1a90abba35da7aab3d1299627702206196a592a5a2d99f5dfba4830965e97ca5ae7359a1e72ae2f712dde60a80db9b41";
+
+        let secp = Secp256k1::signing_only();
+        let message = Message::from_slice(&hex::decode(hashed).unwrap()).unwrap();
+        let secret_key = private_key_to_secret_key(&private_key);
+        assert_eq!(secret_key, SecretKey::from_slice(&hex::decode("748c9dc4643c0ee4d0dd047277af81bf8cee1b4947ed6fd84cb7b660a5e1f613").unwrap()).unwrap());
+        let mut signature = secp.sign(&message, &secret_key);
+        signature.normalize_s();
+        let mut sig = signature.serialize_der().to_vec();
+        sig.push(sighash_type);
+        
+        assert_eq!(hex::encode(sig), signature_expected)
+    }
+
+    #[test]
     fn test_write() {
         // input data
         let private_key = "cRVFvtZENLvnV4VAspNkZxjpKvt65KC5pKnKtK7Riaqv5p1ppbnh".to_string();
@@ -711,8 +739,9 @@ mod tests {
         let mut is = Cursor::new(Vec::new());
         messages::TxBsv {
             // key: "",
-            unspents: unspents,
-            outputs
+            unspents,
+            outputs,
+            private_key: private_key.as_bytes().to_vec(),
         }.write(&mut is, &mut ()).unwrap();
         let res = hex::encode(&is.get_ref());
         let exp = "0100000001fd9c28a5d1645277bd17218a5789a8ad5790b30395a37fd33aee617805acc6ce000000006b48304502210090298a2bf23e5640396400e4afea95c872b7da1a90abba35da7aab3d1299627702206196a592a5a2d99f5dfba4830965e97ca5ae7359a1e72ae2f712dde60a80db9b41210347fa53577cf93729ac48b1bc44df12d3dd9b88c2d9991abe84000e94728e9a26ffffffff02000000000000000005006a02686999f1052a010000001976a9146acc9139e75729d2dea892695e54b66ff105ac2888ac00000000";

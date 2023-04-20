@@ -73,7 +73,7 @@ impl Serializable<Hello> for Hello{
         let padding = (16 - (len % 16)) % 16;
         let mut packet: Vec<u8> = vec![0u8; len + padding + 16];
         
-		&mut packet[..len].copy_from_slice(&payload);
+		let _ = &mut packet[..len].copy_from_slice(&payload);
         Ctx::encoder(ctx).try_apply_keystream(&mut packet[..len]).unwrap();
 
 		if padding != 0 {
@@ -88,7 +88,7 @@ impl Serializable<Hello> for Hello{
         Ctx::get_remote_mac(ctx, prev.as_bytes_mut());
 
 		let mut enc = Hash128::default();
-		&mut enc[..].copy_from_slice(prev.as_bytes());
+		let _ = &mut enc[..].copy_from_slice(prev.as_bytes());
 
         let mac_encoder: Ecb<Aes256, ZeroPadding> = Ecb::new_var(&ctx.secret_key()[..], &[]).expect("failed to aes ecb 1");
 	    let enc_mut = enc.as_bytes_mut();
