@@ -236,7 +236,6 @@ impl Message {
     /// Writes a Bitcoin P2P message with its payload to bytes
     pub fn write(&self, writer: &mut dyn Write, magic: [u8; 4], ctx: &mut dyn Ctx) -> io::Result<()> {
         use self::commands::*;
-        use std::convert::TryInto;
         match self {
             Message::Other(s) => Err(io::Error::new::<&str>(io::ErrorKind::InvalidData, s.as_ref())),
             Message::Partial(_) => Err(io::Error::new(
