@@ -160,7 +160,7 @@ impl Serializable<Tx2> for Tx2 {
 
         let mut packet: Vec<u8> = vec![];
         lil_rlp::put_num(&mut packet, u128::from(PACKET_TRANSACTIONS));
-        let mut enc = snap::Encoder::new();
+        let mut enc = snap::raw::Encoder::new();
         let compressed = enc.compress_vec(&data).unwrap();
         packet.extend(&compressed);
         
@@ -221,7 +221,7 @@ impl Payload<Tx2> for Tx2 {
                                 
         let mut packet: Vec<u8> = vec![];
         lil_rlp::put_num(&mut packet, u128::from(PACKET_TRANSACTIONS));
-        let mut enc = snap::Encoder::new();
+        let mut enc = snap::raw::Encoder::new();
         let compressed = enc.compress_vec(data).unwrap();
         packet.extend(&compressed);
 

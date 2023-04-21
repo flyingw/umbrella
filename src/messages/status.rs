@@ -33,7 +33,7 @@ impl Serializable<Status> for Status{
         if packet_id == PACKET_STATUS {
             let mut payload = Vec::new();
             reader.read_to_end(&mut payload)?;
-            let mut dec = snap::Decoder::new();
+            let mut dec = snap::raw::Decoder::new();
             let packet: Vec<u8> = dec.decompress_vec(&payload).unwrap();
             let mut iter = packet.iter();
 
@@ -64,7 +64,7 @@ impl Serializable<Status> for Status{
         lil_rlp::put_str(&mut buf, &self.latest_hash);
         lil_rlp::put_str(&mut buf, &self.genesis);
         let data: Vec<u8> = lil_rlp::as_list(&buf);
-        let mut enc = snap::Encoder::new();
+        let mut enc = snap::raw::Encoder::new();
         let data_compressed = enc.compress_vec(&data).unwrap();
 
         let len = data_compressed.len() + 1;
@@ -111,7 +111,7 @@ impl Payload<Status> for Status {
         lil_rlp::put_str(&mut buf, &self.latest_hash);
         lil_rlp::put_str(&mut buf, &self.genesis);
         let data: Vec<u8> = lil_rlp::as_list(&buf);
-        let mut enc = snap::Encoder::new();
+        let mut enc = snap::raw::Encoder::new();
         let data_compressed = enc.compress_vec(&data).unwrap();
 
         let len = data_compressed.len() + 1;

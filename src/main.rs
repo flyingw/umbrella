@@ -271,6 +271,8 @@ pub fn main() {
     
     our_version.write(&mut stream, magic, &mut ()).unwrap();
 
+    use std::io;
+
     let lis = thread::spawn(move || {
         let mut ct: Box<dyn Ctx> = Box::new(());
         debug!("Connected {:?}", &seed);
