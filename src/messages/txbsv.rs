@@ -1,17 +1,12 @@
 use byteorder::{LittleEndian, WriteBytesExt};
 use crate::ctx::Ctx;
-use crate::double_sha256;
-use crate::key_scriptcode;
-use crate::Output;
+use crate::{Output, double_sha256, key_scriptcode, var_int};
 use crate::result::{Error, Result};
 use crate::serdes::Serializable;
-use crate::var_int;
 use crate::{SIGHASH_ALL, SIGHASH_FORKID};
 use rust_base58::FromBase58;
-use secp256k1::SecretKey;
-use secp256k1::{Message, Secp256k1};
-use std::io::Cursor;
-use std::io::{Read, Write};
+use secp256k1::{SecretKey, Message, Secp256k1, PublicKey};
+use std::io::{Cursor, Read, Write};
 use std::io;
 
 // #[derive(Debug, Default, PartialEq, Eq, Hash, Clone)]
@@ -56,8 +51,29 @@ pub struct TxInBsv {
     pub txid: Vec<u8>,
     pub txindex: u32,
     pub amount: u64,
-    //script
-    //script_len
+}
+
+pub struct TxInScriptBsv {
+    pub txid: Vec<u8>,
+    pub txindex: u32,
+    pub amount: u64,
+    pub script: Vec<u8>,
+    pub script_len: Vec<u8>,
+}
+
+impl Serializable<TxInScriptBsv> for TxInScriptBsv {
+    fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<TxInScriptBsv> {
+        Err(Error::NotImplemented)
+    }
+
+    fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
+        writer.write(&self.txid)?;
+        writer.write_u32::<LittleEndian>(self.txindex)?;
+        writer.write(&self.script_len)?;
+        writer.write(&self.script)?;
+        writer.write_u32::<LittleEndian>(0xffffffff)?;
+        Ok(())
+    }
 }
 
 impl Serializable<TxBsv> for TxBsv {
@@ -65,15 +81,12 @@ impl Serializable<TxBsv> for TxBsv {
         Err(Error::NotImplemented)
     }
 
-    fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
-        writer.write_u32::<LittleEndian>(1)?;
-        var_int::write(self.unspents.len() as u64, writer)?;
-        
-        let mut is = Cursor::new(Vec::new());
+    fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
+        let mut output_block = Cursor::new(Vec::new());
         for tx_out in self.outputs.iter() {
-            tx_out.write(&mut is, &mut ()).unwrap();
+            tx_out.write(&mut output_block, &mut ()).unwrap();
         }
-        let hash_outputs = double_sha256(is.get_ref());
+        let hash_outputs = double_sha256(output_block.get_ref());
 
         let mut inputs = Vec::new();
         for unspent in self.unspents.iter() {
@@ -99,7 +112,7 @@ impl Serializable<TxBsv> for TxBsv {
         }
         let hash_sequence = double_sha256(&hash_sequence1.get_ref());
 
-        // let mut inputScripts = Vec::new();
+        let mut tx_in_scripts = Vec::new();
         for tx_in in inputs.iter() {
             let mut to_be_hashed = Cursor::new(Vec::new());
             to_be_hashed.write_u32::<LittleEndian>(1)?;
@@ -128,8 +141,34 @@ impl Serializable<TxBsv> for TxBsv {
             let mut sig = signature.serialize_der().to_vec();
             sig.push(sighash_type);
 
-            //todo make script_sig with sig
+            let mut script_sig = Cursor::new(Vec::new());
+            script_sig.write_u8(sig.len() as u8)?;
+            script_sig.write(&sig)?;
+            let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
+            let public_key = pub_key.serialize().to_vec();
+            script_sig.write_u8(public_key.len() as u8)?;
+            script_sig.write(&public_key)?;
+
+            let mut script_len = Cursor::new(Vec::new());
+            var_int::write(script_sig.get_ref().len() as u64, &mut script_len)?;
+
+            tx_in_scripts.push(TxInScriptBsv {
+                txid: tx_in.txid.to_vec(),
+                txindex: tx_in.txindex,
+                amount: tx_in.amount,
+                script: script_sig.get_ref().to_vec(),
+                script_len: script_len.get_ref().to_vec(),
+            });
         }
+
+        writer.write_u32::<LittleEndian>(1)?;
+        var_int::write(self.unspents.len() as u64, writer)?;
+        for tx_in in tx_in_scripts.iter() {
+            tx_in.write(writer, ctx)?;
+        }
+        var_int::write(self.outputs.len() as u64, writer)?;
+        writer.write(output_block.get_ref())?;
+        writer.write_u32::<LittleEndian>(0)?;
 
         //construct_input_block
         // for tx_in in inputs.iter() {
