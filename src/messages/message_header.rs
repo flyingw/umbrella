@@ -189,7 +189,6 @@ impl Serializable<SecHeader> for SecHeader {
     }
 
     fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
-        use std::convert::TryInto;
         let len: usize = self.payload_size.try_into().unwrap();
         let mut header = [0u8; SecHeader::HEADER_LEN];
         let (pl_sz, rest) = header.split_at_mut(3);

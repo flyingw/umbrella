@@ -267,7 +267,6 @@ pub fn main() {
     our_version.write(&mut stream, magic, &mut ()).unwrap();
 
     use std::io;
-    use std::convert::TryInto;
 
     let lis = thread::spawn(move || {
         let mut ct: Box<dyn Ctx> = Box::new(());
