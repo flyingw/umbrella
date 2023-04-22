@@ -512,7 +512,7 @@ fn estimate_tx_fee(n_in: u64, compressed: bool, op_return_size: u64) -> u64 {
     f64::ceil((estimated_size as f64) * satoshis) as u64
 }
 
-fn sanitize_tx_data(unspents: &Vec<UnspentBsv>, leftover: Vec<u8>, message: &Vec<u8>, compressed: bool) -> Vec<Output> {
+fn sanitize_tx_data(unspents: &Vec<UnspentBsv>, leftover: &Vec<u8>, message: &Vec<u8>, compressed: bool) -> Vec<Output> {
     let mut res = Vec::new();
     res.push(Output{
         dest: message.clone(),
@@ -533,7 +533,7 @@ fn sanitize_tx_data(unspents: &Vec<UnspentBsv>, leftover: Vec<u8>, message: &Vec
     const DUST: i128 = 546;
     if remaining > DUST {
         res.push(Output{
-            dest: leftover,
+            dest: leftover.to_vec(),
             amount: remaining as u64,
         });
     } else if remaining < 0 {
@@ -721,7 +721,7 @@ mod tests {
         let address = public_key_to_address(public_key, &network);
 
         // test sanitize_tx_data
-        let outputs = sanitize_tx_data(&unspents, address, &msg, pk_compressed);
+        let outputs = sanitize_tx_data(&unspents, &address, &msg, pk_compressed);
         assert_eq!(outputs, vec![Output{
             dest: "hi".as_bytes().to_vec(),
             amount: 0,
@@ -735,6 +735,7 @@ mod tests {
             unspents,
             outputs,
             private_key: private_key.as_bytes().to_vec(),
+            address: address.to_vec(),
         }.write(&mut is, &mut ()).unwrap();
         let res = hex::encode(&is.get_ref());
         let exp = "0100000001fd9c28a5d1645277bd17218a5789a8ad5790b30395a37fd33aee617805acc6ce000000006b48304502210090298a2bf23e5640396400e4afea95c872b7da1a90abba35da7aab3d1299627702206196a592a5a2d99f5dfba4830965e97ca5ae7359a1e72ae2f712dde60a80db9b41210347fa53577cf93729ac48b1bc44df12d3dd9b88c2d9991abe84000e94728e9a26ffffffff02000000000000000005006a02686999f1052a010000001976a9146acc9139e75729d2dea892695e54b66ff105ac2888ac00000000";
