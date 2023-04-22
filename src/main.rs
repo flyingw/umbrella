@@ -51,7 +51,6 @@ use rust_base58::base58::FromBase58;
 use aes_ctr::Aes256Ctr;
 use aes::block_cipher_trait::generic_array::GenericArray;
 use aes_ctr::stream_cipher::NewStreamCipher;
-use std::convert::TryInto;
 
 use std::str::FromStr;
 use std::thread;
@@ -59,7 +58,6 @@ use crate::messages::commands;
 use ctx::{Ctx,EncCtx};
 use tiny_keccak::Keccak;
 use crate::keys::{slice_to_public, Address};
-use std::io;
 
 const NULL_IV: [u8; 16] = [0;16];
 
@@ -267,6 +265,8 @@ pub fn main() {
     debug!("Write {:#?}", our_version);
     
     our_version.write(&mut stream, magic, &mut ()).unwrap();
+
+    use std::io;
 
     let lis = thread::spawn(move || {
         let mut ct: Box<dyn Ctx> = Box::new(());
