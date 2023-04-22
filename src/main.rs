@@ -51,7 +51,6 @@ use rust_base58::base58::FromBase58;
 use aes_ctr::Aes256Ctr;
 use aes::block_cipher_trait::generic_array::GenericArray;
 use aes_ctr::stream_cipher::NewStreamCipher;
-use byteorder::{LittleEndian, WriteBytesExt}; //ReadBytesExt
 use std::convert::TryInto;
 
 use std::str::FromStr;
@@ -60,9 +59,7 @@ use crate::messages::commands;
 use ctx::{Ctx,EncCtx};
 use tiny_keccak::Keccak;
 use crate::keys::{slice_to_public, Address};
-use crate::messages::{UnspentBsv, Output};
 use std::io;
-use std::io::{Read, Write};
 
 const NULL_IV: [u8; 16] = [0;16];
 
@@ -382,145 +379,6 @@ pub fn main() {
     stream.shutdown(Shutdown::Both).unwrap();
 }
 
-fn key_scriptcode(dest: &Vec<u8>) -> Vec<u8> {
-    use op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_PUSH_20};
-    let mut xs = Vec::new();
-    xs.write_u8(OP_DUP).unwrap();
-    xs.write_u8(OP_HASH160).unwrap();
-    xs.write_u8(OP_PUSH_20).unwrap();
-    xs.write(&address_to_public_key_hash(&dest)).unwrap();
-    xs.write_u8(OP_EQUALVERIFY).unwrap();
-    xs.write_u8(OP_CHECKSIG).unwrap();
-    xs
-}
-
-fn get_op_pushdata_code(dest: &Vec<u8>) -> Vec<u8> {
-    let mut xs = Vec::new();
-    const OP_PUSHDATA1: u8 = 0x4c;
-    const OP_PUSHDATA2: u8 = 0x4d;
-    const OP_PUSHDATA4: u8 = 0x4e;
-    let length_data = dest.len();
-    if length_data <= 0x4c {
-        xs.write_u8(length_data as u8).unwrap();
-    } else if length_data <= 0xff {
-        xs.write_u8(OP_PUSHDATA1).unwrap();
-        xs.write_u8(length_data as u8).unwrap();
-    } else if length_data <= 0xffff {
-        xs.write_u8(OP_PUSHDATA2).unwrap();
-        xs.write_u16::<LittleEndian>(length_data as u16).unwrap();
-    } else {
-        xs.write_u8(OP_PUSHDATA4).unwrap();
-        xs.write_u32::<LittleEndian>(length_data as u32).unwrap();
-    }
-    xs
-}
-
-fn int_to_varint(val: u64) -> Vec<u8> {
-    let mut xs = Vec::new();
-    var_int::write(val as u64, &mut xs).unwrap();
-    xs
-}
-
-fn get_op_return_size(message: &Vec<u8>) -> u64 {
-    const OP_FALSE: u8 = 0x00;
-    const OP_RETURN: u8 = 0x6a;
-    let mut op_return_size = 
-        8 // int64_t amount 0x00000000
-        + [OP_FALSE, OP_RETURN].len() // 2 bytes
-        + get_op_pushdata_code(message).len() // 1 byte if <75 bytes, 2 bytes if OP_PUSHDATA1...
-        + message.len(); // Max 220 bytes at present
-    // "Var_Int" that preceeds OP_RETURN - 0xdf is max value with current 220 byte limit (so only adds 1 byte)
-    op_return_size += int_to_varint(op_return_size as u64).len();
-    op_return_size as u64
-}
-
-fn get_fee(speed: &str) -> f64 {
-    match speed {
-        "fast"   => 2.0,
-        "medium" => 1.0,
-        "slow"   => 0.5,
-        _ => panic!("Invalid speed argument.")
-    }
-}
-
-fn estimate_tx_fee(n_in: u64, compressed: bool, op_return_size: u64) -> u64 {
-    let n_out = 1;
-    let satoshis = get_fee(&"slow");
-    let estimated_size =
-        4 + // version
-        n_in * (if compressed { 148 } else { 180 })
-        + (int_to_varint(n_in).len() as u64)
-        + n_out * 34  // excluding op_return outputs, dealt with separately
-        + (int_to_varint(n_out).len() as u64)
-        + op_return_size  // grand total size of op_return outputs(s) and related field(s)
-        + 4;  // time lock
-    f64::ceil((estimated_size as f64) * satoshis) as u64
-}
-
-fn b58decode(string: &Vec<u8>) -> Vec<u8> {
-    string.from_base58().unwrap()
-}
-
-fn b58decode_check(string: &Vec<u8>) -> Vec<u8> {
-    let decoded = &b58decode(string)[..];
-    let mut shortened = vec![0; decoded.len()-4];
-    shortened.copy_from_slice(&decoded[ .. decoded.len()-4]);
-    let decoded_checksum: [u8;4] = decoded[decoded.len() - 4 .. ].try_into().unwrap();
-    let hash_checksum = double_sha256_checksum(&shortened);
-    if decoded_checksum != hash_checksum {
-        panic!("Decoded checksum {:?} derived from \"{:?}\" is not equal to hash checksum {:?}.", decoded_checksum, string, hash_checksum)
-    }
-    shortened
-}
-
-fn sha256(bytestr: &[u8]) -> [u8;32] {
-    use ring::digest::{digest, SHA256};
-    digest(&SHA256, bytestr).as_ref().try_into().unwrap()
-}
-
-fn double_sha256(bytestr: &Vec<u8>) -> [u8;32] {
-    sha256(&sha256(&bytestr[..]))
-}
-
-fn double_sha256_checksum(bytestr: &Vec<u8>) -> [u8;4] {
-    double_sha256(bytestr)[..4].try_into().unwrap()
-}
-
-// fn wif_to_bytes(wif: &Vec<u8>) -> String {
-//     let private_key = b58decode_check(wif);
-//     panic!("ni")
-// }
-
-fn private_key_to_secret_key(wif: &String) -> SecretKey {
-    let mut privk = [0;32];
-    privk.copy_from_slice(&wif.from_base58().unwrap()[1..33]); 
-    SecretKey::from_slice(&privk).expect("32 bytes, within curve order")
-}
-
-fn private_key_to_public_key(wif: &String) -> Vec<u8> {
-    let secret_key = private_key_to_secret_key(wif);
-    let secp = Secp256k1::new();
-    let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
-    pub_key.serialize().to_vec()
-}
-
-fn b58encode_check(bytestr: Vec<u8>) -> Vec<u8> {
-    let mut xs = vec![];
-    xs.extend(bytestr.clone());
-    xs.extend(double_sha256_checksum(&bytestr).to_vec());
-    bs58::encode(xs).into_vec()
-}
-
-fn public_key_to_address(_public_key: Vec<u8>, _network: &Network) -> Vec<u8> {
-    let mut xs = hash160(&_public_key[..]).0.to_vec();
-    xs.insert(0, _network.legacyaddr_pubkeyhash_flag());
-    b58encode_check(xs)
-}
-
-fn address_to_public_key_hash(address: &Vec<u8>) -> Vec<u8> {
-    b58decode_check(address)[1..].to_vec()
-}
-
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
@@ -553,67 +411,5 @@ mod tests {
         let res = hex::encode(&is.get_ref());
         let exp = "02000000011264d6a003b3a4ee1790a8694551cc4adc3cda058f52a786be304616a44127df000000006b483045022100d8e386aab795d56f9d7b7d6a51e5e79f9838227bc87b264140399fa31846cb8802203c3726092a64e6c9979e38a422a56292d76dfd0ac7fdb8201386101af5b277594121029239a0bf858ee84dc7dc17cd036967038091ca44eccad3d430e60be6c7cec6100000000002e092f505000000001976a9142ce1af0eadc139c1a184d7926a3ff9c1f1a8378688ac10270000000000001976a9143523920e592b3af260060c15725c26b37a7b45bd88ac00000000";
         assert_eq!(res, exp)
-    }
-
-    #[test]
-    fn test_utils() {
-        let decoded = b58decode(&"2yGEbwRFyft7uRe2t".as_bytes().to_vec());
-        assert_eq!(decoded, "hello there!".to_string().as_bytes());
-        assert_eq!(&decoded[ .. decoded.len() - 4], "hello th".to_string().as_bytes());
-        assert_eq!(&decoded[decoded.len() - 4 .. ], "ere!".to_string().as_bytes());
-
-        let private_key = "cRVFvtZENLvnV4VAspNkZxjpKvt65KC5pKnKtK7Riaqv5p1ppbnh".to_string();
-        let network = Network::BsvRegtest;
-        let public_key = private_key_to_public_key(&private_key);
-        let address = public_key_to_address(public_key, &network);
-        assert_eq!(address, "mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".to_string().as_bytes());
-    }
-
-    #[test]
-    fn test_output_write1() {
-        let mut is2 = Cursor::new(Vec::new());
-        Output{
-            dest: "hi".as_bytes().to_vec(),
-            amount: 0,
-        }.write(&mut is2, &mut ()).unwrap();
-        let res2 = hex::encode(&is2.get_ref());
-        let exp2 = "000000000000000005006a026869";
-        assert_eq!(res2, exp2);
-    }
-
-    #[test]
-    fn test_output_write2() {
-        let mut is2 = Cursor::new(Vec::new());
-        Output{
-            dest: "mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".as_bytes().to_vec(),
-            amount: 4999999897,
-        }.write(&mut is2, &mut ()).unwrap();
-        let res2 = hex::encode(&is2.get_ref());
-        let exp2 = "99f1052a010000001976a9146acc9139e75729d2dea892695e54b66ff105ac2888ac";
-        assert_eq!(res2, exp2);
-    }
-
-    #[test]
-    fn test_signature_bsv() {
-        use secp256k1::{Message, Secp256k1};
-        let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
-        assert_eq!(sighash_type, 0x41);
-
-        let private_key = "cRVFvtZENLvnV4VAspNkZxjpKvt65KC5pKnKtK7Riaqv5p1ppbnh".to_string();
-
-        // let hashed = "1de06a2fabae2b020ea38298111cd22b84c7dd7fc7473eb07da6a51df8ee85a6";
-        let hashed = "0ee40f326fb83415461348dd0a6ebe5081314dfa30845e6948dc9d043fcb8c7a"; // double sha256
-        let signature_expected = "304502210090298a2bf23e5640396400e4afea95c872b7da1a90abba35da7aab3d1299627702206196a592a5a2d99f5dfba4830965e97ca5ae7359a1e72ae2f712dde60a80db9b41";
-
-        let secp = Secp256k1::signing_only();
-        let message = Message::from_slice(&hex::decode(hashed).unwrap()).unwrap();
-        let secret_key = private_key_to_secret_key(&private_key);
-        assert_eq!(secret_key, SecretKey::from_slice(&hex::decode("748c9dc4643c0ee4d0dd047277af81bf8cee1b4947ed6fd84cb7b660a5e1f613").unwrap()).unwrap());
-        let mut signature = secp.sign_ecdsa(&message, &secret_key);
-        signature.normalize_s();
-        let mut sig = signature.serialize_der().to_vec();
-        sig.push(sighash_type);
-        
-        assert_eq!(hex::encode(sig), signature_expected)
     }
 }
