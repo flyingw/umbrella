@@ -1,6 +1,6 @@
 use byteorder::{LittleEndian, WriteBytesExt};
-use crate::{ctx::Ctx, hash160, network::Network, result::{Error, Result}, serdes::Serializable, var_int};
 use crate::op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_PUSH_20, OP_FALSE, OP_RETURN, OP_PUSHDATA1, OP_PUSHDATA2, OP_PUSHDATA4};
+use crate::{ctx::Ctx, hash160, network::Network, result::{Error, Result}, serdes::Serializable, var_int};
 use crate::{SIGHASH_ALL, SIGHASH_FORKID};
 use secp256k1::{SecretKey, Message, Secp256k1, PublicKey};
 use std::io::{Cursor, Read, Write};
@@ -62,7 +62,6 @@ fn sanitize_tx_data(unspents: &Vec<UnspentBsv>, leftover: &Vec<u8>, message: &Ve
     let total_op_return_size = get_op_return_size(message);
     let calculated_fee = estimate_tx_fee(unspents.len() as u64, compressed, total_op_return_size);
     let total_out = calculated_fee;
-    // print!("{}", total_out);
     let total_in: u64 = unspents.iter().map(|x| x.amount).sum();
     let remaining = total_in as i128 - total_out as i128;
     const DUST: i128 = 546;
@@ -98,11 +97,8 @@ impl Serializable<TxBsv> for TxBsv {
     fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
         let output_block = output_block(&self.outputs);
         let hash_outputs = double_sha256(&output_block);
-
         let inputs = unspents_to_inputs(&self.unspents);
-
         let hash_prevouts = hash_prevouts(&inputs).unwrap();
-
         let hash_sequence = hash_sequence(inputs.len()).unwrap();
 
         let mut tx_in_scripts = Vec::new();
@@ -121,8 +117,7 @@ impl Serializable<TxBsv> for TxBsv {
             let mut script_sig = Cursor::new(Vec::new());
             script_sig.write_u8(sig.len() as u8)?;
             script_sig.write(&sig)?;
-            let pub_key = secret_key_to_public_key(&secret_key);
-            let public_key = pub_key.serialize().to_vec();
+            let public_key = secret_key_to_public_key(&secret_key);
             script_sig.write_u8(public_key.len() as u8)?;
             script_sig.write(&public_key)?;
 
@@ -138,14 +133,14 @@ impl Serializable<TxBsv> for TxBsv {
             });
         }
 
-        writer.write_u32::<LittleEndian>(1)?;
+        writer.write_u32::<LittleEndian>(1)?; // version
         var_int::write(self.unspents.len() as u64, writer)?;
         for tx_in in tx_in_scripts.iter() {
             tx_in.write(writer, ctx)?;
         }
         var_int::write(self.outputs.len() as u64, writer)?;
         writer.write(&output_block)?;
-        writer.write_u32::<LittleEndian>(0)?;
+        writer.write_u32::<LittleEndian>(0)?; // lock time
         Ok(())
     }
 }
@@ -181,7 +176,7 @@ impl Serializable<TxInScriptBsv> for TxInScriptBsv {
 
 fn to_be_hashed(tx_in: &TxInBsv, hash_prevouts: [u8; 32], hash_sequence: [u8; 32], hash_outputs: [u8; 32], address: &Vec<u8>) -> Result<Vec<u8>> {
     let mut to_be_hashed = Cursor::new(Vec::new());
-    to_be_hashed.write_u32::<LittleEndian>(1)?;
+    to_be_hashed.write_u32::<LittleEndian>(1)?; // version
     to_be_hashed.write(&hash_prevouts)?;
     to_be_hashed.write(&hash_sequence)?;
     to_be_hashed.write(&tx_in.txid)?;
@@ -190,10 +185,10 @@ fn to_be_hashed(tx_in: &TxInBsv, hash_prevouts: [u8; 32], hash_sequence: [u8; 32
     var_int::write(scriptcode.len() as u64, &mut to_be_hashed)?;
     to_be_hashed.write(&scriptcode)?;
     to_be_hashed.write_u64::<LittleEndian>(tx_in.amount)?;
-    to_be_hashed.write_u32::<LittleEndian>(0xffffffff)?;
+    to_be_hashed.write_u32::<LittleEndian>(0xffffffff)?; // sequence
     to_be_hashed.write(&hash_outputs)?;
-    to_be_hashed.write_u32::<LittleEndian>(0)?;
-    to_be_hashed.write_u32::<LittleEndian>(0x41)?;
+    to_be_hashed.write_u32::<LittleEndian>(0)?; // lock time
+    to_be_hashed.write_u32::<LittleEndian>(0x41)?; // hash type
     Ok(to_be_hashed.get_ref().to_vec())
 }
 
@@ -242,9 +237,9 @@ fn private_key_to_secret_key(private_key: &Vec<u8>) -> SecretKey {
     SecretKey::from_slice(&privk).expect("32 bytes, within curve order")
 }
 
-fn secret_key_to_public_key(secret_key: &SecretKey) -> PublicKey {
+fn secret_key_to_public_key(secret_key: &SecretKey) -> Vec<u8> {
     let secp = Secp256k1::signing_only();
-    PublicKey::from_secret_key(&secp, &secret_key)
+    PublicKey::from_secret_key(&secp, &secret_key).serialize().to_vec()
 }
 
 
