@@ -47,7 +47,6 @@ use script::Script;
 use secp256k1::{ecdh, Secp256k1, SecretKey, PublicKey};
 use sighash::{bip143_sighash, SigHashCache, SIGHASH_FORKID, SIGHASH_ALL};
 use transaction::generate_signature;
-use rust_base58::base58::FromBase58;
 use aes_ctr::Aes256Ctr;
 use aes::block_cipher_trait::generic_array::GenericArray;
 use aes_ctr::stream_cipher::NewStreamCipher;
@@ -117,7 +116,7 @@ pub fn create_transaction(opt: &Opt) -> Tx {
     let mut cache = SigHashCache::new();
     
     let mut privk = [0;32];
-    privk.copy_from_slice(&opt.sender().secret().unwrap().from_base58().unwrap()[1..33]); 
+    privk.copy_from_slice(&bs58::decode(&opt.sender().secret().unwrap()).into_vec().unwrap()[1..33]); 
 
     let secret_key = SecretKey::from_slice(&privk).expect("32 bytes, within curve order");
     let pub_key = PublicKey::from_secret_key(&secp, &secret_key);

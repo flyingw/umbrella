@@ -1,25 +1,12 @@
 use byteorder::{LittleEndian, WriteBytesExt};
-use crate::ctx::Ctx;
-use crate::{var_int};
-use crate::result::{Error, Result};
-use crate::serdes::Serializable;
+use crate::{ctx::Ctx, hash160, network::Network, result::{Error, Result}, serdes::Serializable, var_int};
+use crate::op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_PUSH_20, OP_FALSE, OP_RETURN, OP_PUSHDATA1, OP_PUSHDATA2, OP_PUSHDATA4};
 use crate::{SIGHASH_ALL, SIGHASH_FORKID};
-use rust_base58::FromBase58;
 use secp256k1::{SecretKey, Message, Secp256k1, PublicKey};
 use std::io::{Cursor, Read, Write};
 use std::io;
-use crate::network::Network;
-use crate::op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_PUSH_20};
-use crate::hash160;
 
-#[derive(Default, PartialEq, Eq, Hash, Clone, Debug)]
-pub struct Unspent {
-    pub amount: u64,
-    pub txid: String,
-    pub txindex: u32,
-}
-
-#[derive(Default, PartialEq, Eq, Hash, Clone, Debug)]
+#[derive(PartialEq, Debug)]
 pub struct Output {
     pub dest: Vec<u8>,
     pub amount: u64,
@@ -38,13 +25,6 @@ impl Serializable<Output> for Output {
             var_int::write(scriptcode.len() as u64, writer)?;
             writer.write(&scriptcode)?;
         } else {
-            const OP_FALSE: u8 = 0x00;
-            const OP_RETURN: u8 = 0x6a;
-            
-            // const script = 
-            // writer.write_u32::<LittleEndian>(1)?;
-            // var_int::write(self.unspents.len() as u64, writer)?;
-
             let mut xs = Vec::new();
             xs.write_u8(OP_FALSE).unwrap();
             xs.write_u8(OP_RETURN).unwrap();
@@ -108,6 +88,66 @@ pub struct TxBsv {
     pub outputs: Vec<Output>,
     pub private_key: Vec<u8>,
     pub address: Vec<u8>,
+}
+
+impl Serializable<TxBsv> for TxBsv {
+    fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<TxBsv> {
+        Err(Error::NotImplemented)
+    }
+
+    fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
+        let output_block = output_block(&self.outputs);
+        let hash_outputs = double_sha256(&output_block);
+
+        let inputs = unspents_to_inputs(&self.unspents);
+
+        let hash_prevouts = hash_prevouts(&inputs).unwrap();
+
+        let hash_sequence = hash_sequence(inputs.len()).unwrap();
+
+        let mut tx_in_scripts = Vec::new();
+        for tx_in in inputs.iter() {
+            let to_be_hashed = to_be_hashed(tx_in, hash_prevouts, hash_sequence, hash_outputs, &self.address).unwrap();
+            let hashed = double_sha256(&to_be_hashed); // sign will not do sha256
+
+            let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
+            let message = Message::from_slice(&hashed).unwrap();
+            let secret_key = private_key_to_secret_key(&self.private_key);
+            let mut signature = Secp256k1::signing_only().sign_ecdsa(&message, &secret_key);
+            signature.normalize_s();
+            let mut sig = signature.serialize_der().to_vec();
+            sig.push(sighash_type);
+
+            let mut script_sig = Cursor::new(Vec::new());
+            script_sig.write_u8(sig.len() as u8)?;
+            script_sig.write(&sig)?;
+            let pub_key = secret_key_to_public_key(&secret_key);
+            let public_key = pub_key.serialize().to_vec();
+            script_sig.write_u8(public_key.len() as u8)?;
+            script_sig.write(&public_key)?;
+
+            let mut script_len = Cursor::new(Vec::new());
+            var_int::write(script_sig.get_ref().len() as u64, &mut script_len)?;
+
+            tx_in_scripts.push(TxInScriptBsv {
+                txid: tx_in.txid.to_vec(),
+                txindex: tx_in.txindex,
+                amount: tx_in.amount,
+                script: script_sig.get_ref().to_vec(),
+                script_len: script_len.get_ref().to_vec(),
+            });
+        }
+
+        writer.write_u32::<LittleEndian>(1)?;
+        var_int::write(self.unspents.len() as u64, writer)?;
+        for tx_in in tx_in_scripts.iter() {
+            tx_in.write(writer, ctx)?;
+        }
+        var_int::write(self.outputs.len() as u64, writer)?;
+        writer.write(&output_block)?;
+        writer.write_u32::<LittleEndian>(0)?;
+        Ok(())
+    }
 }
 
 pub struct TxInBsv {
@@ -198,7 +238,7 @@ fn output_block(outputs: &Vec<Output>) -> Vec<u8> {
 
 fn private_key_to_secret_key(private_key: &Vec<u8>) -> SecretKey {
     let mut privk = [0;32];
-    privk.copy_from_slice(&private_key.from_base58().unwrap()[1..33]);
+    privk.copy_from_slice(&bs58::decode(&private_key).into_vec().unwrap()[1..33]);
     SecretKey::from_slice(&privk).expect("32 bytes, within curve order")
 }
 
@@ -221,9 +261,6 @@ fn key_scriptcode(dest: &Vec<u8>) -> Vec<u8> {
 
 fn get_op_pushdata_code(dest: &Vec<u8>) -> Vec<u8> {
     let mut xs = Vec::new();
-    const OP_PUSHDATA1: u8 = 0x4c;
-    const OP_PUSHDATA2: u8 = 0x4d;
-    const OP_PUSHDATA4: u8 = 0x4e;
     let length_data = dest.len();
     if length_data <= 0x4c {
         xs.write_u8(length_data as u8).unwrap();
@@ -247,8 +284,6 @@ fn int_to_varint(val: u64) -> Vec<u8> {
 }
 
 fn get_op_return_size(message: &Vec<u8>) -> u64 {
-    const OP_FALSE: u8 = 0x00;
-    const OP_RETURN: u8 = 0x6a;
     let mut op_return_size = 
         8 // int64_t amount 0x00000000
         + [OP_FALSE, OP_RETURN].len() // 2 bytes
@@ -283,7 +318,7 @@ fn estimate_tx_fee(n_in: u64, compressed: bool, op_return_size: u64) -> u64 {
 }
 
 fn b58decode(string: &Vec<u8>) -> Vec<u8> {
-    string.from_base58().unwrap()
+    bs58::decode(string).into_vec().unwrap()
 }
 
 fn b58decode_check(string: &Vec<u8>) -> Vec<u8> {
@@ -313,7 +348,7 @@ fn double_sha256_checksum(bytestr: &Vec<u8>) -> [u8;4] {
 
 fn private_key_to_secret_key_str(wif: &String) -> SecretKey {
     let mut privk = [0;32];
-    privk.copy_from_slice(&wif.from_base58().unwrap()[1..33]); 
+    privk.copy_from_slice(&bs58::decode(&wif).into_vec().unwrap()[1..33]); 
     SecretKey::from_slice(&privk).expect("32 bytes, within curve order")
 }
 
@@ -340,67 +375,6 @@ fn public_key_to_address(_public_key: Vec<u8>, _network: &Network) -> Vec<u8> {
 fn address_to_public_key_hash(address: &Vec<u8>) -> Vec<u8> {
     b58decode_check(address)[1..].to_vec()
 }
-
-impl Serializable<TxBsv> for TxBsv {
-    fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<TxBsv> {
-        Err(Error::NotImplemented)
-    }
-
-    fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
-        let output_block = output_block(&self.outputs);
-        let hash_outputs = double_sha256(&output_block);
-
-        let inputs = unspents_to_inputs(&self.unspents);
-
-        let hash_prevouts = hash_prevouts(&inputs).unwrap();
-
-        let hash_sequence = hash_sequence(inputs.len()).unwrap();
-
-        let mut tx_in_scripts = Vec::new();
-        for tx_in in inputs.iter() {
-            let to_be_hashed = to_be_hashed(tx_in, hash_prevouts, hash_sequence, hash_outputs, &self.address).unwrap();
-            let hashed = double_sha256(&to_be_hashed); // sign will not do sha256
-
-            let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
-            let message = Message::from_slice(&hashed).unwrap();
-            let secret_key = private_key_to_secret_key(&self.private_key);
-            let mut signature = Secp256k1::signing_only().sign_ecdsa(&message, &secret_key);
-            signature.normalize_s();
-            let mut sig = signature.serialize_der().to_vec();
-            sig.push(sighash_type);
-
-            let mut script_sig = Cursor::new(Vec::new());
-            script_sig.write_u8(sig.len() as u8)?;
-            script_sig.write(&sig)?;
-            let pub_key = secret_key_to_public_key(&secret_key);
-            let public_key = pub_key.serialize().to_vec();
-            script_sig.write_u8(public_key.len() as u8)?;
-            script_sig.write(&public_key)?;
-
-            let mut script_len = Cursor::new(Vec::new());
-            var_int::write(script_sig.get_ref().len() as u64, &mut script_len)?;
-
-            tx_in_scripts.push(TxInScriptBsv {
-                txid: tx_in.txid.to_vec(),
-                txindex: tx_in.txindex,
-                amount: tx_in.amount,
-                script: script_sig.get_ref().to_vec(),
-                script_len: script_len.get_ref().to_vec(),
-            });
-        }
-
-        writer.write_u32::<LittleEndian>(1)?;
-        var_int::write(self.unspents.len() as u64, writer)?;
-        for tx_in in tx_in_scripts.iter() {
-            tx_in.write(writer, ctx)?;
-        }
-        var_int::write(self.outputs.len() as u64, writer)?;
-        writer.write(&output_block)?;
-        writer.write_u32::<LittleEndian>(0)?;
-        Ok(())
-    }
-}
-
 
 #[cfg(test)]
 mod tests {
