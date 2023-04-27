@@ -347,7 +347,7 @@ fn private_key_to_secret_key_str(wif: &String) -> SecretKey {
     SecretKey::from_slice(&privk).expect("32 bytes, within curve order")
 }
 
-fn private_key_to_public_key(wif: &String) -> Vec<u8> {
+pub fn private_key_to_public_key(wif: &String) -> Vec<u8> {
     let secret_key = private_key_to_secret_key_str(wif);
     let secp = Secp256k1::new();
     let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
@@ -361,13 +361,13 @@ fn b58encode_check(bytestr: Vec<u8>) -> Vec<u8> {
     bs58::encode(xs).into_vec()
 }
 
-fn public_key_to_address(_public_key: Vec<u8>, _network: &Network) -> Vec<u8> {
+pub fn public_key_to_address(_public_key: Vec<u8>, _network: &Network) -> Vec<u8> {
     let mut xs = hash160(&_public_key[..]).0.to_vec();
     xs.insert(0, _network.legacyaddr_pubkeyhash_flag());
     b58encode_check(xs)
 }
 
-fn address_to_public_key_hash(address: &Vec<u8>) -> Vec<u8> {
+pub fn address_to_public_key_hash(address: &Vec<u8>) -> Vec<u8> {
     b58decode_check(address)[1..].to_vec()
 }
 

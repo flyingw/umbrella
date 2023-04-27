@@ -61,13 +61,13 @@ use crate::keys::{slice_to_public, Address};
 const NULL_IV: [u8; 16] = [0;16];
 
 // Creates public key hash script.
-fn pk_script(addr: &str) -> Script {
+fn pk_script(addr: &str, network: Network) -> Script {
     let mut s = Script::new();
     let mut payload = [1;20];
 
     use cashaddr::cashaddr_decode;
 
-    let hash = cashaddr_decode(addr, Network::Regtest).expect("correct cash address");
+    let hash = cashaddr_decode(addr, network).expect("correct cash address");
     payload.copy_from_slice(&hash.0[..20]);
 
     use op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160};
@@ -75,6 +75,22 @@ fn pk_script(addr: &str) -> Script {
     s.append(OP_DUP);
     s.append(OP_HASH160);
     s.append_data(&payload);
+    s.append(OP_EQUALVERIFY);
+    s.append(OP_CHECKSIG);
+    s   
+}
+
+fn pk_script_bsv(addr: &str) -> Script {
+    let mut s = Script::new();
+
+    use crate::messages::bsv::address_to_public_key_hash;
+    let hash = address_to_public_key_hash(&addr.as_bytes().to_vec());
+
+    use op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160};
+
+    s.append(OP_DUP);
+    s.append(OP_HASH160);
+    s.append_data(&hash);
     s.append(OP_EQUALVERIFY);
     s.append(OP_CHECKSIG);
     s   
@@ -89,9 +105,10 @@ fn sig_script(sig: &[u8], public_key: &[u8; 33]) -> Script {
 }
 
 pub fn create_transaction(opt: &Opt) -> Tx {
-    let pub_script      = pk_script(&opt.sender().in_address());
-    let chng_pk_script  = pk_script(&opt.sender().out_address());
-    let dump_pk_script  = pk_script(&opt.data().dust_address);
+    let network = opt.network.network();
+    let pub_script      = pk_script(&opt.sender().in_address(), network);
+    let chng_pk_script  = pk_script(&opt.sender().out_address(), network);
+    let dump_pk_script  = pk_script(&opt.data().dust_address, network);
 
     trace!("pk: {:?}", &pub_script);
     trace!("ck: {:?}", &chng_pk_script);
@@ -132,13 +149,17 @@ pub fn create_transaction(opt: &Opt) -> Tx {
 }
 
 pub fn create_transaction_bsv(opt: &Opt) -> Tx {
-    let pub_script      = pk_script(&opt.sender().in_address());
-    let chng_pk_script  = pk_script(&opt.sender().out_address());
-    let dump_pk_script  = pk_script(&opt.data().dust_address);
+    let network = &opt.network.network();
 
-    trace!("pk: {:?}", &pub_script);
-    trace!("ck: {:?}", &chng_pk_script);
-    trace!("dk: {:?}", &dump_pk_script);
+    use crate::messages::bsv::{private_key_to_public_key, public_key_to_address};
+    
+    let private_key = opt.sender().secret().unwrap();
+    let public_key = private_key_to_public_key(&private_key);
+    let _address = public_key_to_address(public_key, network);
+
+    let pub_script      = pk_script_bsv(&opt.sender().in_address());
+    let chng_pk_script  = pk_script_bsv(&opt.sender().out_address());
+    let dump_pk_script  = pk_script_bsv(&opt.data().dust_address);
 
     let mut tx = Tx {
         version: 1,
@@ -461,16 +482,16 @@ mod tests {
         let tx = create_transaction_bsv(&Opt{
             network: Network::BSVReg{
                 sender: Wallet{
-                    in_address: "bchreg:mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".to_string(), //todo: remove param
+                    in_address: "mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".to_string(), //todo: remove param
                     in_amount: f64::from_str("50.0000").unwrap(),
                     outpoint_hash: Hash256::decode("cec6ac057861ee3ad37fa39503b39057ada889578a2117bd775264d1a5289cfd").unwrap(),
                     outpoint_index: 0,
                     secret: "cRVFvtZENLvnV4VAspNkZxjpKvt65KC5pKnKtK7Riaqv5p1ppbnh".to_string(),
-                    out_address: "bsvreg:mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".to_string(), //todo: remove param
+                    out_address: "mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".to_string(), //todo: remove param
                     change: f64::from_str("49.99999897").unwrap(), //todo: remove param
                 },
                 data: Data{
-                    dust_address: "bsvreg:mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".to_string(), //todo: remove param
+                    dust_address: "mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".to_string(), //todo: remove param
                     dust_amount: f64::from_str("0").unwrap(), //todo: remove param
                     data: HexData::from_str("6869").unwrap(),
                 },
