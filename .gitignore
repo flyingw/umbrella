@@ -1,3 +1,2 @@
-target/
-network1/
-**/*.rs.bk
+.DS_Store
+/target/

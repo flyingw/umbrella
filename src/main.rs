@@ -131,6 +131,49 @@ pub fn create_transaction(opt: &Opt) -> Tx {
     return tx;
 }
 
+pub fn create_transaction_bsv(opt: &Opt) -> Tx {
+    let pub_script      = pk_script(&opt.sender().in_address());
+    let chng_pk_script  = pk_script(&opt.sender().out_address());
+    let dump_pk_script  = pk_script(&opt.data().dust_address);
+
+    trace!("pk: {:?}", &pub_script);
+    trace!("ck: {:?}", &chng_pk_script);
+    trace!("dk: {:?}", &dump_pk_script);
+
+    let mut tx = Tx {
+        version: 1,
+        inputs: vec![TxIn{
+            prev_output: OutPoint {
+                hash:  opt.sender().outpoint_hash(),
+                index: opt.sender().outpoint_index(),
+            },
+            ..Default::default()
+        }],
+        outputs: vec![
+            TxOut{ amount: Amount::from(opt.sender().change(), Units::Bch), pk_script: chng_pk_script,}, 
+            TxOut{ amount: Amount::from(opt.data().dust_amount, Units::Bch), pk_script: dump_pk_script, }],
+        lock_time:0
+    };
+
+    let secp = Secp256k1::new();
+    let mut cache = SigHashCache::new();
+    
+    let mut privk = [0;32];
+    privk.copy_from_slice(&bs58::decode(&opt.sender().secret().unwrap()).into_vec().unwrap()[1..33]); 
+
+    let secret_key = SecretKey::from_slice(&privk).expect("32 bytes, within curve order");
+    let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
+
+    let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
+    let sighash = bip143_sighash(&mut tx, 0, &pub_script.0, Amount::from(opt.sender().in_amount(), Units::Bch), sighash_type, &mut cache).unwrap();
+    let signature = generate_signature(&privk, &sighash, sighash_type).unwrap();
+    let sig_script = sig_script(&signature, &pub_key.serialize());
+
+    tx.inputs[0].sig_script = sig_script;
+
+    return tx;
+}
+
 fn create_transaction2(opt: &Opt) -> Tx2 {
     let mut address: Address = Default::default();
     let decoded_address = hex::decode(&opt.sender().out_address()).unwrap();
@@ -409,6 +452,35 @@ mod tests {
         tx.write(&mut is, &mut ()).unwrap();
         let res = hex::encode(&is.get_ref());
         let exp = "02000000011264d6a003b3a4ee1790a8694551cc4adc3cda058f52a786be304616a44127df000000006b483045022100d8e386aab795d56f9d7b7d6a51e5e79f9838227bc87b264140399fa31846cb8802203c3726092a64e6c9979e38a422a56292d76dfd0ac7fdb8201386101af5b277594121029239a0bf858ee84dc7dc17cd036967038091ca44eccad3d430e60be6c7cec6100000000002e092f505000000001976a9142ce1af0eadc139c1a184d7926a3ff9c1f1a8378688ac10270000000000001976a9143523920e592b3af260060c15725c26b37a7b45bd88ac00000000";
+        assert_eq!(res, exp)
+    }
+
+    #[test]
+    fn test_bsv() {
+        use conf::{Network, Wallet, Data, HexData};
+        let tx = create_transaction_bsv(&Opt{
+            network: Network::BSVReg{
+                sender: Wallet{
+                    in_address: "bchreg:mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".to_string(), //todo: remove param
+                    in_amount: f64::from_str("50.0000").unwrap(),
+                    outpoint_hash: Hash256::decode("cec6ac057861ee3ad37fa39503b39057ada889578a2117bd775264d1a5289cfd").unwrap(),
+                    outpoint_index: 0,
+                    secret: "cRVFvtZENLvnV4VAspNkZxjpKvt65KC5pKnKtK7Riaqv5p1ppbnh".to_string(),
+                    out_address: "bsvreg:mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".to_string(), //todo: remove param
+                    change: f64::from_str("49.99999897").unwrap(), //todo: remove param
+                },
+                data: Data{
+                    dust_address: "bsvreg:mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".to_string(), //todo: remove param
+                    dust_amount: f64::from_str("0").unwrap(), //todo: remove param
+                    data: HexData::from_str("6869").unwrap(),
+                },
+            },
+            quiet: false,
+        });
+        let mut is = Cursor::new(Vec::new());
+        tx.write(&mut is, &mut ()).unwrap();
+        let res = hex::encode(&is.get_ref());
+        let exp = "0100000001fd9c28a5d1645277bd17218a5789a8ad5790b30395a37fd33aee617805acc6ce000000006b48304502210090298a2bf23e5640396400e4afea95c872b7da1a90abba35da7aab3d1299627702206196a592a5a2d99f5dfba4830965e97ca5ae7359a1e72ae2f712dde60a80db9b41210347fa53577cf93729ac48b1bc44df12d3dd9b88c2d9991abe84000e94728e9a26ffffffff02000000000000000005006a02686999f1052a010000001976a9146acc9139e75729d2dea892695e54b66ff105ac2888ac00000000";
         assert_eq!(res, exp)
     }
 }
