@@ -18,30 +18,22 @@ impl Serializable<Output> for Output {
     }
 
     fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
-        if self.amount > 0 {
-            writer.write_u64::<LittleEndian>(self.amount)?;
+        writer.write_u64::<LittleEndian>(self.amount)?;
 
-            let scriptcode = key_scriptcode(&self.dest);
-            var_int::write(scriptcode.len() as u64, writer)?;
-            writer.write(&scriptcode)?;
-        } else {
-            let mut xs = Vec::new();
-            xs.write_u8(OP_FALSE).unwrap();
-            xs.write_u8(OP_RETURN).unwrap();
-            xs.write(&get_op_pushdata_code(&self.dest)).unwrap();
-            xs.write(&self.dest).unwrap();
+        let scriptcode =
+            if self.amount > 0 {
+                key_scriptcode(&self.dest)
+            } else {
+                let mut xs = Vec::new();
+                xs.write_u8(OP_FALSE).unwrap();
+                xs.write_u8(OP_RETURN).unwrap();
+                xs.write(&get_op_pushdata_code(&self.dest)).unwrap();
+                xs.write(&self.dest).unwrap();
+                xs
+            };
 
-            writer.write_u8(0x00)?;
-            writer.write_u8(0x00)?;
-            writer.write_u8(0x00)?;
-            writer.write_u8(0x00)?;
-            writer.write_u8(0x00)?;
-            writer.write_u8(0x00)?;
-            writer.write_u8(0x00)?;
-            writer.write_u8(0x00)?;
-            var_int::write(xs.len() as u64, writer)?;
-            writer.write(&xs)?;
-        }
+        var_int::write(scriptcode.len() as u64, writer)?;
+        writer.write(&scriptcode)?;
 
         Ok(())
     }
@@ -254,7 +246,7 @@ fn key_scriptcode(dest: &Vec<u8>) -> Vec<u8> {
     xs
 }
 
-fn get_op_pushdata_code(dest: &Vec<u8>) -> Vec<u8> {
+pub fn get_op_pushdata_code(dest: &Vec<u8>) -> Vec<u8> {
     let mut xs = Vec::new();
     let length_data = dest.len();
     if length_data <= 0x4c {
@@ -485,7 +477,7 @@ mod tests {
             txid: "cec6ac057861ee3ad37fa39503b39057ada889578a2117bd775264d1a5289cfd".as_bytes().to_vec(),
             txindex: 0
         }];
-        let msg = "hi".as_bytes().to_vec();
+        let msg = "6869".as_bytes().to_vec();
         let network = Network::BsvRegtest;
 
         // derived data from input
@@ -494,14 +486,13 @@ mod tests {
         assert_eq!(pk_compressed, true);
         let address = public_key_to_address(public_key, &network);
 
-        // test sanitize_tx_data
         let outputs = sanitize_tx_data(&unspents, &address, &msg, pk_compressed);
         assert_eq!(outputs, vec![Output{
-            dest: "hi".as_bytes().to_vec(),
+            dest: msg,
             amount: 0,
         }, Output{
             dest: "mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".as_bytes().to_vec(),
-            amount: 4999999897,
+            amount: 4999999896,
         }]);
 
         let mut is = Cursor::new(Vec::new());
@@ -512,7 +503,7 @@ mod tests {
             address: address.to_vec(),
         }.write(&mut is, &mut ()).unwrap();
         let res = hex::encode(&is.get_ref());
-        let exp = "0100000001fd9c28a5d1645277bd17218a5789a8ad5790b30395a37fd33aee617805acc6ce000000006b48304502210090298a2bf23e5640396400e4afea95c872b7da1a90abba35da7aab3d1299627702206196a592a5a2d99f5dfba4830965e97ca5ae7359a1e72ae2f712dde60a80db9b41210347fa53577cf93729ac48b1bc44df12d3dd9b88c2d9991abe84000e94728e9a26ffffffff02000000000000000005006a02686999f1052a010000001976a9146acc9139e75729d2dea892695e54b66ff105ac2888ac00000000";
+        let exp = "0100000001fd9c28a5d1645277bd17218a5789a8ad5790b30395a37fd33aee617805acc6ce000000006b4830450221009e078509e8be0548894c469a31dc20da687ca6208ae94ec68689a58d815ddbfc022027b4284218d3af62de788045a02a1139dcfbccbc6190314cff787aebd182ef2241210347fa53577cf93729ac48b1bc44df12d3dd9b88c2d9991abe84000e94728e9a26ffffffff02000000000000000007006a043638363998f1052a010000001976a9146acc9139e75729d2dea892695e54b66ff105ac2888ac00000000";
         assert_eq!(res, exp)
     }
 }
