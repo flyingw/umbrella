@@ -12,8 +12,6 @@ pub const OP_FALSE: u8 = 0;
 /// Offset by n to push n bytes onto the stack, where n: [1-75]
 pub const OP_PUSH: u8 = 0;
 
-pub const OP_PUSH_20: u8 = 20;
-
 /// The next byte sets the number of bytes to push onto the stack
 pub const OP_PUSHDATA1: u8 = 76;
 /// The next two bytes sets the number of bytes to push onto the stack

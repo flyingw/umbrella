@@ -1,5 +1,5 @@
 use byteorder::{LittleEndian, WriteBytesExt};
-use crate::op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_PUSH_20, OP_FALSE, OP_RETURN, OP_PUSHDATA1, OP_PUSHDATA2, OP_PUSHDATA4};
+use crate::op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_PUSH, OP_FALSE, OP_RETURN, OP_PUSHDATA1, OP_PUSHDATA2, OP_PUSHDATA4};
 use crate::{ctx::Ctx, hash160, network::Network, result::{Error, Result}, serdes::Serializable, var_int};
 use crate::{SIGHASH_ALL, SIGHASH_FORKID};
 use secp256k1::{SecretKey, Message, Secp256k1, PublicKey};
@@ -236,11 +236,12 @@ fn secret_key_to_public_key(secret_key: &SecretKey) -> Vec<u8> {
 
 
 fn key_scriptcode(dest: &Vec<u8>) -> Vec<u8> {
+    let hash = &address_to_public_key_hash(&dest);
     let mut xs = Vec::new();
     xs.write_u8(OP_DUP).unwrap();
     xs.write_u8(OP_HASH160).unwrap();
-    xs.write_u8(OP_PUSH_20).unwrap();
-    xs.write(&address_to_public_key_hash(&dest)).unwrap();
+    xs.write_u8(OP_PUSH + hash.len() as u8).unwrap();
+    xs.write(&hash).unwrap();
     xs.write_u8(OP_EQUALVERIFY).unwrap();
     xs.write_u8(OP_CHECKSIG).unwrap();
     xs
