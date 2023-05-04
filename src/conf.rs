@@ -225,11 +225,13 @@ fn encrypt_node_version(pub_key:PublicKey
 }
 
 #[derive(Debug, Clone)]
-pub struct HexData(Vec<u8>);
+pub struct HexData(pub Vec<u8>);
+
 impl HexData {
     #[inline]
     pub fn as_vec(&self) -> Vec<u8> {self.0.clone()}
 }
+
 impl FromStr for HexData {
     type Err = hex::FromHexError;
 

@@ -58,7 +58,7 @@ use ctx::{Ctx,EncCtx};
 use tiny_keccak::Keccak;
 use crate::keys::{slice_to_public, Address};
 
-use messages::bsv::{private_key_to_public_key, public_key_to_address, address_to_public_key_hash};
+use messages::bsv::{private_key_to_public_key, public_key_to_address, address_to_public_key_hash, estimate_tx_fee, get_op_return_size};
 use op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_FALSE, OP_RETURN};
 
 const NULL_IV: [u8; 16] = [0;16];
@@ -159,9 +159,24 @@ pub fn create_transaction_bsv(opt: &Opt) -> Tx {
     let address = public_key_to_address(public_key, network);
 
     let pub_script = pk_script_bsv(&address);
-    let _data_script = pk_script_bsv_data(&opt.data().data.as_vec());
+    let data = &opt.data().data.0;
+    if data.len() > 100000 {
+        panic!("too long message");
+    }
+    let data_script = pk_script_bsv_data(&data);
 
-    let amount = Amount::from(opt.sender().in_amount(), Units::Bch);
+    let mut outputs = Vec::new();
+    outputs.push(TxOut{ amount: Amount::from(0.0, Units::Bch), pk_script: data_script });
+
+    let in_amount = Amount::from(opt.sender().in_amount(), Units::Bch);
+    let amount = in_amount.to(Units::Sats) as u64;
+    let calculated_fee = estimate_tx_fee(1, true, get_op_return_size(&data));
+    let remaining = amount as i128 - calculated_fee as i128;
+    if remaining > 546 as i128 {
+        outputs.push(TxOut{ amount: Amount::from(remaining as f64, Units::Bch), pk_script: pub_script.clone() });
+    } else if remaining < 0 {
+        panic!("Balance {} is less than {} (including fee).", amount, calculated_fee);
+    }
 
     let mut tx = Tx {
         version: 1,
@@ -172,11 +187,8 @@ pub fn create_transaction_bsv(opt: &Opt) -> Tx {
             },
             ..Default::default()
         }],
-        outputs: vec![
-            // TxOut{ amount: Amount::from(opt.sender().change(), Units::Bch), pk_script: chng_pk_script,}, 
-            // TxOut{ amount: Amount::from(opt.data().dust_amount, Units::Bch), pk_script: dump_pk_script, }
-        ],
-        lock_time:0
+        outputs: outputs,
+        lock_time: 0,
     };
 
     let secp = Secp256k1::new();
@@ -189,7 +201,7 @@ pub fn create_transaction_bsv(opt: &Opt) -> Tx {
     let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
 
     let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
-    let sighash = bip143_sighash(&mut tx, 0, &pub_script.0, amount, sighash_type, &mut cache).unwrap();
+    let sighash = bip143_sighash(&mut tx, 0, &pub_script.0, in_amount, sighash_type, &mut cache).unwrap();
     let signature = generate_signature(&privk, &sighash, sighash_type).unwrap();
     let sig_script = sig_script(&signature, &pub_key.serialize());
 

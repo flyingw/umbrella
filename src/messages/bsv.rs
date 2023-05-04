@@ -271,13 +271,12 @@ fn int_to_varint(val: u64) -> Vec<u8> {
     xs
 }
 
-fn get_op_return_size(message: &Vec<u8>) -> u64 {
+pub fn get_op_return_size(message: &Vec<u8>) -> u64 {
     let mut op_return_size = 
-        8 // int64_t amount 0x00000000
-        + [OP_FALSE, OP_RETURN].len() // 2 bytes
-        + get_op_pushdata_code(message).len() // 1 byte if <75 bytes, 2 bytes if OP_PUSHDATA1...
-        + message.len(); // Max 220 bytes at present
-    // "Var_Int" that preceeds OP_RETURN - 0xdf is max value with current 220 byte limit (so only adds 1 byte)
+        8 // 0 amount as u64
+        + [OP_FALSE, OP_RETURN].len()
+        + get_op_pushdata_code(message).len()
+        + message.len();
     op_return_size += int_to_varint(op_return_size as u64).len();
     op_return_size as u64
 }
@@ -291,7 +290,7 @@ fn get_fee(speed: &str) -> f64 {
     }
 }
 
-fn estimate_tx_fee(n_in: u64, compressed: bool, op_return_size: u64) -> u64 {
+pub fn estimate_tx_fee(n_in: u64, compressed: bool, op_return_size: u64) -> u64 {
     let n_out = 1;
     let satoshis = get_fee(&"slow");
     let estimated_size =
