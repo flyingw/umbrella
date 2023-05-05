@@ -113,10 +113,6 @@ pub fn create_transaction(opt: &Opt) -> Tx {
     let chng_pk_script  = pk_script(&opt.sender().out_address(), network);
     let dump_pk_script  = pk_script(&opt.data().dust_address, network);
 
-    trace!("pk: {:?}", &pub_script);
-    trace!("ck: {:?}", &chng_pk_script);
-    trace!("dk: {:?}", &dump_pk_script);
-
     let mut tx = Tx {
         version: 2,
         inputs: vec![TxIn{
@@ -147,8 +143,7 @@ pub fn create_transaction(opt: &Opt) -> Tx {
     let sig_script = sig_script(&signature, &pub_key.serialize());
 
     tx.inputs[0].sig_script = sig_script;
-
-    return tx;
+    tx
 }
 
 pub fn create_transaction_bsv(opt: &Opt) -> Tx {
@@ -160,7 +155,7 @@ pub fn create_transaction_bsv(opt: &Opt) -> Tx {
 
     let pub_script = pk_script_bsv(&address);
     let data = &opt.data().data.0;
-    if data.len() > 100000 {
+    if data.len() > 100_000 {
         panic!("too long message");
     }
     let data_script = pk_script_bsv_data(&data);
@@ -173,7 +168,7 @@ pub fn create_transaction_bsv(opt: &Opt) -> Tx {
     let calculated_fee = estimate_tx_fee(1, true, get_op_return_size(&data));
     let remaining = amount as i128 - calculated_fee as i128;
     if remaining > 546 as i128 {
-        outputs.push(TxOut{ amount: Amount::from(remaining as f64, Units::Bch), pk_script: pub_script.clone() });
+        outputs.push(TxOut{ amount: Amount(remaining as u64), pk_script: pub_script.clone() });
     } else if remaining < 0 {
         panic!("Balance {} is less than {} (including fee).", amount, calculated_fee);
     }
@@ -185,6 +180,7 @@ pub fn create_transaction_bsv(opt: &Opt) -> Tx {
                 hash:  opt.sender().outpoint_hash(),
                 index: opt.sender().outpoint_index(),
             },
+            sequence: 0xffffffff,
             ..Default::default()
         }],
         outputs: outputs,
@@ -206,8 +202,7 @@ pub fn create_transaction_bsv(opt: &Opt) -> Tx {
     let sig_script = sig_script(&signature, &pub_key.serialize());
 
     tx.inputs[0].sig_script = sig_script;
-
-    return tx;
+    tx
 }
 
 fn create_transaction2(opt: &Opt) -> Tx2 {
@@ -410,13 +405,12 @@ pub fn main() {
                                 debug!("Write {:#?}", ping);
                                 Message::Pong(ping.clone()).write(&mut is, magic, &mut ()).unwrap();
                             }
-                            Message::FeeFilter(ref fee) if network == Network::BsvMainnet => {
+                            Message::FeeFilter(ref fee) if network == Network::BsvRegtest || network == Network::BsvMainnet => {
+                                let tx = create_transaction_bsv(&opt);
                                 debug!("Min fee {:?}, validate", fee.minfee);
-                                panic!("ni")
-                            }
-                            Message::FeeFilter(ref fee) if network == Network::BsvRegtest => {
-                                debug!("Min fee {:?}, validate", fee.minfee);
-                                panic!("ni")
+                                let mx = Message::Tx(tx);
+                                mx.write(&mut is, magic, &mut ()).unwrap();
+                                return Ok(mx);
                             }
                             Message::FeeFilter(ref fee) => {
                                 let tx = create_transaction(&opt);
@@ -491,24 +485,23 @@ mod tests {
         assert_eq!(res, exp)
     }
 
-    #[ignore]
     #[test]
     fn test_bsv() {
         use conf::{Network, Wallet, Data, HexData};
         let tx = create_transaction_bsv(&Opt{
             network: Network::BSVReg{
                 sender: Wallet{
-                    in_address: "mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".to_string(), //todo: remove param
+                    in_address: "".to_string(), // unused
                     in_amount: f64::from_str("50.00000000").unwrap(),
                     outpoint_hash: Hash256::decode("cec6ac057861ee3ad37fa39503b39057ada889578a2117bd775264d1a5289cfd").unwrap(),
                     outpoint_index: 0,
                     secret: "cRVFvtZENLvnV4VAspNkZxjpKvt65KC5pKnKtK7Riaqv5p1ppbnh".to_string(),
-                    out_address: "mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".to_string(), //todo: remove param
-                    change: f64::from_str("49.99999896").unwrap(), //todo: remove param
+                    out_address: "".to_string(), // unused
+                    change: -1.0, // unused
                 },
                 data: Data{
-                    dust_address: "mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj".to_string(), //todo: remove param
-                    dust_amount: f64::from_str("0").unwrap(), //todo: remove param
+                    dust_address: "".to_string(), // unused
+                    dust_amount: -1.0, // unused
                     data: HexData::from_str("6869").unwrap(),
                 },
             },
@@ -517,7 +510,7 @@ mod tests {
         let mut is = Cursor::new(Vec::new());
         tx.write(&mut is, &mut ()).unwrap();
         let res = hex::encode(&is.get_ref());
-        let exp = "0100000001fd9c28a5d1645277bd17218a5789a8ad5790b30395a37fd33aee617805acc6ce000000006b4830450221009e078509e8be0548894c469a31dc20da687ca6208ae94ec68689a58d815ddbfc022027b4284218d3af62de788045a02a1139dcfbccbc6190314cff787aebd182ef2241210347fa53577cf93729ac48b1bc44df12d3dd9b88c2d9991abe84000e94728e9a26ffffffff02000000000000000007006a043638363998f1052a010000001976a9146acc9139e75729d2dea892695e54b66ff105ac2888ac00000000";
+        let exp = "0100000001fd9c28a5d1645277bd17218a5789a8ad5790b30395a37fd33aee617805acc6ce000000006b48304502210090298a2bf23e5640396400e4afea95c872b7da1a90abba35da7aab3d1299627702206196a592a5a2d99f5dfba4830965e97ca5ae7359a1e72ae2f712dde60a80db9b41210347fa53577cf93729ac48b1bc44df12d3dd9b88c2d9991abe84000e94728e9a26ffffffff02000000000000000005006a02686999f1052a010000001976a9146acc9139e75729d2dea892695e54b66ff105ac2888ac00000000";
         assert_eq!(res, exp)
     }
 }
