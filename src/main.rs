@@ -36,30 +36,27 @@ pub use result::{Error, Result};
 pub use amount::{Amount, Units};
 pub use hash160::{Hash160, hash160};
 pub use hash256::{sha256d, Hash256};
-use conf::Opt;
-use structopt::StructOpt;
 
+use aes::block_cipher_trait::generic_array::GenericArray;
+use aes_ctr::Aes256Ctr;
+use aes_ctr::stream_cipher::NewStreamCipher;
+use conf::Opt;
+use ctx::{Ctx, EncCtx};
+use keys::{slice_to_public, Address};
+use messages::bsv::{private_key_to_public_key, public_key_to_address, address_to_public_key_hash, estimate_tx_fee, get_op_return_size};
+use messages::commands;
+use messages::{Tx, Tx2, TxIn, OutPoint, TxOut, Hello, Message, MsgHeader};
 use network::Network;
-use messages::{Tx, Tx2, TxIn, OutPoint, TxOut, Hello};
-use messages::{Message,MsgHeader};
-use std::time::Duration;
+use op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_FALSE, OP_RETURN};
 use script::Script;
 use secp256k1::{ecdh, Secp256k1, SecretKey, PublicKey};
 use sighash::{bip143_sighash, SigHashCache, SIGHASH_FORKID, SIGHASH_ALL};
-use transaction::generate_signature;
-use aes_ctr::Aes256Ctr;
-use aes::block_cipher_trait::generic_array::GenericArray;
-use aes_ctr::stream_cipher::NewStreamCipher;
-
 use std::str::FromStr;
 use std::thread;
-use crate::messages::commands;
-use ctx::{Ctx,EncCtx};
+use std::time::Duration;
+use structopt::StructOpt;
 use tiny_keccak::Keccak;
-use crate::keys::{slice_to_public, Address};
-
-use messages::bsv::{private_key_to_public_key, public_key_to_address, address_to_public_key_hash, estimate_tx_fee, get_op_return_size};
-use op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_FALSE, OP_RETURN};
+use transaction::generate_signature;
 
 const NULL_IV: [u8; 16] = [0;16];
 
