@@ -23,8 +23,8 @@ Released binaries
 
 Select corresponend platform to test:
 
-* [Bitchoin ABS](doc/bch/test-setup.md) and [run](./test.sh)
-* [Ethereum](doc/eth/test-setup.md)     and [run](./testht.sh)
+* [Bitchoin ABS](doc/bch/test-setup.md) and [run](./test_bch.sh)
+* [Ethereum](doc/eth/test-setup.md)     and [run](./test_eth.sh)
 * [Bitcoin SV](doc/bsv/test-setup.md)   and [run](./test_bsv.sh)
 
 # links
