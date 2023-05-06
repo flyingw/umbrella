@@ -98,26 +98,12 @@ pub fn create_transaction(opt: &Opt) -> Tx {
     let pub_script = pk_script(&opt.sender().in_address(), network);
     let chng_pk_script = pk_script(&opt.sender().out_address(), network);
     let dump_pk_script = pk_script(&opt.data().dust_address, network);
-
-    let mut tx = Tx {
-        version: 2,
-        inputs: vec![TxIn{
-            prev_output: OutPoint {
-                hash:  opt.sender().outpoint_hash(),
-                index: opt.sender().outpoint_index(),
-            },
-            ..Default::default()
-        }],
-        outputs: vec![
-            TxOut{ amount: Amount::from(opt.sender().change(), Units::Bch), pk_script: chng_pk_script,}, 
-            TxOut{ amount: Amount::from(opt.data().dust_amount, Units::Bch), pk_script: dump_pk_script, }],
-        lock_time:0
-    };
-
     let in_amount = Amount::from(opt.sender().in_amount(), Units::Bch);
-
-    tx.inputs[0].sig_script = create_sig_script(&opt, in_amount, &mut tx, &pub_script);
-    tx
+    let outputs = vec![
+        TxOut{ amount: Amount::from(opt.sender().change(), Units::Bch), pk_script: chng_pk_script,}, 
+        TxOut{ amount: Amount::from(opt.data().dust_amount, Units::Bch), pk_script: dump_pk_script, },
+    ];
+    create_tx(&opt, in_amount, 2, 0x00000000, outputs, &pub_script)
 }
 
 pub fn create_transaction_bsv(opt: &Opt, min_fee: u64) -> Tx {
@@ -154,20 +140,23 @@ pub fn create_transaction_bsv(opt: &Opt, min_fee: u64) -> Tx {
         panic!("Balance {} is less than {} (including fee).", amount, calculated_fee);
     }
 
+    create_tx(&opt, in_amount, 1, 0xffffffff, outputs, &pub_script)
+}
+
+fn create_tx(opt: &Opt, in_amount: Amount, version: u32, sequence: u32, outputs: Vec<TxOut>, pub_script: &Script) -> Tx {
     let mut tx = Tx {
-        version: 1,
+        version: version,
         inputs: vec![TxIn{
             prev_output: OutPoint {
                 hash:  opt.sender().outpoint_hash(),
                 index: opt.sender().outpoint_index(),
             },
-            sequence: 0xffffffff,
+            sequence: sequence,
             ..Default::default()
         }],
         outputs: outputs,
         lock_time: 0,
     };
-
     tx.inputs[0].sig_script = create_sig_script(&opt, in_amount, &mut tx, &pub_script);
     tx
 }
