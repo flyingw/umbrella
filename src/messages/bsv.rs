@@ -39,35 +39,6 @@ impl Serializable<Output> for Output {
     }
 }
 
-fn sanitize_tx_data(unspents: &Vec<UnspentBsv>, leftover: &Vec<u8>, message: &Vec<u8>, compressed: bool) -> Vec<Output> {
-    let mut res = Vec::new();
-    res.push(Output{
-        dest: message.clone(),
-        amount: 0,
-    });
-    if unspents.len() == 0 {
-        panic!("Transactions must have at least one unspent.");
-    }
-    if message.len() > 100000 {
-        panic!("too long message");
-    }
-    let total_op_return_size = get_op_return_size(message);
-    let calculated_fee = estimate_tx_fee(unspents.len() as u64, compressed, total_op_return_size);
-    let total_out = calculated_fee;
-    let total_in: u64 = unspents.iter().map(|x| x.amount).sum();
-    let remaining = total_in as i128 - total_out as i128;
-    const DUST: i128 = 546;
-    if remaining > DUST {
-        res.push(Output{
-            dest: leftover.to_vec(),
-            amount: remaining as u64,
-        });
-    } else if remaining < 0 {
-        panic!("Balance {} is less than {} (including fee).", total_in, total_out);
-    }
-    res
-}
-
 struct UnspentBsv {
     txid: Vec<u8>,
     txindex: u32,
@@ -464,6 +435,35 @@ mod tests {
         sig.push(sighash_type);
         
         assert_eq!(hex::encode(sig), signature_expected)
+    }
+
+    fn sanitize_tx_data(unspents: &Vec<UnspentBsv>, leftover: &Vec<u8>, message: &Vec<u8>, compressed: bool) -> Vec<Output> {
+        let mut res = Vec::new();
+        res.push(Output{
+            dest: message.clone(),
+            amount: 0,
+        });
+        if unspents.len() == 0 {
+            panic!("Transactions must have at least one unspent.");
+        }
+        if message.len() > 100000 {
+            panic!("too long message");
+        }
+        let total_op_return_size = get_op_return_size(message);
+        let calculated_fee = estimate_tx_fee(unspents.len() as u64, compressed, total_op_return_size);
+        let total_out = calculated_fee;
+        let total_in: u64 = unspents.iter().map(|x| x.amount).sum();
+        let remaining = total_in as i128 - total_out as i128;
+        const DUST: i128 = 546;
+        if remaining > DUST {
+            res.push(Output{
+                dest: leftover.to_vec(),
+                amount: remaining as u64,
+            });
+        } else if remaining < 0 {
+            panic!("Balance {} is less than {} (including fee).", total_in, total_out);
+        }
+        res
     }
 
     #[test]

@@ -44,7 +44,6 @@ use op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_FALSE, OP_RET
 use result::{Error, Result};
 use script::Script;
 use secp256k1::{ecdh, Secp256k1, SecretKey, PublicKey};
-use serdes::Serializable;
 use sighash::{bip143_sighash, SigHashCache, SIGHASH_FORKID, SIGHASH_ALL};
 use std::str::FromStr;
 use std::thread;
@@ -141,7 +140,15 @@ pub fn create_transaction_bsv(opt: &Opt) -> Tx {
     let in_amount = Amount::from(opt.sender().in_amount(), Units::Bch);
     let amount = in_amount.to(Units::Sats) as u64;
     let calculated_fee = estimate_tx_fee(1, true, get_op_return_size(&data));
-    let remaining = amount as i128 - calculated_fee as i128;
+    let min_fee = 250; //todo pass min fee
+    let fee =
+        if calculated_fee < min_fee {
+            debug!("calculated fee {} is lower than min fee {}", calculated_fee, min_fee);
+            min_fee
+        } else {
+            calculated_fee
+        };
+    let remaining = amount as i128 - fee as i128;
     if remaining > 546 as i128 {
         outputs.push(TxOut{ amount: Amount(remaining as u64), pk_script: pub_script.clone() });
     } else if remaining < 0 {
@@ -427,6 +434,7 @@ pub fn main() {
 
 #[cfg(test)]
 mod tests {
+    use serdes::Serializable;
     use std::io::Cursor;
     use super::*;
 
@@ -471,11 +479,11 @@ mod tests {
                     outpoint_index: 0,
                     secret: "cRVFvtZENLvnV4VAspNkZxjpKvt65KC5pKnKtK7Riaqv5p1ppbnh".to_string(),
                     out_address: "".to_string(), // unused
-                    change: -1.0, // unused
+                    change: 0.0, // unused
                 },
                 data: Data{
                     dust_address: "".to_string(), // unused
-                    dust_amount: -1.0, // unused
+                    dust_amount: 0.0, // unused
                     data: HexData::from_str("6869").unwrap(),
                 },
             },
@@ -484,7 +492,7 @@ mod tests {
         let mut is = Cursor::new(Vec::new());
         tx.write(&mut is, &mut ()).unwrap();
         let res = hex::encode(&is.get_ref());
-        let exp = "0100000001fd9c28a5d1645277bd17218a5789a8ad5790b30395a37fd33aee617805acc6ce000000006b48304502210090298a2bf23e5640396400e4afea95c872b7da1a90abba35da7aab3d1299627702206196a592a5a2d99f5dfba4830965e97ca5ae7359a1e72ae2f712dde60a80db9b41210347fa53577cf93729ac48b1bc44df12d3dd9b88c2d9991abe84000e94728e9a26ffffffff02000000000000000005006a02686999f1052a010000001976a9146acc9139e75729d2dea892695e54b66ff105ac2888ac00000000";
+        let exp = "0100000001fd9c28a5d1645277bd17218a5789a8ad5790b30395a37fd33aee617805acc6ce000000006a47304402202f46fed85c3b22ea24331d4d2d2126b74e13e6450863ad09bac714c372cd15f402206eb6d362d5e5b5aa8769af2f0872c4a3686edf29cd73a893da363559058c24b941210347fa53577cf93729ac48b1bc44df12d3dd9b88c2d9991abe84000e94728e9a26ffffffff02000000000000000005006a02686906f1052a010000001976a9146acc9139e75729d2dea892695e54b66ff105ac2888ac00000000";
         assert_eq!(res, exp)
     }
 }

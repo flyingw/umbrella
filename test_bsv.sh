@@ -7,11 +7,11 @@ OUT_PNT=0 # unpent voud
 DATA="68656c6c6f2c7361696c6f72" # your message
 NETWORK="bsv-reg"
 
-IN_ADD="bsvreg:mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj" # create form secret -> pubkey -> addr
-CHANGE="0" # do not need
-DUST="0" # do not need
-OUT_ADD="bsvreg:mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj" # do not need
-DST_ADD="bsvreg:mqFeyyMpBAEHiiHC4RmDHGg9EdsmZFcjPj" # do not need
+IN_ADD=""
+CHANGE="-1"
+DUST="-1"
+OUT_ADD=""
+DST_ADD=""
 
 RUST_BACKTRACE=1 cargo run -- $NETWORK \
     --in_address $IN_ADD --in_amount $AMOUNT --secret $SECRET \
