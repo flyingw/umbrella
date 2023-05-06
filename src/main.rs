@@ -213,62 +213,62 @@ pub fn ctx(secret: &SecretKey
         let mut remote_nonce: Hash256 = Hash256::default();
 
         let remote_ephemeral = slice_to_public(&ack[0..64]).unwrap();
-        remote_nonce.copy_from_slice(&ack[64..(64+32)]);		
+        remote_nonce.copy_from_slice(&ack[64..(64+32)]);        
 
         let shared = &ecdh::shared_secret_point(&remote_ephemeral, &ecdhe_secret_key)[..32];
         
-		let mut nonce_material = Hash512::default();
-		(&mut nonce_material[0..32]).copy_from_slice(remote_nonce.as_bytes());
-		(&mut nonce_material[32..64]).copy_from_slice(nonce.as_bytes());
-		let mut key_material = Hash512::default();
+        let mut nonce_material = Hash512::default();
+        (&mut nonce_material[0..32]).copy_from_slice(remote_nonce.as_bytes());
+        (&mut nonce_material[32..64]).copy_from_slice(nonce.as_bytes());
+        let mut key_material = Hash512::default();
         (&mut key_material[0..32]).copy_from_slice(&shared);
-		Keccak::keccak256(nonce_material.as_bytes_mut(), &mut key_material[32..64]);
-		
+        Keccak::keccak256(nonce_material.as_bytes_mut(), &mut key_material[32..64]);
+        
         let mut key_material_keccak = Hash256::default();
-		Keccak::keccak256(key_material.as_bytes(), key_material_keccak.as_bytes_mut());
+        Keccak::keccak256(key_material.as_bytes(), key_material_keccak.as_bytes_mut());
 
-		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
-		
+        (&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
+        
         let mut key_material_keccak = Hash256::default();
-		Keccak::keccak256(key_material.as_bytes(), key_material_keccak.as_bytes_mut());
+        Keccak::keccak256(key_material.as_bytes(), key_material_keccak.as_bytes_mut());
 
-		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
+        (&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
 
-		// Using a 0 IV with CTR is fine as long as the same IV is never reused with the same key.
-		// This is the case here: ecdh creates a new secret which will be the symmetric key used
-		// only for this session the 0 IV is only use once with this secret, so we are in the case
-		// of same IV use for different key.
+        // Using a 0 IV with CTR is fine as long as the same IV is never reused with the same key.
+        // This is the case here: ecdh creates a new secret which will be the symmetric key used
+        // only for this session the 0 IV is only use once with this secret, so we are in the case
+        // of same IV use for different key.
         let encoder = Aes256Ctr::new(GenericArray::from_slice(&key_material[32..64]), GenericArray::from_slice(&NULL_IV));
-		let decoder = Aes256Ctr::new(GenericArray::from_slice(&key_material[32..64]), GenericArray::from_slice(&NULL_IV));
+        let decoder = Aes256Ctr::new(GenericArray::from_slice(&key_material[32..64]), GenericArray::from_slice(&NULL_IV));
 
         let mut key_material_keccak = Hash256::default();
-		Keccak::keccak256(key_material.as_bytes(), key_material_keccak.as_bytes_mut());
+        Keccak::keccak256(key_material.as_bytes(), key_material_keccak.as_bytes_mut());
 
-		(&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
+        (&mut key_material[32..64]).copy_from_slice(key_material_keccak.as_bytes());
 
-		let mac_encoder_key: SecretKey = SecretKey::from_slice(&key_material[32..64]).unwrap();
+        let mac_encoder_key: SecretKey = SecretKey::from_slice(&key_material[32..64]).unwrap();
 
-		let mut egress_mac = Keccak::new_keccak256();
-		let mut mac_material = Hash256::from_slice(&key_material[32..64]) ^ remote_nonce;
-		egress_mac.update(mac_material.as_bytes());
-		egress_mac.update(&auth_cipher);
+        let mut egress_mac = Keccak::new_keccak256();
+        let mut mac_material = Hash256::from_slice(&key_material[32..64]) ^ remote_nonce;
+        egress_mac.update(mac_material.as_bytes());
+        egress_mac.update(&auth_cipher);
 
         // message auth code for sent messages here
         // last part is something we've received as auth acknowledgement unencrypted
-		let mut ingress_mac = Keccak::new_keccak256();
-		mac_material = Hash256::from_slice(&key_material[32..64]) ^ nonce;
-		ingress_mac.update(mac_material.as_bytes());
-		ingress_mac.update(&auth_data.clone().to_vec());
+        let mut ingress_mac = Keccak::new_keccak256();
+        mac_material = Hash256::from_slice(&key_material[32..64]) ^ nonce;
+        ingress_mac.update(mac_material.as_bytes());
+        ingress_mac.update(&auth_data.clone().to_vec());
         
-		EncCtx {
-			encoder: encoder,
-			decoder: decoder,
-			mac_encoder_key: mac_encoder_key,
-			egress_mac: egress_mac,
-			ingress_mac: ingress_mac,
-			public_key: public_key,
+        EncCtx {
+            encoder: encoder,
+            decoder: decoder,
+            mac_encoder_key: mac_encoder_key,
+            egress_mac: egress_mac,
+            ingress_mac: ingress_mac,
+            public_key: public_key,
             expected: commands::HELLO,
-		}
+        }
     }).map_err(|_e| {
         Error::Unsupported(String::from("need special error"))
     })
