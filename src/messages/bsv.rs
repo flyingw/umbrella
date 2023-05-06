@@ -7,9 +7,9 @@ use std::io::{Cursor, Read, Write};
 use std::io;
 
 #[derive(PartialEq, Debug)]
-pub struct Output {
-    pub dest: Vec<u8>,
-    pub amount: u64,
+struct Output {
+    dest: Vec<u8>,
+    amount: u64,
 }
 
 impl Serializable<Output> for Output {
@@ -68,17 +68,17 @@ fn sanitize_tx_data(unspents: &Vec<UnspentBsv>, leftover: &Vec<u8>, message: &Ve
     res
 }
 
-pub struct UnspentBsv {
-    pub txid: Vec<u8>,
-    pub txindex: u32,
-    pub amount: u64,
+struct UnspentBsv {
+    txid: Vec<u8>,
+    txindex: u32,
+    amount: u64,
 }
 
-pub struct TxBsv {
-    pub unspents: Vec<UnspentBsv>,
-    pub outputs: Vec<Output>,
-    pub private_key: Vec<u8>,
-    pub address: Vec<u8>,
+struct TxBsv {
+    unspents: Vec<UnspentBsv>,
+    outputs: Vec<Output>,
+    private_key: Vec<u8>,
+    address: Vec<u8>,
 }
 
 impl Serializable<TxBsv> for TxBsv {
@@ -119,7 +119,6 @@ impl Serializable<TxBsv> for TxBsv {
             tx_in_scripts.push(TxInScriptBsv {
                 txid: tx_in.txid.to_vec(),
                 txindex: tx_in.txindex,
-                amount: tx_in.amount,
                 script: script_sig.get_ref().to_vec(),
                 script_len: script_len.get_ref().to_vec(),
             });
@@ -137,18 +136,17 @@ impl Serializable<TxBsv> for TxBsv {
     }
 }
 
-pub struct TxInBsv {
-    pub txid: Vec<u8>,
-    pub txindex: u32,
-    pub amount: u64,
+struct TxInBsv {
+    txid: Vec<u8>,
+    txindex: u32,
+    amount: u64,
 }
 
-pub struct TxInScriptBsv {
-    pub txid: Vec<u8>,
-    pub txindex: u32,
-    pub amount: u64,
-    pub script: Vec<u8>,
-    pub script_len: Vec<u8>,
+struct TxInScriptBsv {
+    txid: Vec<u8>,
+    txindex: u32,
+    script: Vec<u8>,
+    script_len: Vec<u8>,
 }
 
 impl Serializable<TxInScriptBsv> for TxInScriptBsv {
@@ -247,7 +245,7 @@ fn key_scriptcode(dest: &Vec<u8>) -> Vec<u8> {
     xs
 }
 
-pub fn get_op_pushdata_code(dest: &Vec<u8>) -> Vec<u8> {
+fn get_op_pushdata_code(dest: &Vec<u8>) -> Vec<u8> {
     let mut xs = Vec::new();
     let length_data = dest.len();
     if length_data <= 0x4c {
