@@ -277,7 +277,6 @@ pub enum Network {
     /// Operate on Ethereum network
     Eth{
         #[structopt(flatten)] sender: EthWallet,
-        //find how to remove that shit
         #[structopt(flatten)] data: Data,
     },
     #[structopt(name="bsv", raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
