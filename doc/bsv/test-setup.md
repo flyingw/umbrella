@@ -84,4 +84,6 @@ docker run --rm --network container:bitcoind bitcoinsv/bitcoin-sv bitcoin-cli -r
 
 bitcoin-cli getbalance
 bitcoin-cli setban "172.17.0.1" "remove"
+
+./test_bsv.sh
 ```
