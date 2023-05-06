@@ -2,7 +2,11 @@
 
 Universal cross network client to write data into blockchain.
 
-WARN: Do not use with real networks. Test/Private only.
+| network | transaction | regtest | mainnet |
+|:-------:|:-----------:|:-------:|:-------:|
+| BCH     | ✅          |         |         |
+| ETH     | ✅          | ✅      |         |
+| BCH     | ✅          | ✅      |         |
 
 ## build
 
@@ -39,3 +43,5 @@ Nice lib bitsv for python. It works with API but was highly inspired by.
 ## browse
 
 [abe](https://github.com/marioschlipf/bitcoin-abe)
+
+[bsv](https://whatsonchain.com)
