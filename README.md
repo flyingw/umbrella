@@ -1,4 +1,4 @@
-# Umbrella
+# umbrella
 
 Universal cross network client to write data into blockchain.
 
@@ -38,7 +38,7 @@ Definitelly use [rust-bch](https://github.com/brentongunning/rust-bch) library t
 Its hard to recommend [parity-ethereum](https://github.com/paritytech/parity-ethereum) project to create Ethereum applications.
 We've had a hard times with it and did impossible to get rid of it.
 
-Nice lib bitsv for python. It works with API but was highly inspired by.
+[bitsv](https://pypi.org/project/bitsv/) is a lib for python to build Bitcoin SV application. It works with API but was quite useful to verify transaction implementation.
 
 ## browse
 
