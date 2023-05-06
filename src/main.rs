@@ -188,7 +188,7 @@ fn create_transaction2(opt: &Opt) -> Tx2 {
         gas: opt.sender().gas(),
         call: address,
         value: opt.sender().value(),
-        data: opt.data().data.as_vec(),
+        data: opt.data().data.0.clone(),
         r: Hash256::default(),
         s: Hash256::default(),
         v: 0u64,

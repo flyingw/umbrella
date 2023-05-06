@@ -1,7 +1,13 @@
-use structopt::StructOpt;
-use std::str::FromStr;
+use crate::ecies;
 use crate::hash256::Hash256;
+use crate::keys::{public_to_slice, sign, slice_to_public};
+use crate::messages::{Message, NodeKey, Version, PROTOCOL_VERSION, NODE_NONE};
+use crate::util::secs_since;
 use secp256k1::{ecdh, Secp256k1, PublicKey, SecretKey};
+use std::str::FromStr;
+use std::time::UNIX_EPOCH;
+use structopt::StructOpt;
+use tiny_keccak::Keccak;
 
 #[derive(StructOpt,Debug)]
 /// Sender information.
@@ -49,7 +55,7 @@ pub struct Wallet {
     pub change: f64,
 }
 
-#[derive(StructOpt,Debug)]
+#[derive(StructOpt, Debug)]
 /// Eth node info
 pub struct EthWallet {
     #[structopt(long)]
@@ -105,9 +111,6 @@ pub struct EncOpt {
     pub nonce: Hash256,
 }
 
-use crate::keys::{public_to_slice, sign, slice_to_public};
-use crate::messages::{Message, NodeKey, Version, PROTOCOL_VERSION, NODE_NONE};
-
 pub trait Sender {
     fn change(&self) -> f64 {0.0}
     fn secret(&self) -> Option<String> {None}
@@ -125,9 +128,6 @@ pub trait Sender {
     fn encryption_conf(&self) -> Option<EncOpt> { None }
     fn version(&self, cfg: &Option<EncOpt>) -> Message; 
 }
-
-use std::time::UNIX_EPOCH;
-use crate::util::secs_since;
 
 impl Sender for Wallet {
     fn in_address(&self) -> String {return self.in_address.clone();}
@@ -188,8 +188,6 @@ impl Sender for EthWallet {
     }
 }
 
-use tiny_keccak::Keccak;
-use crate::ecies;
 /// Probably a part of version message with encryption support
 /// 
 fn encrypt_node_version(pub_key:PublicKey
@@ -224,13 +222,8 @@ fn encrypt_node_version(pub_key:PublicKey
     (ecies::encrypt(&pub_key, &[], &version).unwrap(), sec1)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct HexData(pub Vec<u8>);
-
-impl HexData {
-    #[inline]
-    pub fn as_vec(&self) -> Vec<u8> {self.0.clone()}
-}
 
 impl FromStr for HexData {
     type Err = hex::FromHexError;
@@ -287,8 +280,8 @@ pub enum Network {
         //find how to remove that shit
         #[structopt(flatten)] data: Data,
     },
-    #[structopt(name="btc-reg", raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
-    /// Operate on Bitcoin Core Regtest network
+    #[structopt(name="bsv", raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
+    /// Operate on Bitcoin SV Regtest network
     BSV{
         #[structopt(flatten)] sender: Wallet,
         #[structopt(flatten)] data: Data,
@@ -308,7 +301,7 @@ impl Network {
             Network::BCHTest{..}=> crate::network::Network::Testnet,
             Network::BCHReg{..} => crate::network::Network::Regtest,
             Network::Eth{..}    => crate::network::Network::Ethereum,
-            Network::BSV{..} => crate::network::Network::BsvMainnet,
+            Network::BSV{..}    => crate::network::Network::BsvMainnet,
             Network::BSVReg{..} => crate::network::Network::BsvRegtest,
         }
     }
