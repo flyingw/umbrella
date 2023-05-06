@@ -120,7 +120,7 @@ pub fn create_transaction(opt: &Opt) -> Tx {
     tx
 }
 
-pub fn create_transaction_bsv(opt: &Opt) -> Tx {
+pub fn create_transaction_bsv(opt: &Opt, min_fee: u64) -> Tx {
     let network = &opt.network.network();
     
     let private_key = opt.sender().secret().unwrap();
@@ -140,7 +140,6 @@ pub fn create_transaction_bsv(opt: &Opt) -> Tx {
     let in_amount = Amount::from(opt.sender().in_amount(), Units::Bch);
     let amount = in_amount.to(Units::Sats) as u64;
     let calculated_fee = estimate_tx_fee(1, true, get_op_return_size(&data));
-    let min_fee = 250; //todo pass min fee
     let fee =
         if calculated_fee < min_fee {
             debug!("calculated fee {} is lower than min fee {}", calculated_fee, min_fee);
@@ -390,13 +389,13 @@ pub fn main() {
                                 Message::Pong(ping.clone()).write(&mut is, magic, &mut ()).unwrap();
                             }
                             Message::FeeFilter(ref fee) => {
+                                debug!("Min fee {:?}, validate", fee.minfee);
                                 let tx =
                                     if network == Network::BsvRegtest || network == Network::BsvMainnet {
-                                        create_transaction_bsv(&opt)
+                                        create_transaction_bsv(&opt, fee.minfee)
                                     } else {
                                         create_transaction(&opt)
                                     };
-                                debug!("Min fee {:?}, validate", fee.minfee);
                                 let mx = Message::Tx(tx);
                                 mx.write(&mut is, magic, &mut ()).unwrap();
                                 return Ok(mx);
@@ -488,7 +487,7 @@ mod tests {
                 },
             },
             quiet: false,
-        });
+        }, 250);
         let mut is = Cursor::new(Vec::new());
         tx.write(&mut is, &mut ()).unwrap();
         let res = hex::encode(&is.get_ref());
