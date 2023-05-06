@@ -384,11 +384,11 @@ pub fn main() {
                             }
                             Message::FeeFilter(ref fee) => {
                                 let tx =
-                                if network == Network::BsvRegtest || network == Network::BsvMainnet {
-                                    create_transaction_bsv(&opt)
-                                } else {
-                                    create_transaction(&opt)
-                                };
+                                    if network == Network::BsvRegtest || network == Network::BsvMainnet {
+                                        create_transaction_bsv(&opt)
+                                    } else {
+                                        create_transaction(&opt)
+                                    };
                                 debug!("Min fee {:?}, validate", fee.minfee);
                                 let mx = Message::Tx(tx);
                                 mx.write(&mut is, magic, &mut ()).unwrap();
