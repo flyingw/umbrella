@@ -1,9 +1,6 @@
 #[macro_use]
 extern crate log;
 
-extern crate rust_scrypt;
-extern crate serde_json;
-
 pub mod address;
 pub mod messages;
 pub mod network;
@@ -31,25 +28,23 @@ pub mod lil_rlp;
 pub mod ecies;
 pub mod json;
 
-pub use serdes::Serializable;
-pub use result::{Error, Result};
-pub use amount::{Amount, Units};
-pub use hash160::{Hash160, hash160};
-pub use hash256::{sha256d, Hash256};
-
 use aes::block_cipher_trait::generic_array::GenericArray;
 use aes_ctr::Aes256Ctr;
 use aes_ctr::stream_cipher::NewStreamCipher;
+use amount::{Amount, Units};
 use conf::Opt;
 use ctx::{Ctx, EncCtx};
+use hash160::hash160;
+use hash256::Hash256;
 use keys::{slice_to_public, Address};
 use messages::bsv::{private_key_to_public_key, public_key_to_address, address_to_public_key_hash, estimate_tx_fee, get_op_return_size};
-use messages::commands;
-use messages::{Tx, Tx2, TxIn, OutPoint, TxOut, Hello, Message, MsgHeader};
+use messages::{Tx, Tx2, TxIn, OutPoint, TxOut, Hello, Message, MsgHeader, commands};
 use network::Network;
 use op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_FALSE, OP_RETURN};
+use result::{Error, Result};
 use script::Script;
 use secp256k1::{ecdh, Secp256k1, SecretKey, PublicKey};
+use serdes::Serializable;
 use sighash::{bip143_sighash, SigHashCache, SIGHASH_FORKID, SIGHASH_ALL};
 use std::str::FromStr;
 use std::thread;
@@ -62,33 +57,28 @@ const NULL_IV: [u8; 16] = [0;16];
 
 // Creates public key hash script.
 fn pk_script(addr: &str, network: Network) -> Script {
-    let mut s = Script::new();
-    let mut payload = [1;20];
-
     use cashaddr::cashaddr_decode;
-
     let hash = cashaddr_decode(addr, network).expect("correct cash address");
+    let mut payload = [1;20];
     payload.copy_from_slice(&hash.0[..20]);
-
-    s.append(OP_DUP);
-    s.append(OP_HASH160);
-    s.append_data(&payload);
-    s.append(OP_EQUALVERIFY);
-    s.append(OP_CHECKSIG);
-    s
+    pk_script_gen(&payload.to_vec())
 }
 
 fn pk_script_bsv(dest: &Vec<u8>) -> Script {
+    pk_script_gen(&address_to_public_key_hash(&dest))
+}
+
+fn pk_script_gen(data: &Vec<u8>) -> Script {
     let mut s = Script::new();
     s.append(OP_DUP);
     s.append(OP_HASH160);
-    s.append_data(&address_to_public_key_hash(&dest));
+    s.append_data(&data);
     s.append(OP_EQUALVERIFY);
     s.append(OP_CHECKSIG);
     s
 }
 
-fn pk_script_bsv_data(dest: &Vec<u8>) -> Script {
+fn pk_script_data(dest: &Vec<u8>) -> Script {
     let mut s = Script::new();
     s.append(OP_FALSE);
     s.append(OP_RETURN);
@@ -106,9 +96,9 @@ fn sig_script(sig: &[u8], public_key: &[u8; 33]) -> Script {
 
 pub fn create_transaction(opt: &Opt) -> Tx {
     let network = opt.network.network();
-    let pub_script      = pk_script(&opt.sender().in_address(), network);
-    let chng_pk_script  = pk_script(&opt.sender().out_address(), network);
-    let dump_pk_script  = pk_script(&opt.data().dust_address, network);
+    let pub_script = pk_script(&opt.sender().in_address(), network);
+    let chng_pk_script = pk_script(&opt.sender().out_address(), network);
+    let dump_pk_script = pk_script(&opt.data().dust_address, network);
 
     let mut tx = Tx {
         version: 2,
@@ -125,21 +115,9 @@ pub fn create_transaction(opt: &Opt) -> Tx {
         lock_time:0
     };
 
-    let secp = Secp256k1::new();
-    let mut cache = SigHashCache::new();
-    
-    let mut privk = [0;32];
-    privk.copy_from_slice(&bs58::decode(&opt.sender().secret().unwrap()).into_vec().unwrap()[1..33]); 
+    let in_amount = Amount::from(opt.sender().in_amount(), Units::Bch);
 
-    let secret_key = SecretKey::from_slice(&privk).expect("32 bytes, within curve order");
-    let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
-
-    let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
-    let sighash = bip143_sighash(&mut tx, 0, &pub_script.0, Amount::from(opt.sender().in_amount(), Units::Bch), sighash_type, &mut cache).unwrap();
-    let signature = generate_signature(&privk, &sighash, sighash_type).unwrap();
-    let sig_script = sig_script(&signature, &pub_key.serialize());
-
-    tx.inputs[0].sig_script = sig_script;
+    tx.inputs[0].sig_script = create_sig_script(&opt, in_amount, &mut tx, &pub_script);
     tx
 }
 
@@ -155,7 +133,7 @@ pub fn create_transaction_bsv(opt: &Opt) -> Tx {
     if data.len() > 100_000 {
         panic!("too long message");
     }
-    let data_script = pk_script_bsv_data(&data);
+    let data_script = pk_script_data(&data);
 
     let mut outputs = Vec::new();
     outputs.push(TxOut{ amount: Amount::from(0.0, Units::Bch), pk_script: data_script });
@@ -184,6 +162,11 @@ pub fn create_transaction_bsv(opt: &Opt) -> Tx {
         lock_time: 0,
     };
 
+    tx.inputs[0].sig_script = create_sig_script(&opt, in_amount, &mut tx, &pub_script);
+    tx
+}
+
+fn create_sig_script(opt: &Opt, in_amount: Amount, tx: &mut Tx, pub_script: &Script) -> Script {
     let secp = Secp256k1::new();
     let mut cache = SigHashCache::new();
     
@@ -194,12 +177,9 @@ pub fn create_transaction_bsv(opt: &Opt) -> Tx {
     let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
 
     let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
-    let sighash = bip143_sighash(&mut tx, 0, &pub_script.0, in_amount, sighash_type, &mut cache).unwrap();
+    let sighash = bip143_sighash(tx, 0, &pub_script.0, in_amount, sighash_type, &mut cache).unwrap();
     let signature = generate_signature(&privk, &sighash, sighash_type).unwrap();
-    let sig_script = sig_script(&signature, &pub_key.serialize());
-
-    tx.inputs[0].sig_script = sig_script;
-    tx
+    sig_script(&signature, &pub_key.serialize())
 }
 
 fn create_transaction2(opt: &Opt) -> Tx2 {
@@ -402,15 +382,13 @@ pub fn main() {
                                 debug!("Write {:#?}", ping);
                                 Message::Pong(ping.clone()).write(&mut is, magic, &mut ()).unwrap();
                             }
-                            Message::FeeFilter(ref fee) if network == Network::BsvRegtest || network == Network::BsvMainnet => {
-                                let tx = create_transaction_bsv(&opt);
-                                debug!("Min fee {:?}, validate", fee.minfee);
-                                let mx = Message::Tx(tx);
-                                mx.write(&mut is, magic, &mut ()).unwrap();
-                                return Ok(mx);
-                            }
                             Message::FeeFilter(ref fee) => {
-                                let tx = create_transaction(&opt);
+                                let tx =
+                                if network == Network::BsvRegtest || network == Network::BsvMainnet {
+                                    create_transaction_bsv(&opt)
+                                } else {
+                                    create_transaction(&opt)
+                                };
                                 debug!("Min fee {:?}, validate", fee.minfee);
                                 let mx = Message::Tx(tx);
                                 mx.write(&mut is, magic, &mut ()).unwrap();
@@ -426,8 +404,7 @@ pub fn main() {
                 }
                 Err(e) => {
                     if let Error::IOError(ref e) = e {
-                        if e.kind() == io::ErrorKind::WouldBlock || 
-                            e.kind() == io::ErrorKind::TimedOut {
+                        if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::TimedOut {
                             continue;
                         }
                     }
