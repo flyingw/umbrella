@@ -324,23 +324,23 @@ pub struct Opt {
 impl Opt {
     pub fn sender(&self) -> &dyn Sender {
         match &self.network {
-            Network::BCH{sender, ..}    => sender,
-            Network::BCHTest{sender, ..}=> sender,
-            Network::BCHReg{sender, ..} => sender,
-            Network::Eth{sender, ..}    => sender,
-            Network::BSV{sender, ..} => sender,
-            Network::BSVReg{sender, ..} => sender,
+            Network::BCH    {sender, ..} => sender,
+            Network::BCHTest{sender, ..} => sender,
+            Network::BCHReg {sender, ..} => sender,
+            Network::Eth    {sender, ..} => sender,
+            Network::BSV    {sender, ..} => sender,
+            Network::BSVReg {sender, ..} => sender,
         }
     }
+
     pub fn data(&self) -> &Data{
-        
         match &self.network {
-            Network::BCH{sender:_, data}    => data,
-            Network::BCHTest{sender:_, data}=> data,
-            Network::BCHReg{sender:_, data} => data,
-            Network::Eth{sender:_, data}    => data,
-            Network::BSV{sender:_, data} => data,
-            Network::BSVReg{sender:_, data} => data,
+            Network::BCH    {sender:_, data} => data,
+            Network::BCHTest{sender:_, data} => data,
+            Network::BCHReg {sender:_, data} => data,
+            Network::Eth    {sender:_, data} => data,
+            Network::BSV    {sender:_, data} => data,
+            Network::BSVReg {sender:_, data} => data,
         }
     }
 }
