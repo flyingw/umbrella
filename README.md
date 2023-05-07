@@ -2,11 +2,12 @@
 
 Universal cross network client to write data into blockchain.
 
-| network | transaction | regtest | mainnet |
-|:-------:|:-----------:|:-------:|:-------:|
-| BCH     | ✅          |         |         |
-| ETH     | ✅          | ✅      |         |
-| BCH     | ✅          | ✅      |         |
+| network | tx | data | mainnet |
+|:-------:|:--:|:----:|:-------:|
+| BCH     | ✅ |      |         |
+| ETH     | ✅ | ✅   |         |
+| BSV     | ✅ | ✅   |         |
+| NEM     |    |      |         |
 
 ## build
 
