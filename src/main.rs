@@ -40,7 +40,7 @@ use hash512::Hash512;
 use keys::{slice_to_public, Address};
 use messages::bsv::{private_key_to_public_key, public_key_to_address, address_to_public_key_hash, estimate_tx_fee, get_op_return_size};
 use messages::{Tx, Tx2, TxIn, OutPoint, TxOut, Hello, Message, MsgHeader, commands};
-use network::{Network, SEEDS_BSV_MAINNET};
+use network::{Network, PEERS_BSV_MAINNET};
 use op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_FALSE, OP_RETURN};
 use rand::seq::{SliceRandom, IteratorRandom};
 use result::{Error, Result};
@@ -48,6 +48,7 @@ use script::Script;
 use secp256k1::{ecdh, Secp256k1, SecretKey, PublicKey};
 use sighash::{bip143_sighash, SigHashCache, SIGHASH_FORKID, SIGHASH_ALL};
 use std::io;
+use std::io::{ErrorKind};
 use std::net::{Shutdown, TcpStream, SocketAddr, ToSocketAddrs};
 use std::str::FromStr;
 use std::thread;
@@ -276,19 +277,30 @@ pub fn main() {
     let network = opt.network.network();
 
     let mut rng = rand::thread_rng();
-    let seed: SocketAddr =
-        if network == Network::BsvMainnet {
-            SocketAddr::from(*SEEDS_BSV_MAINNET.choose(&mut rng).unwrap())
-        } else {
-            let seed = network.seeds();
-            let seed = seed.choose(&mut rng).unwrap();
-            let seed = [&seed, ":", &network.port().to_string()].concat();
-            seed.to_socket_addrs().unwrap().choose(&mut rng).unwrap()
-        };
     
-    trace!("Connecting to {}", &seed);
-    let mut stream = TcpStream::connect_timeout(&seed, Duration::from_secs(3)).unwrap();
-    // + kind: ConnectionRefused for next seed
+    let mut stream = {
+        let mut i = 0;
+        loop {
+            let seed = 
+                if network == Network::BsvMainnet {
+                    SocketAddr::from(PEERS_BSV_MAINNET[i])
+                } else {
+                    let seed = network.seeds();
+                    let seed = seed.choose(&mut rng).unwrap();
+                    let seed = [&seed, ":", &network.port().to_string()].concat();
+                    seed.to_socket_addrs().unwrap().choose(&mut rng).unwrap()
+                };
+            trace!("{} Connecting to {}", i + 1, &seed);
+            match TcpStream::connect_timeout(&seed, Duration::from_secs(1)) {
+                Ok(stream) => break stream,
+                Err(error) => match error.kind() {
+                    ErrorKind::TimedOut => i += 1,
+                    ErrorKind::ConnectionRefused => i += 1,
+                    _ => panic!("{}", error),
+                }
+            }
+        }
+    };
     stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
     
     let magic = network.magic();
@@ -303,7 +315,7 @@ pub fn main() {
 
     let lis = thread::spawn(move || {
         let mut ct: Box<dyn Ctx> = Box::new(());
-        debug!("Connected {:?}", &seed);
+        debug!("Connected.");
         loop {
             let message = match (&partial, &enc_opt) {
                 (Some(header),_) => Message::read_partial(&mut is, header.as_ref(), &mut *ct),
@@ -356,6 +368,11 @@ pub fn main() {
                             }
                             Message::Version(v) => {
                                 debug!("Version {:?}, verract", v);
+                                if network == Network::BsvMainnet {
+                                    if !v.user_agent.starts_with("/Bitcoin SV") {
+                                        panic!("bad user agent {}", v.user_agent);
+                                    }
+                                }
                             }
                             Message::Verack => {
                                 debug!("Write {:#?}", Message::Verack);
@@ -466,7 +483,7 @@ mod tests {
         let mut is = Cursor::new(Vec::new());
         tx.write(&mut is, &mut ()).unwrap();
         let res = hex::encode(&is.get_ref());
-        let exp = "0100000001fd9c28a5d1645277bd17218a5789a8ad5790b30395a37fd33aee617805acc6ce000000006a47304402202f46fed85c3b22ea24331d4d2d2126b74e13e6450863ad09bac714c372cd15f402206eb6d362d5e5b5aa8769af2f0872c4a3686edf29cd73a893da363559058c24b941210347fa53577cf93729ac48b1bc44df12d3dd9b88c2d9991abe84000e94728e9a26ffffffff02000000000000000005006a02686906f1052a010000001976a9146acc9139e75729d2dea892695e54b66ff105ac2888ac00000000";
+        let exp = "0100000001fd9c28a5d1645277bd17218a5789a8ad5790b30395a37fd33aee617805acc6ce000000006b48304502210090298a2bf23e5640396400e4afea95c872b7da1a90abba35da7aab3d1299627702206196a592a5a2d99f5dfba4830965e97ca5ae7359a1e72ae2f712dde60a80db9b41210347fa53577cf93729ac48b1bc44df12d3dd9b88c2d9991abe84000e94728e9a26ffffffff02000000000000000005006a02686999f1052a010000001976a9146acc9139e75729d2dea892695e54b66ff105ac2888ac00000000";
         assert_eq!(res, exp)
     }
 }

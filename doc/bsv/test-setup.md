@@ -75,12 +75,38 @@ echo 68656c6c6f2c7361696c6f72 | xxd -r -p
 > hello,sailor
 ```
 
+## mainnet
+
+```sh
+export MSG="..." # your message
+export DATA="$(echo $MSG | od -A n -t x1 | sed 's/ *//g')"
+export NETWORK="bsv"
+
+export BALANCE=""
+export SECRET=""
+export OUT_HSH=""
+export OUT_PNT=""
+
+RUST_BACKTRACE=1 cargo run -- $NETWORK \
+  --in_address "" \
+  --in_amount $BALANCE \
+  --secret $SECRET \
+  --outpoint_hash $OUT_HSH \
+  --outpoint_index $OUT_PNT \
+  --out_address "" \
+  --change "0" \
+  --dust_address "" \
+  --dust_amount "0" \
+  --data $DATA
+```
+
 ## notes
 
 ```sh
 docker ps
 docker exec -it bitcoind bash
 docker run --rm --network container:bitcoind bitcoinsv/bitcoin-sv bitcoin-cli -regtest <cmd>
+docker logs --follow bitcoind
 
 bitcoin-cli getbalance
 bitcoin-cli setban "172.17.0.1" "remove"
