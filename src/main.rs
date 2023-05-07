@@ -40,11 +40,14 @@ use keys::{slice_to_public, Address};
 use messages::bsv::{private_key_to_public_key, public_key_to_address, address_to_public_key_hash, estimate_tx_fee, get_op_return_size};
 use messages::{Tx, Tx2, TxIn, OutPoint, TxOut, Hello, Message, MsgHeader, commands};
 use network::Network;
+use network::SEEDS_BSV_MAINNET;
 use op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_FALSE, OP_RETURN};
+use rand::seq::{SliceRandom, IteratorRandom};
 use result::{Error, Result};
 use script::Script;
 use secp256k1::{ecdh, Secp256k1, SecretKey, PublicKey};
 use sighash::{bip143_sighash, SigHashCache, SIGHASH_FORKID, SIGHASH_ALL};
+use std::net::{SocketAddr, IpAddr, ToSocketAddrs};
 use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
@@ -285,15 +288,17 @@ pub fn main() {
 
     let network = opt.network.network();
 
-    use rand::seq::{SliceRandom, IteratorRandom};
-
     let mut rng = rand::thread_rng();
-    let seed = network.seeds();
-    let seed = seed.choose(&mut rng).unwrap();
-    let seed = [&seed, ":", &network.port().to_string()].concat();
-
-    use std::net::{SocketAddr, ToSocketAddrs};
-    let seed: SocketAddr = seed.to_socket_addrs().unwrap().choose(&mut rng).unwrap();
+    let seed: SocketAddr =
+        if network == Network::BsvMainnet {
+            let (a, b) = *SEEDS_BSV_MAINNET.choose(&mut rng).unwrap();
+            SocketAddr::new(IpAddr::from(a), b)
+        } else {
+            let seed = network.seeds();
+            let seed = seed.choose(&mut rng).unwrap();
+            let seed = [&seed, ":", &network.port().to_string()].concat();
+            seed.to_socket_addrs().unwrap().choose(&mut rng).unwrap()
+        };
 
     use std::net::TcpStream;
     
