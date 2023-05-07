@@ -29,25 +29,26 @@ pub mod ecies;
 pub mod json;
 
 use aes::block_cipher_trait::generic_array::GenericArray;
-use aes_ctr::Aes256Ctr;
-use aes_ctr::stream_cipher::NewStreamCipher;
+use aes_ctr::{Aes256Ctr, stream_cipher::NewStreamCipher};
 use amount::{Amount, Units};
+use cashaddr::cashaddr_decode;
 use conf::Opt;
 use ctx::{Ctx, EncCtx};
 use hash160::hash160;
 use hash256::Hash256;
+use hash512::Hash512;
 use keys::{slice_to_public, Address};
 use messages::bsv::{private_key_to_public_key, public_key_to_address, address_to_public_key_hash, estimate_tx_fee, get_op_return_size};
 use messages::{Tx, Tx2, TxIn, OutPoint, TxOut, Hello, Message, MsgHeader, commands};
-use network::Network;
-use network::SEEDS_BSV_MAINNET;
+use network::{Network, SEEDS_BSV_MAINNET};
 use op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_FALSE, OP_RETURN};
 use rand::seq::{SliceRandom, IteratorRandom};
 use result::{Error, Result};
 use script::Script;
 use secp256k1::{ecdh, Secp256k1, SecretKey, PublicKey};
 use sighash::{bip143_sighash, SigHashCache, SIGHASH_FORKID, SIGHASH_ALL};
-use std::net::{SocketAddr, IpAddr, ToSocketAddrs};
+use std::io;
+use std::net::{Shutdown, TcpStream, SocketAddr, ToSocketAddrs};
 use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
@@ -59,15 +60,10 @@ const NULL_IV: [u8; 16] = [0;16];
 
 // Creates public key hash script.
 fn pk_script(addr: &str, network: Network) -> Script {
-    use cashaddr::cashaddr_decode;
     let hash = cashaddr_decode(addr, network).expect("correct cash address");
     let mut payload = [1;20];
     payload.copy_from_slice(&hash.0[..20]);
     pk_script_gen(&payload.to_vec())
-}
-
-fn pk_script_bsv(dest: &Vec<u8>) -> Script {
-    pk_script_gen(&address_to_public_key_hash(&dest))
 }
 
 fn pk_script_gen(data: &Vec<u8>) -> Script {
@@ -109,14 +105,14 @@ pub fn create_transaction(opt: &Opt) -> Tx {
     create_tx(&opt, in_amount, 2, 0x00000000, outputs, &pub_script)
 }
 
-pub fn create_transaction_bsv(opt: &Opt, min_fee: u64) -> Tx {
+pub fn create_transaction_bsv(opt: &Opt) -> Tx {
     let network = &opt.network.network();
     
     let private_key = opt.sender().secret().unwrap();
     let public_key = private_key_to_public_key(&private_key);
     let address = public_key_to_address(public_key, network);
 
-    let pub_script = pk_script_bsv(&address);
+    let pub_script = pk_script_gen(&address_to_public_key_hash(&address));
     let data = &opt.data().data.0;
     if data.len() > 100_000 {
         panic!("too long message");
@@ -129,14 +125,7 @@ pub fn create_transaction_bsv(opt: &Opt, min_fee: u64) -> Tx {
     let in_amount = Amount::from(opt.sender().in_amount(), Units::Bch);
     let amount = in_amount.to(Units::Sats) as u64;
     let calculated_fee = estimate_tx_fee(1, true, get_op_return_size(&data));
-    let fee =
-        if calculated_fee < min_fee {
-            debug!("calculated fee {} is lower than min fee {}", calculated_fee, min_fee);
-            min_fee
-        } else {
-            calculated_fee
-        };
-    let remaining = amount as i128 - fee as i128;
+    let remaining = amount as i128 - calculated_fee as i128;
     if remaining > 546 as i128 {
         outputs.push(TxOut{ amount: Amount(remaining as u64), pk_script: pub_script.clone() });
     } else if remaining < 0 {
@@ -206,8 +195,6 @@ pub fn ctx(secret: &SecretKey
     , public_key: PublicKey) -> Result<impl Ctx> {
 
     ecies::decrypt(secret, &[], auth_data).map(|ack| {
-        use crate::hash512::Hash512;
-
         let mut remote_nonce: Hash256 = Hash256::default();
 
         let remote_ephemeral = slice_to_public(&ack[0..64]).unwrap();
@@ -291,18 +278,16 @@ pub fn main() {
     let mut rng = rand::thread_rng();
     let seed: SocketAddr =
         if network == Network::BsvMainnet {
-            let (a, b) = *SEEDS_BSV_MAINNET.choose(&mut rng).unwrap();
-            SocketAddr::new(IpAddr::from(a), b)
+            SocketAddr::from(*SEEDS_BSV_MAINNET.choose(&mut rng).unwrap())
         } else {
             let seed = network.seeds();
             let seed = seed.choose(&mut rng).unwrap();
             let seed = [&seed, ":", &network.port().to_string()].concat();
             seed.to_socket_addrs().unwrap().choose(&mut rng).unwrap()
         };
-
-    use std::net::TcpStream;
     
-    let mut stream = TcpStream::connect_timeout(&seed, Duration::from_secs(1)).unwrap();
+    trace!("Connecting to {}", &seed);
+    let mut stream = TcpStream::connect_timeout(&seed, Duration::from_secs(3)).unwrap();
     // + kind: ConnectionRefused for next seed
     stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
     
@@ -315,8 +300,6 @@ pub fn main() {
     debug!("Write {:#?}", our_version);
     
     our_version.write(&mut stream, magic, &mut ()).unwrap();
-
-    use std::io;
 
     let lis = thread::spawn(move || {
         let mut ct: Box<dyn Ctx> = Box::new(());
@@ -386,7 +369,7 @@ pub fn main() {
                                 debug!("Min fee {:?}, validate", fee.minfee);
                                 let tx =
                                     if network == Network::BsvRegtest || network == Network::BsvMainnet {
-                                        create_transaction_bsv(&opt, fee.minfee)
+                                        create_transaction_bsv(&opt)
                                     } else {
                                         create_transaction(&opt)
                                     };
@@ -421,19 +404,18 @@ pub fn main() {
         Err(r)  => debug!("{:?}", r),
     };
 
-    use std::net::Shutdown;
     stream.shutdown(Shutdown::Both).unwrap();
 }
 
 #[cfg(test)]
 mod tests {
+    use conf::{Network, Wallet, Data, HexData};
     use serdes::Serializable;
     use std::io::Cursor;
     use super::*;
 
     #[test]
     fn test_bch() {
-        use conf::{Network, Wallet, Data, HexData};
         let tx = create_transaction(&Opt{
             network: Network::BCHReg{
                 sender: Wallet{
@@ -462,7 +444,6 @@ mod tests {
 
     #[test]
     fn test_bsv() {
-        use conf::{Network, Wallet, Data, HexData};
         let tx = create_transaction_bsv(&Opt{
             network: Network::BSVReg{
                 sender: Wallet{
@@ -481,7 +462,7 @@ mod tests {
                 },
             },
             quiet: false,
-        }, 250);
+        });
         let mut is = Cursor::new(Vec::new());
         tx.write(&mut is, &mut ()).unwrap();
         let res = hex::encode(&is.get_ref());
