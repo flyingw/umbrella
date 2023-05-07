@@ -1,220 +1,7 @@
 use byteorder::{LittleEndian, WriteBytesExt};
-use crate::op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_PUSH, OP_FALSE, OP_RETURN, OP_PUSHDATA1, OP_PUSHDATA2, OP_PUSHDATA4};
-use crate::{ctx::Ctx, hash160, network::Network, result::{Error, Result}, serdes::Serializable, var_int};
-use crate::{SIGHASH_ALL, SIGHASH_FORKID};
-use secp256k1::{SecretKey, Message, Secp256k1, PublicKey};
-use std::io::{Cursor, Read, Write};
-use std::io;
-
-#[derive(PartialEq, Debug)]
-struct Output {
-    dest: Vec<u8>,
-    amount: u64,
-}
-
-impl Serializable<Output> for Output {
-    fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<Output> {
-        Err(Error::NotImplemented)
-    }
-
-    fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
-        writer.write_u64::<LittleEndian>(self.amount)?;
-
-        let scriptcode =
-            if self.amount > 0 {
-                key_scriptcode(&self.dest)
-            } else {
-                let mut xs = Vec::new();
-                xs.write_u8(OP_FALSE).unwrap();
-                xs.write_u8(OP_RETURN).unwrap();
-                xs.write(&get_op_pushdata_code(&self.dest)).unwrap();
-                xs.write(&self.dest).unwrap();
-                xs
-            };
-
-        var_int::write(scriptcode.len() as u64, writer)?;
-        writer.write(&scriptcode)?;
-
-        Ok(())
-    }
-}
-
-struct UnspentBsv {
-    txid: Vec<u8>,
-    txindex: u32,
-    amount: u64,
-}
-
-struct TxBsv {
-    unspents: Vec<UnspentBsv>,
-    outputs: Vec<Output>,
-    private_key: Vec<u8>,
-    address: Vec<u8>,
-}
-
-impl Serializable<TxBsv> for TxBsv {
-    fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<TxBsv> {
-        Err(Error::NotImplemented)
-    }
-
-    fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
-        let output_block = output_block(&self.outputs);
-        let hash_outputs = double_sha256(&output_block);
-        let inputs = unspents_to_inputs(&self.unspents);
-        let hash_prevouts = hash_prevouts(&inputs).unwrap();
-        let hash_sequence = hash_sequence(inputs.len()).unwrap();
-
-        let mut tx_in_scripts = Vec::new();
-        for tx_in in inputs.iter() {
-            let to_be_hashed = to_be_hashed(tx_in, hash_prevouts, hash_sequence, hash_outputs, &self.address).unwrap();
-            let hashed = double_sha256(&to_be_hashed); // sign will not do sha256
-
-            let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
-            let message = Message::from_slice(&hashed).unwrap();
-            let secret_key = private_key_to_secret_key(&self.private_key);
-            let mut signature = Secp256k1::signing_only().sign_ecdsa(&message, &secret_key);
-            signature.normalize_s();
-            let mut sig = signature.serialize_der().to_vec();
-            sig.push(sighash_type);
-
-            let mut script_sig = Cursor::new(Vec::new());
-            script_sig.write_u8(sig.len() as u8)?;
-            script_sig.write(&sig)?;
-            let public_key = secret_key_to_public_key(&secret_key);
-            script_sig.write_u8(public_key.len() as u8)?;
-            script_sig.write(&public_key)?;
-
-            let mut script_len = Cursor::new(Vec::new());
-            var_int::write(script_sig.get_ref().len() as u64, &mut script_len)?;
-
-            tx_in_scripts.push(TxInScriptBsv {
-                txid: tx_in.txid.to_vec(),
-                txindex: tx_in.txindex,
-                script: script_sig.get_ref().to_vec(),
-                script_len: script_len.get_ref().to_vec(),
-            });
-        }
-
-        writer.write_u32::<LittleEndian>(1)?; // version
-        var_int::write(self.unspents.len() as u64, writer)?;
-        for tx_in in tx_in_scripts.iter() {
-            tx_in.write(writer, ctx)?;
-        }
-        var_int::write(self.outputs.len() as u64, writer)?;
-        writer.write(&output_block)?;
-        writer.write_u32::<LittleEndian>(0)?; // lock time
-        Ok(())
-    }
-}
-
-struct TxInBsv {
-    txid: Vec<u8>,
-    txindex: u32,
-    amount: u64,
-}
-
-struct TxInScriptBsv {
-    txid: Vec<u8>,
-    txindex: u32,
-    script: Vec<u8>,
-    script_len: Vec<u8>,
-}
-
-impl Serializable<TxInScriptBsv> for TxInScriptBsv {
-    fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<TxInScriptBsv> {
-        Err(Error::NotImplemented)
-    }
-
-    fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
-        writer.write(&self.txid)?;
-        writer.write_u32::<LittleEndian>(self.txindex)?;
-        writer.write(&self.script_len)?;
-        writer.write(&self.script)?;
-        writer.write_u32::<LittleEndian>(0xffffffff)?;
-        Ok(())
-    }
-}
-
-fn to_be_hashed(tx_in: &TxInBsv, hash_prevouts: [u8; 32], hash_sequence: [u8; 32], hash_outputs: [u8; 32], address: &Vec<u8>) -> Result<Vec<u8>> {
-    let mut to_be_hashed = Cursor::new(Vec::new());
-    to_be_hashed.write_u32::<LittleEndian>(1)?; // version
-    to_be_hashed.write(&hash_prevouts)?;
-    to_be_hashed.write(&hash_sequence)?;
-    to_be_hashed.write(&tx_in.txid)?;
-    to_be_hashed.write_u32::<LittleEndian>(tx_in.txindex)?;
-    let scriptcode = key_scriptcode(&address);
-    var_int::write(scriptcode.len() as u64, &mut to_be_hashed)?;
-    to_be_hashed.write(&scriptcode)?;
-    to_be_hashed.write_u64::<LittleEndian>(tx_in.amount)?;
-    to_be_hashed.write_u32::<LittleEndian>(0xffffffff)?; // sequence
-    to_be_hashed.write(&hash_outputs)?;
-    to_be_hashed.write_u32::<LittleEndian>(0)?; // lock time
-    to_be_hashed.write_u32::<LittleEndian>(0x41)?; // hash type
-    Ok(to_be_hashed.get_ref().to_vec())
-}
-
-fn hash_prevouts(inputs: &Vec<TxInBsv>) -> Result<[u8; 32]> {
-    let mut hash_prevouts = Cursor::new(Vec::new());
-    for tx_in in inputs.iter() {
-        hash_prevouts.write(&tx_in.txid)?;
-        hash_prevouts.write_u32::<LittleEndian>(tx_in.txindex)?;
-    }
-    Ok(double_sha256(&hash_prevouts.get_ref()))
-}
-
-fn hash_sequence(n: usize) -> Result<[u8; 32]> {
-    let mut hash_sequence1 = Cursor::new(Vec::new());
-    for _ in 1..=n {
-        hash_sequence1.write_u32::<LittleEndian>(0xffffffff)?;
-    }
-    Ok(double_sha256(&hash_sequence1.get_ref()))
-}
-
-fn unspents_to_inputs(unspents: &Vec<UnspentBsv>) -> Vec<TxInBsv> {
-    let mut inputs = Vec::new();
-    for unspent in unspents.iter() {
-        let mut txid = hex::decode(&unspent.txid).unwrap();
-        txid.reverse();
-        inputs.push(TxInBsv{
-            txid: txid,
-            txindex: unspent.txindex,
-            amount: unspent.amount,
-        });
-    }
-    inputs
-}
-
-fn output_block(outputs: &Vec<Output>) -> Vec<u8> {
-    let mut output_block = Cursor::new(Vec::new());
-    for tx_out in outputs.iter() {
-        tx_out.write(&mut output_block, &mut ()).unwrap();
-    }
-    output_block.get_ref().to_vec()
-}
-
-fn private_key_to_secret_key(private_key: &Vec<u8>) -> SecretKey {
-    let mut privk = [0;32];
-    privk.copy_from_slice(&bs58::decode(&private_key).into_vec().unwrap()[1..33]);
-    SecretKey::from_slice(&privk).expect("32 bytes, within curve order")
-}
-
-fn secret_key_to_public_key(secret_key: &SecretKey) -> Vec<u8> {
-    let secp = Secp256k1::signing_only();
-    PublicKey::from_secret_key(&secp, &secret_key).serialize().to_vec()
-}
-
-
-fn key_scriptcode(dest: &Vec<u8>) -> Vec<u8> {
-    let hash = &address_to_public_key_hash(&dest);
-    let mut xs = Vec::new();
-    xs.write_u8(OP_DUP).unwrap();
-    xs.write_u8(OP_HASH160).unwrap();
-    xs.write_u8(OP_PUSH + hash.len() as u8).unwrap();
-    xs.write(&hash).unwrap();
-    xs.write_u8(OP_EQUALVERIFY).unwrap();
-    xs.write_u8(OP_CHECKSIG).unwrap();
-    xs
-}
+use crate::op_codes::{OP_FALSE, OP_RETURN, OP_PUSHDATA1, OP_PUSHDATA2, OP_PUSHDATA4};
+use crate::{hash160, network::Network, var_int};
+use secp256k1::{SecretKey, Secp256k1, PublicKey};
 
 fn get_op_pushdata_code(dest: &Vec<u8>) -> Vec<u8> {
     let mut xs = Vec::new();
@@ -335,6 +122,221 @@ pub fn address_to_public_key_hash(address: &Vec<u8>) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ctx::Ctx;
+    use crate::op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_PUSH};
+    use crate::{SIGHASH_ALL, SIGHASH_FORKID, result::{Error, Result}, serdes::Serializable};
+    use secp256k1::{SecretKey, Message, Secp256k1, PublicKey};
+    use std::io::{Cursor, Read, Write};
+    use std::io;
+
+    #[derive(PartialEq, Debug)]
+    struct Output {
+        dest: Vec<u8>,
+        amount: u64,
+    }
+
+    struct UnspentBsv {
+        txid: Vec<u8>,
+        txindex: u32,
+        amount: u64,
+    }
+
+    struct TxBsv {
+        unspents: Vec<UnspentBsv>,
+        outputs: Vec<Output>,
+        private_key: Vec<u8>,
+        address: Vec<u8>,
+    }
+
+    struct TxInBsv {
+        txid: Vec<u8>,
+        txindex: u32,
+        amount: u64,
+    }
+
+    struct TxInScriptBsv {
+        txid: Vec<u8>,
+        txindex: u32,
+        script: Vec<u8>,
+        script_len: Vec<u8>,
+    }
+
+    fn key_scriptcode(dest: &Vec<u8>) -> Vec<u8> {
+        let hash = &address_to_public_key_hash(&dest);
+        let mut xs = Vec::new();
+        xs.write_u8(OP_DUP).unwrap();
+        xs.write_u8(OP_HASH160).unwrap();
+        xs.write_u8(OP_PUSH + hash.len() as u8).unwrap();
+        xs.write(&hash).unwrap();
+        xs.write_u8(OP_EQUALVERIFY).unwrap();
+        xs.write_u8(OP_CHECKSIG).unwrap();
+        xs
+    }
+
+    fn private_key_to_secret_key(private_key: &Vec<u8>) -> SecretKey {
+        let mut privk = [0;32];
+        privk.copy_from_slice(&bs58::decode(&private_key).into_vec().unwrap()[1..33]);
+        SecretKey::from_slice(&privk).expect("32 bytes, within curve order")
+    }
+
+    fn secret_key_to_public_key(secret_key: &SecretKey) -> Vec<u8> {
+        let secp = Secp256k1::signing_only();
+        PublicKey::from_secret_key(&secp, &secret_key).serialize().to_vec()
+    }
+
+    fn hash_prevouts(inputs: &Vec<TxInBsv>) -> Result<[u8; 32]> {
+        let mut hash_prevouts = Cursor::new(Vec::new());
+        for tx_in in inputs.iter() {
+            hash_prevouts.write(&tx_in.txid)?;
+            hash_prevouts.write_u32::<LittleEndian>(tx_in.txindex)?;
+        }
+        Ok(double_sha256(&hash_prevouts.get_ref()))
+    }
+
+    fn hash_sequence(n: usize) -> Result<[u8; 32]> {
+        let mut hash_sequence1 = Cursor::new(Vec::new());
+        for _ in 1..=n {
+            hash_sequence1.write_u32::<LittleEndian>(0xffffffff)?;
+        }
+        Ok(double_sha256(&hash_sequence1.get_ref()))
+    }
+
+    fn unspents_to_inputs(unspents: &Vec<UnspentBsv>) -> Vec<TxInBsv> {
+        let mut inputs = Vec::new();
+        for unspent in unspents.iter() {
+            let mut txid = hex::decode(&unspent.txid).unwrap();
+            txid.reverse();
+            inputs.push(TxInBsv{
+                txid: txid,
+                txindex: unspent.txindex,
+                amount: unspent.amount,
+            });
+        }
+        inputs
+    }
+
+    fn output_block(outputs: &Vec<Output>) -> Vec<u8> {
+        let mut output_block = Cursor::new(Vec::new());
+        for tx_out in outputs.iter() {
+            tx_out.write(&mut output_block, &mut ()).unwrap();
+        }
+        output_block.get_ref().to_vec()
+    }
+
+    fn to_be_hashed(tx_in: &TxInBsv, hash_prevouts: [u8; 32], hash_sequence: [u8; 32], hash_outputs: [u8; 32], address: &Vec<u8>) -> Result<Vec<u8>> {
+        let mut to_be_hashed = Cursor::new(Vec::new());
+        to_be_hashed.write_u32::<LittleEndian>(1)?; // version
+        to_be_hashed.write(&hash_prevouts)?;
+        to_be_hashed.write(&hash_sequence)?;
+        to_be_hashed.write(&tx_in.txid)?;
+        to_be_hashed.write_u32::<LittleEndian>(tx_in.txindex)?;
+        let scriptcode = key_scriptcode(&address);
+        var_int::write(scriptcode.len() as u64, &mut to_be_hashed)?;
+        to_be_hashed.write(&scriptcode)?;
+        to_be_hashed.write_u64::<LittleEndian>(tx_in.amount)?;
+        to_be_hashed.write_u32::<LittleEndian>(0xffffffff)?; // sequence
+        to_be_hashed.write(&hash_outputs)?;
+        to_be_hashed.write_u32::<LittleEndian>(0)?; // lock time
+        to_be_hashed.write_u32::<LittleEndian>(0x41)?; // hash type
+        Ok(to_be_hashed.get_ref().to_vec())
+    }
+
+    impl Serializable<Output> for Output {
+        fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<Output> {
+            Err(Error::NotImplemented)
+        }
+
+        fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
+            writer.write_u64::<LittleEndian>(self.amount)?;
+
+            let scriptcode =
+                if self.amount > 0 {
+                    key_scriptcode(&self.dest)
+                } else {
+                    let mut xs = Vec::new();
+                    xs.write_u8(OP_FALSE).unwrap();
+                    xs.write_u8(OP_RETURN).unwrap();
+                    xs.write(&get_op_pushdata_code(&self.dest)).unwrap();
+                    xs.write(&self.dest).unwrap();
+                    xs
+                };
+
+            var_int::write(scriptcode.len() as u64, writer)?;
+            writer.write(&scriptcode)?;
+
+            Ok(())
+        }
+    }
+
+    impl Serializable<TxBsv> for TxBsv {
+        fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<TxBsv> {
+            Err(Error::NotImplemented)
+        }
+
+        fn write(&self, writer: &mut dyn Write, ctx: &mut dyn Ctx) -> io::Result<()> {
+            let output_block = output_block(&self.outputs);
+            let hash_outputs = double_sha256(&output_block);
+            let inputs = unspents_to_inputs(&self.unspents);
+            let hash_prevouts = hash_prevouts(&inputs).unwrap();
+            let hash_sequence = hash_sequence(inputs.len()).unwrap();
+
+            let mut tx_in_scripts = Vec::new();
+            for tx_in in inputs.iter() {
+                let to_be_hashed = to_be_hashed(tx_in, hash_prevouts, hash_sequence, hash_outputs, &self.address).unwrap();
+                let hashed = double_sha256(&to_be_hashed); // sign will not do sha256
+
+                let sighash_type = SIGHASH_ALL | SIGHASH_FORKID;
+                let message = Message::from_slice(&hashed).unwrap();
+                let secret_key = private_key_to_secret_key(&self.private_key);
+                let mut signature = Secp256k1::signing_only().sign_ecdsa(&message, &secret_key);
+                signature.normalize_s();
+                let mut sig = signature.serialize_der().to_vec();
+                sig.push(sighash_type);
+
+                let mut script_sig = Cursor::new(Vec::new());
+                script_sig.write_u8(sig.len() as u8)?;
+                script_sig.write(&sig)?;
+                let public_key = secret_key_to_public_key(&secret_key);
+                script_sig.write_u8(public_key.len() as u8)?;
+                script_sig.write(&public_key)?;
+
+                let mut script_len = Cursor::new(Vec::new());
+                var_int::write(script_sig.get_ref().len() as u64, &mut script_len)?;
+
+                tx_in_scripts.push(TxInScriptBsv {
+                    txid: tx_in.txid.to_vec(),
+                    txindex: tx_in.txindex,
+                    script: script_sig.get_ref().to_vec(),
+                    script_len: script_len.get_ref().to_vec(),
+                });
+            }
+
+            writer.write_u32::<LittleEndian>(1)?; // version
+            var_int::write(self.unspents.len() as u64, writer)?;
+            for tx_in in tx_in_scripts.iter() {
+                tx_in.write(writer, ctx)?;
+            }
+            var_int::write(self.outputs.len() as u64, writer)?;
+            writer.write(&output_block)?;
+            writer.write_u32::<LittleEndian>(0)?; // lock time
+            Ok(())
+        }
+    }
+
+    impl Serializable<TxInScriptBsv> for TxInScriptBsv {
+        fn read(_reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<TxInScriptBsv> {
+            Err(Error::NotImplemented)
+        }
+
+        fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
+            writer.write(&self.txid)?;
+            writer.write_u32::<LittleEndian>(self.txindex)?;
+            writer.write(&self.script_len)?;
+            writer.write(&self.script)?;
+            writer.write_u32::<LittleEndian>(0xffffffff)?;
+            Ok(())
+        }
+    }
 
     #[test]
     fn test_hash_prevouts() {

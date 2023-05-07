@@ -104,7 +104,7 @@ impl Network {
             Network::Regtest => 0x00,
             Network::Ethereum => 0x00,
             Network::BsvMainnet => 0x00,
-            Network::BsvRegtest => 0x6f, // not legacy. is using for bsv
+            Network::BsvRegtest => 0x6f, // not legacy. is used for bsv
         }
     }
 

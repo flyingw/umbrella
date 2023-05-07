@@ -5,8 +5,8 @@ Universal cross network client to write data into blockchain.
 | network | tx | data | mainnet |
 |:-------:|:--:|:----:|:-------:|
 | BCH     | ✅ |      |         |
-| ETH     | ✅ | ✅   |         |
 | BSV     | ✅ | ✅   |         |
+| ETH     | ✅ | ✅   |         |
 | NEM     |    |      |         |
 
 ## build
@@ -39,7 +39,7 @@ Definitelly use [rust-bch](https://github.com/brentongunning/rust-bch) library t
 Its hard to recommend [parity-ethereum](https://github.com/paritytech/parity-ethereum) project to create Ethereum applications.
 We've had a hard times with it and did impossible to get rid of it.
 
-[bitsv](https://pypi.org/project/bitsv/) is a lib for python to build Bitcoin SV application. It works with API but was quite useful to verify transaction implementation.
+[bitsv](https://board.uaapps.xyz) is a python lib to build Bitcoin SV application. It works with API but was quite useful to verify transaction implementation.
 
 ## browse
 
