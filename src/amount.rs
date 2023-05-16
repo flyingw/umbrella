@@ -36,16 +36,16 @@ impl Units {
 
 /// An amount of bitcoin in satoshis
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
-pub struct Amount(pub i64);
+pub struct Amount(pub u64);
 
 impl Amount {
     /// Creates from a given amount and unit
     pub fn from(amount: f64, units: Units) -> Amount {
         match units {
-            Units::Bch  => Amount((amount * 100_000_000.) as i64),
-            Units::Bits => Amount((amount * 100.) as i64),
-            Units::Sats => Amount(amount as i64),
-            Units::Eth  => Amount((amount * 100_000_000.) as i64),
+            Units::Bch  => Amount((amount * 100_000_000.) as u64),
+            Units::Bits => Amount((amount * 100.) as u64),
+            Units::Sats => Amount(amount as u64),
+            Units::Eth  => Amount((amount * 100_000_000.) as u64),
         }
     }
 

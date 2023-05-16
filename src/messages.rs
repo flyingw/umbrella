@@ -15,6 +15,7 @@ mod node_key;
 mod hello;
 mod status;
 mod tx2;
+pub mod bsv;
 pub mod fee_filter;
 
 pub use version::{Version,NODE_NONE,PROTOCOL_VERSION};

@@ -1,6 +1,5 @@
 use hex::FromHexError;
 use ring;
-use rust_base58::base58::FromBase58Error;
 use secp256k1;
 use std;
 use std::io;
@@ -13,8 +12,6 @@ pub enum Error {
     BadArgument(String),
     /// The data given is not valid
     BadData(String),
-    /// Base58 string could not be decoded
-    FromBase58Error(FromBase58Error),
     /// Hex string could not be decoded
     FromHexError(FromHexError),
     /// UTF8 parsing error
@@ -35,6 +32,7 @@ pub enum Error {
     UnspecifiedRingError,
     /// The data or functionality is not supported by this library
     Unsupported(String),
+    NotImplemented,
 }
 
 impl std::fmt::Display for Error {
@@ -42,7 +40,6 @@ impl std::fmt::Display for Error {
         match self {
             Error::BadArgument(s) => f.write_str(&format!("Bad argument: {}", s)),
             Error::BadData(s) => f.write_str(&format!("Bad data: {}", s)),
-            Error::FromBase58Error(e) => f.write_str(&format!("Base58 decoding error: {}", e)),
             Error::FromHexError(e) => f.write_str(&format!("Hex decoding error: {}", e)),
             Error::FromUtf8Error(e) => f.write_str(&format!("Utf8 parsing error: {}", e)),
             Error::IllegalState(s) => f.write_str(&format!("Illegal state: {}", s)),
@@ -53,6 +50,7 @@ impl std::fmt::Display for Error {
             Error::Timeout => f.write_str("Timeout"),
             Error::UnspecifiedRingError => f.write_str("Unspecified ring error"),
             Error::Unsupported(s) => f.write_str(&format!("Unsuppored: {}", s)),
+            Error::NotImplemented => f.write_str("Not implemented")
         }
     }
 }
@@ -62,7 +60,6 @@ impl std::error::Error for Error {
         match self {
             Error::BadArgument(_) => "Bad argument",
             Error::BadData(_) => "Bad data",
-            Error::FromBase58Error(_) => "Base58 decoding error",
             Error::FromHexError(_) => "Hex decoding error",
             Error::FromUtf8Error(_) => "Utf8 parsing error",
             Error::IllegalState(_) => "Illegal state",
@@ -73,6 +70,7 @@ impl std::error::Error for Error {
             Error::Timeout => "Timeout",
             Error::UnspecifiedRingError => "Unspecified ring error",
             Error::Unsupported(_) => "Unsupported",
+            Error::NotImplemented => "Not implemented",
         }
     }
 
@@ -85,12 +83,6 @@ impl std::error::Error for Error {
             Error::Secp256k1Error(e) => Some(e),
             _ => None,
         }
-    }
-}
-
-impl From<FromBase58Error> for Error {
-    fn from(e: FromBase58Error) -> Self {
-        Error::FromBase58Error(e)
     }
 }
 

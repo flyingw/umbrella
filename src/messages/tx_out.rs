@@ -26,7 +26,7 @@ impl TxOut {
 
 impl Serializable<TxOut> for TxOut {
     fn read(reader: &mut dyn Read, _ctx: &mut dyn Ctx) -> Result<TxOut> {
-        let amount = Amount(reader.read_i64::<LittleEndian>()?);
+        let amount = Amount(reader.read_u64::<LittleEndian>()?);
         let script_len = var_int::read(reader)?;
         let mut pk_script = Script(vec![0; script_len as usize]);
         reader.read(&mut pk_script.0)?;
@@ -34,7 +34,7 @@ impl Serializable<TxOut> for TxOut {
     }
 
     fn write(&self, writer: &mut dyn Write, _ctx: &mut dyn Ctx) -> io::Result<()> {
-        writer.write_i64::<LittleEndian>(self.amount.0)?;
+        writer.write_u64::<LittleEndian>(self.amount.0)?;
         var_int::write(self.pk_script.0.len() as u64, writer)?;
         writer.write(&self.pk_script.0)?;
         Ok(())

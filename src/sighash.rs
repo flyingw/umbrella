@@ -102,7 +102,7 @@ pub fn bip143_sighash(
     s.write(&script_code)?;
 
     // 6. Serialize amount
-    s.write_i64::<LittleEndian>(amount.0)?;
+    s.write_u64::<LittleEndian>(amount.0)?;
 
     // 7. Serialize sequence
     s.write_u32::<LittleEndian>(tx.inputs[n_input].sequence)?;
