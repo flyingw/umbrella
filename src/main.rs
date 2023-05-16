@@ -370,7 +370,7 @@ pub fn main() {
                                 debug!("Version {:?}, verract", v);
                                 if network == Network::BsvMainnet {
                                     if !v.user_agent.starts_with("/Bitcoin SV") {
-                                        panic!("bad user agent {}", v.user_agent);
+                                        warn!("bad user agent {}", v.user_agent);
                                     }
                                 }
                             }

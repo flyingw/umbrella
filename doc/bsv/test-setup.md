@@ -82,6 +82,9 @@ export MSG="..." # your message
 export DATA="$(echo $MSG | od -A n -t x1 | sed 's/ *//g')"
 export NETWORK="bsv"
 
+export ADDRESS=""
+curl --location $(echo 'https://api.whatsonchain.com/v1/bsv/main/address/'$ADDRESS'/unspent')
+
 export BALANCE=""
 export SECRET=""
 export OUT_HSH=""
@@ -98,6 +101,20 @@ RUST_BACKTRACE=1 cargo run -- $NETWORK \
   --dust_address "" \
   --dust_amount "0" \
   --data $DATA
+```
+
+### api
+
+```
+curl --location 'https://api.whatsonchain.com/v1/bsv/main/tx/raw' \
+--header 'Content-Type: application/json' \
+--data '{
+    "txHex": "hex..."
+}'
+
+curl --location 'https://api.whatsonchain.com/v1/bsv/main/tx/hash/...'
+
+open https://whatsonchain.com/tx/...
 ```
 
 ## notes
